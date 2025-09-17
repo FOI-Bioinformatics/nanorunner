@@ -1,0 +1,9 @@
+include README.md
+include LICENSE
+include requirements.txt
+recursive-include nanopore_simulator *.py
+recursive-include bin *
+recursive-include tests *.py
+recursive-include docs *.md *.rst
+global-exclude *.pyc
+global-exclude __pycache__

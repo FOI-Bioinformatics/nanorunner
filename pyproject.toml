@@ -1,0 +1,83 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nanorunner"
+version = "2.0.0"
+description = "Comprehensive nanopore sequencing simulator with timing models, parallel processing, and real-time monitoring for bioinformatics pipeline testing"
+readme = "README.md"
+requires-python = ">=3.7"
+license = {file = "LICENSE"}
+authors = [
+    {name = "FOI Bioinformatics", email = "bioinformatics@foi.se"},
+]
+maintainers = [
+    {name = "FOI Bioinformatics", email = "bioinformatics@foi.se"},
+]
+keywords = ["nanopore", "sequencing", "bioinformatics", "simulation", "oxford-nanopore", "fastq", "pod5", "timing-models", "parallel-processing", "real-time-monitoring", "pipeline-testing", "nanometanf"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.urls]
+Homepage = "https://github.com/FOI-Bioinformatics/nanorunner"
+Repository = "https://github.com/FOI-Bioinformatics/nanorunner"
+Documentation = "https://github.com/FOI-Bioinformatics/nanorunner#readme"
+"Bug Tracker" = "https://github.com/FOI-Bioinformatics/nanorunner/issues"
+
+[project.scripts]
+nanorunner = "nanopore_simulator.cli.main:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov",
+    "black",
+    "flake8",
+    "mypy",
+]
+test = [
+    "pytest>=6.0",
+    "pytest-cov",
+]
+enhanced = [
+    "psutil>=5.8.0",  # For resource monitoring
+]
+
+[tool.setuptools]
+packages = ["nanopore_simulator", "nanopore_simulator.core", "nanopore_simulator.cli"]
+
+[tool.black]
+line-length = 88
+target-version = ['py37']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.mypy]
+python_version = "3.7"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
