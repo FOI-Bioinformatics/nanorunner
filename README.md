@@ -1,6 +1,6 @@
-# NanoRun - Advanced Nanopore Sequencing Simulator
+# NanoRunnerner - Advanced Nanopore Sequencing Simulator
 
-NanoRun is a comprehensive Python application designed for rigorous testing of nanopore sequencing analysis pipelines. The simulator accurately replicates the temporal and structural characteristics of Oxford Nanopore Technologies sequencing workflows by transferring FASTQ and POD5 files with sophisticated timing models, parallel processing capabilities, and real-time monitoring. This tool facilitates robust validation of bioinformatics pipelines under realistic sequencing conditions.
+NanoRunner is a comprehensive Python application designed for rigorous testing of nanopore sequencing analysis pipelines. The simulator accurately replicates the temporal and structural characteristics of Oxford Nanopore Technologies sequencing workflows by transferring FASTQ and POD5 files with sophisticated timing models, parallel processing capabilities, and real-time monitoring. This tool facilitates robust validation of bioinformatics pipelines under realistic sequencing conditions.
 
 ## Key Features
 
@@ -27,17 +27,17 @@ NanoRun is a comprehensive Python application designed for rigorous testing of n
 
 ```bash
 # Basic installation
-pip install nanorun
+pip install nanorunner
 
 # Installation with enhanced monitoring capabilities
-pip install nanorun[enhanced]
+pip install nanorunner[enhanced]
 ```
 
 ## Usage
 
 ### Basic Invocation
 ```bash
-nanorun <source_dir> <target_dir> [options]
+nanorunner <source_dir> <target_dir> [options]
 ```
 
 ### Essential Examples
@@ -45,64 +45,64 @@ nanorun <source_dir> <target_dir> [options]
 #### Timing Model Selection
 ```bash
 # Uniform intervals for deterministic testing
-nanorun /data/source /watch/output --timing-model uniform --interval 5
+nanorunner /data/source /watch/output --timing-model uniform --interval 5
 
 # Random intervals with controlled variation
-nanorun /data/source /watch/output --timing-model random --random-factor 0.3
+nanorunner /data/source /watch/output --timing-model random --random-factor 0.3
 
 # Poisson process for biologically realistic simulation
-nanorun /data/source /watch/output --timing-model poisson --burst-probability 0.15
+nanorunner /data/source /watch/output --timing-model poisson --burst-probability 0.15
 
 # Adaptive timing responding to processing bottlenecks
-nanorun /data/source /watch/output --timing-model adaptive
+nanorunner /data/source /watch/output --timing-model adaptive
 ```
 
 #### Configuration Profiles
 ```bash
 # Rapid sequencing scenario with optimized parameters
-nanorun /data/source /watch/output --profile rapid_sequencing
+nanorunner /data/source /watch/output --profile rapid_sequencing
 
 # High-throughput simulation with parallel processing
-nanorun /data/source /watch/output --profile high_throughput
+nanorunner /data/source /watch/output --profile high_throughput
 
 # Development testing with accelerated intervals
-nanorun /data/source /watch/output --profile development_testing
+nanorunner /data/source /watch/output --profile development_testing
 
 # List available profiles and their descriptions
-nanorun --list-profiles
+nanorunner --list-profiles
 ```
 
 #### Enhanced Monitoring
 ```bash
 # Enable comprehensive monitoring with resource tracking
-nanorun /data/source /watch/output --monitor enhanced
+nanorunner /data/source /watch/output --monitor enhanced
 
 # Detailed monitoring with verbose logging
-nanorun /data/source /watch/output --monitor detailed
+nanorunner /data/source /watch/output --monitor detailed
 
 # Silent operation for automated testing
-nanorun /data/source /watch/output --monitor none --quiet
+nanorunner /data/source /watch/output --monitor none --quiet
 ```
 
 #### Parallel Processing
 ```bash
 # Enable parallel processing with custom worker count
-nanorun /data/source /watch/output --parallel --worker-count 8
+nanorunner /data/source /watch/output --parallel --worker-count 8
 
 # Combine with configuration profile for optimized performance
-nanorun /data/source /watch/output --profile high_throughput --parallel
+nanorunner /data/source /watch/output --profile high_throughput --parallel
 ```
 
 #### Pipeline Validation
 ```bash
 # Validate output compatibility with specific pipeline
-nanorun /data/source /watch/output --pipeline nanometanf
+nanorunner /data/source /watch/output --pipeline nanometanf
 
 # List supported pipeline adapters
-nanorun --list-adapters
+nanorunner --list-adapters
 
 # Validate existing directory structure
-nanorun --validate-pipeline kraken /path/to/output
+nanorunner --validate-pipeline kraken /path/to/output
 ```
 
 ### Configuration Parameters
@@ -133,7 +133,7 @@ nanorun --validate-pipeline kraken /path/to/output
 Provides constant intervals for deterministic testing scenarios requiring precise temporal control.
 
 ```bash
-nanorun /data /output --timing-model uniform --interval 10
+nanorunner /data /output --timing-model uniform --interval 10
 ```
 
 ### Random Model
@@ -141,7 +141,7 @@ Introduces symmetric stochastic variation around the base interval, suitable for
 
 ```bash
 # ±30% variation around base interval
-nanorun /data /output --timing-model random --interval 5 --random-factor 0.3
+nanorunner /data /output --timing-model random --interval 5 --random-factor 0.3
 ```
 
 ### Poisson Model
@@ -149,14 +149,14 @@ Implements biologically-motivated timing with burst behavior, accurately modelin
 
 ```bash
 # 15% probability of burst events with 3x rate increase
-nanorun /data /output --timing-model poisson --burst-probability 0.15 --burst-rate-multiplier 3.0
+nanorunner /data /output --timing-model poisson --burst-probability 0.15 --burst-rate-multiplier 3.0
 ```
 
 ### Adaptive Model
 Dynamically adjusts intervals based on historical performance, simulating feedback mechanisms in real sequencing systems.
 
 ```bash
-nanorun /data /output --timing-model adaptive --adaptation-rate 0.2
+nanorunner /data /output --timing-model adaptive --adaptation-rate 0.2
 ```
 
 ## Experimental Design Support
@@ -261,10 +261,10 @@ Built-in adapters provide validation for multiple bioinformatics workflows:
 ### Validation Workflow
 ```bash
 # Simulate data with pipeline-specific validation
-nanorun /data/source /watch/output --pipeline nanometanf --monitor enhanced
+nanorunner /data/source /watch/output --pipeline nanometanf --monitor enhanced
 
 # Post-simulation validation report
-nanorun --validate-pipeline kraken /watch/output
+nanorunner --validate-pipeline kraken /watch/output
 ```
 
 ## Performance Characteristics
@@ -293,8 +293,8 @@ The simulator accommodates diverse experimental scales:
 
 ### Installation for Development
 ```bash
-git clone https://github.com/FOI-Bioinformatics/nanorun.git
-cd nanorun
+git clone https://github.com/FOI-Bioinformatics/nanorunner.git
+cd nanorunner
 pip install -e .[enhanced,dev]
 ```
 
@@ -327,5 +327,5 @@ flake8 nanopore_simulator/
 This software is distributed under the MIT License and developed for research applications in bioinformatics pipeline validation. The simulator is designed to complement the nanometanf taxonomic classification pipeline and supports the broader Oxford Nanopore Technologies ecosystem.
 
 **Developed by**: [FOI Bioinformatics](https://github.com/FOI-Bioinformatics) - Swedish Defence Research Agency  
-**Repository**: https://github.com/FOI-Bioinformatics/nanorun  
+**Repository**: https://github.com/FOI-Bioinformatics/nanorunner  
 **Documentation**: Comprehensive user guides and API documentation available in the repository
