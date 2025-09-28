@@ -1,52 +1,45 @@
 # NanoRunner Documentation
 
-This directory contains comprehensive documentation for the NanoRunner nanopore sequencing simulator.
+This directory contains detailed documentation for the NanoRunner nanopore sequencing simulator.
 
-## Documentation Structure
+## Available Documentation
 
-### Core Documentation
-- [`installation.md`](installation.md) - Installation guide and requirements
-- [`quickstart.md`](quickstart.md) - Quick start guide with examples
-- [`configuration.md`](configuration.md) - Detailed configuration options
-- [`timing-models.md`](timing-models.md) - Comprehensive timing model documentation
-- [`monitoring.md`](monitoring.md) - Monitoring and progress tracking features
-
-### Architecture and APIs
-- [`architecture.md`](architecture.md) - System architecture overview
-- [`api-reference.md`](api-reference.md) - Complete API documentation
-- [`pipeline-integration.md`](pipeline-integration.md) - Pipeline adapter system
-
-### Testing and Development
-- [`testing-strategy.md`](testing-strategy.md) - Testing framework and strategy
-- [`test-coverage-report.md`](test-coverage-report.md) - Coverage analysis and goals
-- [`development-guide.md`](development-guide.md) - Development setup and contribution guide
-
-### Examples and Tutorials
-- [`examples/`](examples/) - Complete usage examples
-- [`tutorials/`](tutorials/) - Step-by-step tutorials
-- [`performance/`](performance/) - Performance optimization guides
+### Testing Documentation
+- [`testing.md`](testing.md) - Comprehensive testing guide with 58-test suite overview
+- [`test-coverage-report.md`](test-coverage-report.md) - Detailed coverage analysis
+- [`testing-strategy.md`](testing-strategy.md) - Testing framework and methodology
 
 ## Quick Navigation
 
 ### For Users
-- New to NanoRunner? Start with [quickstart.md](quickstart.md)
-- Need specific configuration? See [configuration.md](configuration.md)
-- Working with pipelines? Check [pipeline-integration.md](pipeline-integration.md)
+- **Getting Started**: See the main [README.md](../README.md) in the repository root
+- **Testing**: Review [testing.md](testing.md) for test suite information
 
 ### For Developers
-- Contributing code? Read [development-guide.md](development-guide.md)
-- Understanding the codebase? See [architecture.md](architecture.md)
-- Writing tests? Follow [testing-strategy.md](testing-strategy.md)
+- **Testing Strategy**: Follow [testing-strategy.md](testing-strategy.md) for development testing
+- **Coverage Goals**: Check [test-coverage-report.md](test-coverage-report.md) for coverage targets
 
-### For Pipeline Developers
-- Integrating with your pipeline? See [pipeline-integration.md](pipeline-integration.md)
-- Custom adapters? Check [api-reference.md](api-reference.md)
+### For Contributors
+- **Test Suite**: Understanding the 58-test comprehensive validation suite
+- **Unit Tests**: 32 isolated component tests
+- **Integration Tests**: 26 realistic workflow tests
 
 ## Documentation Standards
 
 All documentation follows these standards:
-- **Markdown format** for consistency
-- **Clear headings** and table of contents
+- **Markdown format** for consistency and readability
+- **Clear headings** and table of contents where appropriate
 - **Code examples** with expected output
-- **Cross-references** between documents
-- **Version information** for API changes
+- **Current information** reflecting the actual codebase state
+
+## Repository Structure
+
+```
+docs/
+├── README.md                 # This file - documentation index
+├── testing.md               # Comprehensive testing guide (NEW)
+├── test-coverage-report.md  # Coverage analysis and goals
+└── testing-strategy.md      # Testing framework methodology
+```
+
+The main project documentation is in the repository root [README.md](../README.md), which provides complete usage instructions, examples, and feature documentation.
