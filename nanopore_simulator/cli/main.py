@@ -11,7 +11,7 @@ from ..core.adapters import get_available_adapters, validate_for_pipeline, get_c
 from ..core.detector import FileStructureDetector
 
 
-def list_profiles_command():
+def list_profiles_command() -> int:
     """List available configuration profiles"""
     profiles = get_available_profiles()
     print("Available Configuration Profiles:")
@@ -21,7 +21,7 @@ def list_profiles_command():
     return 0
 
 
-def list_adapters_command():
+def list_adapters_command() -> int:
     """List available pipeline adapters"""
     adapters = get_available_adapters()
     print("Available Pipeline Adapters:")
@@ -31,7 +31,7 @@ def list_adapters_command():
     return 0
 
 
-def recommend_profiles_command(source_dir: Path):
+def recommend_profiles_command(source_dir: Path) -> int:
     """Recommend profiles based on source directory"""
     if not source_dir.exists():
         print(f"Error: Source directory does not exist: {source_dir}")
@@ -59,7 +59,7 @@ def recommend_profiles_command(source_dir: Path):
     return 0
 
 
-def validate_pipeline_command(target_dir: Path, pipeline: str):
+def validate_pipeline_command(target_dir: Path, pipeline: str) -> int:
     """Validate directory structure for a pipeline"""
     if not target_dir.exists():
         print(f"Error: Target directory does not exist: {target_dir}")
@@ -91,7 +91,7 @@ def validate_pipeline_command(target_dir: Path, pipeline: str):
     return 0 if report.get('valid', False) else 1
 
 
-def main():
+def main() -> int:
     """Main CLI entry point"""
     parser = argparse.ArgumentParser(
         description="Advanced nanopore sequencing run simulator with profiles and pipeline support",

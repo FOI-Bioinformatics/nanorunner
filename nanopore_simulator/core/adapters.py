@@ -79,7 +79,7 @@ class PipelineAdapter(ABC):
     
     def get_validation_report(self, target_dir: Path) -> Dict[str, Any]:
         """Get detailed validation report"""
-        report = {
+        report: Dict[str, Any] = {
             'pipeline': self.requirements.name,
             'valid': False,
             'structure_valid': False,
@@ -123,7 +123,7 @@ class PipelineAdapter(ABC):
 class NanometanfAdapter(PipelineAdapter):
     """Adapter for the nanometanf pipeline"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         requirements = PipelineRequirements(
             name="nanometanf",
             description="Oxford Nanopore taxonomic analysis pipeline",
@@ -161,7 +161,10 @@ class NanometanfAdapter(PipelineAdapter):
             supported_files.extend(pattern_files)
         
         # Must have at least one supported file
-        if len(supported_files) < self.requirements.validation_rules['min_files']:
+        min_files = 1
+        if self.requirements.validation_rules is not None:
+            min_files = self.requirements.validation_rules.get('min_files', 1)
+        if len(supported_files) < min_files:
             return False
         
         # Check if structure is consistent (either all in root or all in barcode dirs)
@@ -236,7 +239,9 @@ class GenericAdapter(PipelineAdapter):
             
             supported_files.extend(pattern_files)
         
-        min_files = self.requirements.validation_rules.get('min_files', 1)
+        min_files = 1
+        if self.requirements.validation_rules is not None:
+            min_files = self.requirements.validation_rules.get('min_files', 1)
         if len(supported_files) < min_files:
             return False
         
@@ -267,7 +272,7 @@ class GenericAdapter(PipelineAdapter):
 class KrackenAdapter(PipelineAdapter):
     """Adapter for Kraken2/KrakenUniq pipelines"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         requirements = PipelineRequirements(
             name="kraken",
             description="Kraken2/KrakenUniq taxonomic classification pipeline",
@@ -307,7 +312,7 @@ class KrackenAdapter(PipelineAdapter):
 class MiniknifeAdapter(PipelineAdapter):
     """Adapter for Miniknife pipeline"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         requirements = PipelineRequirements(
             name="miniknife", 
             description="Miniknife nanopore taxonomic analysis pipeline",
@@ -337,7 +342,10 @@ class MiniknifeAdapter(PipelineAdapter):
             return False
         
         # Check for sample sheet if required
-        if self.requirements.validation_rules.get('require_sample_sheet'):
+        require_sample_sheet = False
+        if self.requirements.validation_rules is not None:
+            require_sample_sheet = self.requirements.validation_rules.get('require_sample_sheet', False)
+        if require_sample_sheet:
             sample_sheet = target_dir / "sample_sheet.tsv"
             if not sample_sheet.exists():
                 return False
@@ -368,7 +376,7 @@ class MiniknifeAdapter(PipelineAdapter):
 class AdapterManager:
     """Manages pipeline adapters"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.adapters = {
             'nanometanf': NanometanfAdapter(),
             'kraken': KrackenAdapter(), 
@@ -377,7 +385,8 @@ class AdapterManager:
     
     def get_adapter(self, name: str) -> Optional[PipelineAdapter]:
         """Get a pipeline adapter by name"""
-        return self.adapters.get(name.lower())
+        adapter = self.adapters.get(name.lower())
+        return adapter if adapter is not None else None
     
     def add_adapter(self, name: str, adapter: PipelineAdapter) -> None:
         """Add a custom adapter"""

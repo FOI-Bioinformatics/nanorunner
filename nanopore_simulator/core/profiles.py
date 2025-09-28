@@ -160,9 +160,9 @@ BUILTIN_PROFILES = {
 class ProfileManager:
     """Manages configuration profiles"""
     
-    def __init__(self):
-        self.builtin_profiles = BUILTIN_PROFILES.copy()
-        self.custom_profiles = {}
+    def __init__(self) -> None:
+        self.builtin_profiles: Dict[str, ProfileDefinition] = BUILTIN_PROFILES.copy()
+        self.custom_profiles: Dict[str, ProfileDefinition] = {}
     
     def list_profiles(self) -> Dict[str, str]:
         """List all available profiles with descriptions"""
@@ -200,7 +200,7 @@ class ProfileManager:
     
     def create_config_from_profile(self, profile_name: str, source_dir: Path, 
                                  target_dir: Path, interval: float = 5.0, 
-                                 **overrides) -> SimulationConfig:
+                                 **overrides: Any) -> SimulationConfig:
         """Create a SimulationConfig from a profile with optional overrides"""
         profile = self.get_profile(profile_name)
         if profile is None:
@@ -302,7 +302,7 @@ def get_available_profiles() -> Dict[str, str]:
 
 def create_config_from_profile(profile_name: str, source_dir: Path, 
                              target_dir: Path, interval: float = 5.0, 
-                             **overrides) -> SimulationConfig:
+                             **overrides: Any) -> SimulationConfig:
     """Create a configuration from a profile"""
     return profile_manager.create_config_from_profile(
         profile_name, source_dir, target_dir, interval, **overrides

@@ -50,7 +50,7 @@ class FileStructureDetector:
     @classmethod
     def _find_sequencing_files(cls, directory: Path) -> List[Path]:
         """Find sequencing files (FASTQ/POD5) in a directory"""
-        files = []
+        files: List[Path] = []
         if not directory.exists():
             return files
             
