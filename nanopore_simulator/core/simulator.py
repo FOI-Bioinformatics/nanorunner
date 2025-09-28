@@ -6,7 +6,7 @@ import shutil
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import List, Dict, Union, Optional
+from typing import List, Dict, Union, Optional, Any
 
 from .config import SimulationConfig
 from .detector import FileStructureDetector
@@ -50,7 +50,7 @@ class NanoporeSimulator:
         )
         return logging.getLogger(__name__)
     
-    def run_simulation(self):
+    def run_simulation(self) -> None:
         """Run the complete simulation"""
         self.logger.info(f"Starting nanopore simulation")
         self.logger.info(f"Source: {self.config.source_dir}")
@@ -108,19 +108,19 @@ class NanoporeSimulator:
                 self.progress_monitor.stop()
             self._cleanup()
     
-    def _cleanup(self):
+    def _cleanup(self) -> None:
         """Clean up resources used by the simulator"""
         if self.executor is not None:
             self.logger.info("Shutting down thread pool executor")
             self.executor.shutdown(wait=True)
             self.executor = None
     
-    def _prepare_target_directory(self):
+    def _prepare_target_directory(self) -> None:
         """Prepare the target directory for simulation"""
         self.config.target_dir.mkdir(parents=True, exist_ok=True)
         self.logger.info(f"Target directory prepared: {self.config.target_dir}")
     
-    def _create_singleplex_manifest(self) -> List[Dict[str, Union[Path, str]]]:
+    def _create_singleplex_manifest(self) -> List[Dict[str, Any]]:
         """Create file manifest for singleplex simulation"""
         files = FileStructureDetector._find_sequencing_files(self.config.source_dir)
         
@@ -134,7 +134,7 @@ class NanoporeSimulator:
         
         return manifest
     
-    def _create_multiplex_manifest(self) -> List[Dict[str, Union[Path, str]]]:
+    def _create_multiplex_manifest(self) -> List[Dict[str, Any]]:
         """Create file manifest for multiplex simulation"""
         barcode_dirs = FileStructureDetector._find_barcode_directories(self.config.source_dir)
         
@@ -153,7 +153,7 @@ class NanoporeSimulator:
         
         return manifest
     
-    def _execute_simulation(self, file_manifest: List[Dict], structure: str):
+    def _execute_simulation(self, file_manifest: List[Dict], structure: str) -> None:
         """Execute the file simulation with timing and optional parallel processing"""
         total_files = len(file_manifest)
         total_batches = (total_files + self.config.batch_size - 1) // self.config.batch_size
@@ -230,7 +230,7 @@ class NanoporeSimulator:
         """Calculate the next interval using the configured timing model"""
         return self.timing_model.next_interval()
     
-    def _interruptible_sleep(self, duration: float):
+    def _interruptible_sleep(self, duration: float) -> None:
         """Sleep for specified duration while checking for interruptions"""
         start_time = time.time()
         sleep_interval = min(0.1, duration)  # Check every 100ms or less
@@ -253,7 +253,7 @@ class NanoporeSimulator:
             remaining = duration - (time.time() - start_time)
             time.sleep(min(sleep_interval, remaining))
     
-    def pause_simulation(self):
+    def pause_simulation(self) -> None:
         """Pause the simulation if monitoring is enabled"""
         if self.progress_monitor:
             self.progress_monitor.pause()
@@ -261,7 +261,7 @@ class NanoporeSimulator:
         else:
             self.logger.warning("Cannot pause simulation without monitoring enabled")
     
-    def resume_simulation(self):
+    def resume_simulation(self) -> None:
         """Resume the simulation if monitoring is enabled"""
         if self.progress_monitor:
             self.progress_monitor.resume()
@@ -273,17 +273,22 @@ class NanoporeSimulator:
         """Check if simulation is currently paused"""
         return self._simulation_paused
     
-    def _process_batch_sequential(self, batch: List[Dict]):
+    def _process_batch_sequential(self, batch: List[Dict]) -> None:
         """Process a batch of files sequentially"""
         for file_info in batch:
             self._process_file(file_info)
     
-    def _process_batch_parallel(self, batch: List[Dict]):
+    def _process_batch_parallel(self, batch: List[Dict]) -> None:
         """Process a batch of files in parallel using ThreadPoolExecutor"""
         if not batch:
             return
         
         # Submit all files in the batch for parallel processing
+        if self.executor is None:
+            # Fallback to sequential processing if no executor
+            self._process_batch_sequential(batch)
+            return
+            
         futures = []
         for file_info in batch:
             future = self.executor.submit(self._process_file, file_info)
@@ -302,7 +307,7 @@ class NanoporeSimulator:
         if exceptions:
             raise exceptions[0]
     
-    def _process_file(self, file_info: Dict[str, Union[Path, str]]):
+    def _process_file(self, file_info: Dict[str, Any]) -> None:
         """Process a single file (copy or link)"""
         source = file_info['source']
         target = file_info['target']

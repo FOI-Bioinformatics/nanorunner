@@ -3,7 +3,7 @@
 import random
 import time
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, List, Any
 
 
 class TimingModel(ABC):
@@ -105,7 +105,7 @@ class AdaptiveTimingModel(TimingModel):
         
         self.adaptation_rate = adaptation_rate
         self.history_size = history_size
-        self.interval_history = []
+        self.interval_history: List[float] = []
         self.current_mean = base_interval
     
     def next_interval(self) -> float:
@@ -143,7 +143,7 @@ class AdaptiveTimingModel(TimingModel):
         self.current_mean = self.base_interval
 
 
-def create_timing_model(model_type: str, base_interval: float, **kwargs) -> TimingModel:
+def create_timing_model(model_type: str, base_interval: float, **kwargs: Any) -> TimingModel:
     """Factory function to create timing models"""
     
     model_type = model_type.lower()

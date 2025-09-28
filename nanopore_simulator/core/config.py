@@ -12,7 +12,7 @@ class SimulationConfig:
     target_dir: Path
     interval: float = 5.0  # base seconds between file operations
     operation: str = "copy"  # "copy" or "link"
-    file_types: List[str] = None
+    file_types: Optional[List[str]] = None
     force_structure: Optional[str] = None  # "singleplex" or "multiplex"
     batch_size: int = 1  # files to process per interval
     
@@ -26,7 +26,7 @@ class SimulationConfig:
     parallel_processing: bool = False  # enable parallel file processing within batches
     worker_count: int = 4  # number of worker threads for parallel processing
     
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.file_types is None:
             self.file_types = ["fastq", "fq", "fastq.gz", "fq.gz", "pod5"]
         else:
@@ -42,7 +42,7 @@ class SimulationConfig:
         # Validate parameters
         self._validate_config()
     
-    def _validate_config(self):
+    def _validate_config(self) -> None:
         """Validate configuration parameters"""
         # Validate basic parameters
         if self.interval < 0:
@@ -62,6 +62,9 @@ class SimulationConfig:
             raise ValueError(f"timing_model must be one of: {valid_timing_models}")
         
         # Validate timing model specific parameters
+        if self.timing_model_params is None:
+            return  # No additional parameters to validate
+            
         if self.timing_model == "random":
             rf = self.timing_model_params.get("random_factor", 0.3)
             if not 0.0 <= rf <= 1.0:
@@ -96,5 +99,6 @@ class SimulationConfig:
     def get_timing_model_config(self) -> Dict[str, Any]:
         """Get timing model configuration for factory function"""
         config = {"model_type": self.timing_model, "base_interval": self.interval}
-        config.update(self.timing_model_params)
+        if self.timing_model_params is not None:
+            config.update(self.timing_model_params)
         return config

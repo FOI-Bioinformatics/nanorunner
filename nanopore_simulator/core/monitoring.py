@@ -17,7 +17,7 @@ try:
     import psutil
     HAS_PSUTIL = True
 except ImportError:
-    psutil = None
+    psutil = None  # type: ignore
     HAS_PSUTIL = False
 
 
@@ -85,7 +85,7 @@ class SimulationMetrics:
     throughput_history: deque = field(default_factory=lambda: deque(maxlen=30))
     resource_history: deque = field(default_factory=lambda: deque(maxlen=60))
     
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.timing_breakdown:
             self.timing_breakdown = {
                 'file_operations': 0.0,
@@ -114,7 +114,7 @@ class SimulationMetrics:
             return True  # 0/0 is considered complete
         return self.files_processed >= self.files_total
     
-    def update_throughput(self):
+    def update_throughput(self) -> None:
         """Update throughput metrics"""
         elapsed = self.elapsed_time
         if elapsed > 0:
@@ -127,7 +127,7 @@ class SimulationMetrics:
         if self.batches_processed > 0:
             self.average_batch_time = self.total_processing_time / self.batches_processed
     
-    def estimate_eta(self):
+    def estimate_eta(self) -> None:
         """Enhanced ETA estimation with trend analysis"""
         if self.files_processed == 0 or self.throughput_files_per_sec == 0:
             self.eta_seconds = None
@@ -189,11 +189,11 @@ class SimulationMetrics:
             estimated_wait_time = remaining_batches * (self.total_wait_time / self.batches_processed)
             self.eta_seconds += estimated_wait_time
     
-    def add_throughput_sample(self, throughput: float):
+    def add_throughput_sample(self, throughput: float) -> None:
         """Add throughput sample to history"""
         self.throughput_history.append(throughput)
     
-    def add_resource_sample(self, resource_metrics: ResourceMetrics):
+    def add_resource_sample(self, resource_metrics: ResourceMetrics) -> None:
         """Add resource metrics sample to history"""
         self.resource_history.append(resource_metrics)
         
@@ -236,11 +236,12 @@ class ProgressDisplay:
     @staticmethod
     def format_bytes(bytes_count: int) -> str:
         """Format bytes in human readable format"""
+        count_float = float(bytes_count)
         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-            if bytes_count < 1024.0:
-                return f"{bytes_count:.1f} {unit}"
-            bytes_count /= 1024.0
-        return f"{bytes_count:.1f} PB"
+            if count_float < 1024.0:
+                return f"{count_float:.1f} {unit}"
+            count_float /= 1024.0
+        return f"{count_float:.1f} PB"
     
     @staticmethod
     def format_time(seconds: float) -> str:
@@ -314,13 +315,13 @@ class ProgressDisplay:
 class ResourceMonitor:
     """System resource monitoring"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.process = psutil.Process() if HAS_PSUTIL else None
         self._baseline_io = None
         
         if HAS_PSUTIL and self.process:
             try:
-                self._baseline_io = self.process.io_counters()
+                self._baseline_io = self.process.io_counters()  # type: ignore
             except (psutil.AccessDenied, AttributeError):
                 self._baseline_io = None
     
@@ -340,7 +341,7 @@ class ResourceMonitor:
             io_write_mb = 0.0
             if self._baseline_io:
                 try:
-                    current_io = self.process.io_counters()
+                    current_io = self.process.io_counters()  # type: ignore
                     io_read_mb = (current_io.read_bytes - self._baseline_io.read_bytes) / (1024 * 1024)
                     io_write_mb = (current_io.write_bytes - self._baseline_io.write_bytes) / (1024 * 1024)
                 except (psutil.AccessDenied, AttributeError):
@@ -376,7 +377,7 @@ class ResourceMonitor:
 class SignalHandler:
     """Handles graceful shutdown on signals"""
     
-    def __init__(self, progress_monitor):
+    def __init__(self, progress_monitor: 'ProgressMonitor') -> None:
         self.progress_monitor = progress_monitor
         self.shutdown_requested = False
         self.logger = logging.getLogger(__name__)
@@ -387,13 +388,13 @@ class SignalHandler:
         if hasattr(signal, 'SIGBREAK'):  # Windows
             signal.signal(signal.SIGBREAK, self._signal_handler)
     
-    def _signal_handler(self, signum, frame):
+    def _signal_handler(self, signum: int, frame: Any) -> None:
         """Handle shutdown signals"""
         signal_names = {signal.SIGINT: "SIGINT", signal.SIGTERM: "SIGTERM"}
         if hasattr(signal, 'SIGBREAK'):
             signal_names[signal.SIGBREAK] = "SIGBREAK"
         
-        signal_name = signal_names.get(signum, f"Signal {signum}")
+        signal_name = signal_names.get(signum, f"Signal {signum}")  # type: ignore
         
         if not self.shutdown_requested:
             self.shutdown_requested = True
@@ -408,7 +409,7 @@ class SignalHandler:
             print("\nForced shutdown requested. Exiting immediately.")
             sys.exit(1)
     
-    def _print_shutdown_summary(self, metrics: SimulationMetrics):
+    def _print_shutdown_summary(self, metrics: SimulationMetrics) -> None:
         """Print summary during shutdown"""
         print("\n=== Shutdown Summary ===")
         print(f"Files processed: {metrics.files_processed}/{metrics.files_total} ({metrics.progress_percentage:.1f}%)")
@@ -461,7 +462,7 @@ class ProgressMonitor:
         self._last_warning_time = 0.0
         self._warning_cooldown = 30.0  # 30 seconds between warnings
         
-    def start(self):
+    def start(self) -> None:
         """Start the progress monitoring"""
         if self._update_thread is None or not self._update_thread.is_alive():
             self._stop_event.clear()
@@ -472,7 +473,7 @@ class ProgressMonitor:
             # Load checkpoint if it exists
             self._load_checkpoint()
     
-    def stop(self):
+    def stop(self) -> None:
         """Stop the progress monitoring"""
         if self._update_thread and self._update_thread.is_alive():
             self._stop_event.set()
@@ -491,7 +492,7 @@ class ProgressMonitor:
         
         self.display_callback(self.metrics)
     
-    def set_batch_count(self, total_batches: int):
+    def set_batch_count(self, total_batches: int) -> None:
         """Set the total number of batches"""
         with self._lock:
             self.metrics.batches_total = total_batches
@@ -502,7 +503,7 @@ class ProgressMonitor:
         self._batch_start_times.append(start_time)
         return start_time
     
-    def end_batch(self, start_time: float):
+    def end_batch(self, start_time: float) -> None:
         """Mark the end of a batch"""
         end_time = time.time()
         batch_duration = end_time - start_time
@@ -511,13 +512,13 @@ class ProgressMonitor:
             self.metrics.batches_processed += 1
             self.metrics.total_processing_time += batch_duration
     
-    def add_wait_time(self, wait_duration: float):
+    def add_wait_time(self, wait_duration: float) -> None:
         """Add wait time to metrics"""
         with self._lock:
             self.metrics.total_wait_time += wait_duration
             self.metrics.timing_breakdown['waiting'] += wait_duration
     
-    def record_file_processed(self, file_path: Path, operation_time: float = 0.0):
+    def record_file_processed(self, file_path: Path, operation_time: float = 0.0) -> None:
         """Record that a file was processed"""
         try:
             file_size = file_path.stat().st_size if file_path.exists() else 0
@@ -534,27 +535,27 @@ class ProgressMonitor:
             if self.metrics.files_processed % 10 == 0:
                 self._save_checkpoint()
     
-    def record_error(self, error_type: str = "general"):
+    def record_error(self, error_type: str = "general") -> None:
         """Record an error"""
         with self._lock:
             self.metrics.errors_encountered += 1
         
         self.logger.warning(f"Error recorded: {error_type}")
     
-    def record_timing(self, category: str, duration: float):
+    def record_timing(self, category: str, duration: float) -> None:
         """Record timing for a specific category"""
         with self._lock:
             if category not in self.metrics.timing_breakdown:
                 self.metrics.timing_breakdown[category] = 0.0
             self.metrics.timing_breakdown[category] += duration
     
-    def pause(self):
+    def pause(self) -> None:
         """Pause the simulation"""
         self._paused.clear()
         self.logger.info("Simulation paused")
         print("\n⏸️  Simulation paused. Press 'r' to resume or 'q' to quit.")
     
-    def resume(self):
+    def resume(self) -> None:
         """Resume the simulation"""
         self._paused.set()
         self.logger.info("Simulation resumed")
@@ -564,13 +565,13 @@ class ProgressMonitor:
         """Check if simulation is paused"""
         return not self._paused.is_set()
     
-    def wait_if_paused(self, timeout: Optional[float] = None):
+    def wait_if_paused(self, timeout: Optional[float] = None) -> None:
         """Wait if simulation is paused"""
         self._paused.wait(timeout)
     
     def should_stop(self) -> bool:
         """Check if shutdown was requested"""
-        return self.signal_handler and self.signal_handler.shutdown_requested
+        return bool(self.signal_handler and self.signal_handler.shutdown_requested)
     
     def get_metrics(self) -> SimulationMetrics:
         """Get current metrics (thread-safe copy)"""
@@ -606,7 +607,7 @@ class ProgressMonitor:
             
             return current_metrics
     
-    def _update_loop(self):
+    def _update_loop(self) -> None:
         """Enhanced update loop with resource monitoring and performance analysis"""
         while not self._stop_event.wait(self.update_interval):
             # Wait if paused
@@ -642,7 +643,7 @@ class ProgressMonitor:
             except Exception as e:
                 self.logger.error(f"Error in display callback: {e}")
     
-    def _check_performance_warnings(self):
+    def _check_performance_warnings(self) -> None:
         """Check for performance issues and emit warnings"""
         current_time = time.time()
         if current_time - self._last_warning_time < self._warning_cooldown:
@@ -680,7 +681,7 @@ class ProgressMonitor:
             for warning in warnings:
                 self.logger.warning(f"Performance warning: {warning}")
     
-    def _save_checkpoint(self):
+    def _save_checkpoint(self) -> None:
         """Save current progress to checkpoint file"""
         if not self.checkpoint_file:
             return
@@ -698,7 +699,7 @@ class ProgressMonitor:
         except Exception as e:
             self.logger.warning(f"Failed to save checkpoint: {e}")
     
-    def _load_checkpoint(self):
+    def _load_checkpoint(self) -> None:
         """Load progress from checkpoint file"""
         if not self.checkpoint_file or not self.checkpoint_file.exists():
             return
@@ -718,7 +719,7 @@ class ProgressMonitor:
         except Exception as e:
             self.logger.warning(f"Failed to load checkpoint: {e}")
     
-    def _cleanup_checkpoint(self):
+    def _cleanup_checkpoint(self) -> None:
         """Remove checkpoint file when simulation completes"""
         if self.checkpoint_file and self.checkpoint_file.exists():
             try:
@@ -726,7 +727,7 @@ class ProgressMonitor:
             except Exception as e:
                 self.logger.warning(f"Failed to cleanup checkpoint: {e}")
     
-    def _default_display(self, metrics: SimulationMetrics):
+    def _default_display(self, metrics: SimulationMetrics) -> None:
         """Enhanced default display callback"""
         if metrics.files_total > 0:
             # Show resources if available
@@ -739,7 +740,7 @@ class ProgressMonitor:
                 print()  # New line at completion
                 self._print_final_summary(metrics)
     
-    def _print_final_summary(self, metrics: SimulationMetrics):
+    def _print_final_summary(self, metrics: SimulationMetrics) -> None:
         """Print comprehensive final summary"""
         print("\n=== Simulation Complete ===")
         print(f"📁 Files processed: {metrics.files_processed}/{metrics.files_total}")
@@ -776,7 +777,7 @@ class DetailedProgressMonitor(ProgressMonitor):
         self.batch_details: List[Dict[str, Any]] = []
         self.file_details: List[Dict[str, Any]] = []
     
-    def end_batch(self, start_time: float):
+    def end_batch(self, start_time: float) -> None:
         """Enhanced batch tracking"""
         super().end_batch(start_time)
         
@@ -791,7 +792,7 @@ class DetailedProgressMonitor(ProgressMonitor):
         }
         self.batch_details.append(batch_info)
     
-    def record_file_processed(self, file_path: Path, operation_time: float = 0.0):
+    def record_file_processed(self, file_path: Path, operation_time: float = 0.0) -> None:
         """Enhanced file tracking"""
         super().record_file_processed(file_path, operation_time)
         
@@ -804,7 +805,7 @@ class DetailedProgressMonitor(ProgressMonitor):
         }
         self.file_details.append(file_info)
     
-    def _detailed_display(self, metrics: SimulationMetrics):
+    def _detailed_display(self, metrics: SimulationMetrics) -> None:
         """Detailed display with comprehensive information"""
         if metrics.files_total == 0:
             return
@@ -822,7 +823,7 @@ class DetailedProgressMonitor(ProgressMonitor):
             print()  # New line at completion
             self._log_final_summary(metrics)
     
-    def _log_detailed_stats(self, metrics: SimulationMetrics):
+    def _log_detailed_stats(self, metrics: SimulationMetrics) -> None:
         """Log detailed statistics"""
         self.detailed_logger.info(
             f"Progress: {metrics.progress_percentage:.1f}% | "
@@ -832,7 +833,7 @@ class DetailedProgressMonitor(ProgressMonitor):
             f"Errors: {metrics.errors_encountered}"
         )
     
-    def _log_final_summary(self, metrics: SimulationMetrics):
+    def _log_final_summary(self, metrics: SimulationMetrics) -> None:
         """Log comprehensive final summary"""
         self.detailed_logger.info("=== Simulation Complete ===")
         self.detailed_logger.info(f"Total time: {ProgressDisplay.format_time(metrics.elapsed_time)}")
@@ -852,7 +853,7 @@ class DetailedProgressMonitor(ProgressMonitor):
 
 
 def create_progress_monitor(total_files: int, monitor_type: str = "default",
-                          **kwargs) -> ProgressMonitor:
+                          **kwargs: Any) -> ProgressMonitor:
     """Factory function to create progress monitors"""
     if monitor_type.lower() == "detailed":
         return DetailedProgressMonitor(total_files, **kwargs)
