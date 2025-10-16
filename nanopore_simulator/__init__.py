@@ -6,15 +6,15 @@ FASTQ or POD5 files to create folder structures that nanometanf can watch.
 """
 
 from .core.config import SimulationConfig
-from .core.detector import FileStructureDetector  
+from .core.detector import FileStructureDetector
 from .core.simulator import NanoporeSimulator
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 __author__ = "Andreas Sjodin"
 __email__ = "andreas@example.com"
 
 __all__ = [
     "SimulationConfig",
-    "FileStructureDetector", 
+    "FileStructureDetector",
     "NanoporeSimulator",
 ]

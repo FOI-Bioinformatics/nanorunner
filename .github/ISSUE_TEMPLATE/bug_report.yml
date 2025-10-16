@@ -1,0 +1,102 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the information below to help us resolve the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: What happened? What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Install nanorunner with '...'
+        2. Run command '....'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen
+      placeholder: The simulation should complete without errors...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened (include error messages, logs, etc.)
+      placeholder: |
+        Error: ValueError: ...
+        Traceback: ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: NanoRunner Version
+      description: Output of `nanorunner --version`
+      placeholder: "nanorunner 2.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python Version
+      description: Output of `python --version`
+      placeholder: "Python 3.11.5"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: What OS are you using?
+      placeholder: "Ubuntu 22.04, macOS 14.0, Windows 11, etc."
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context about the problem (screenshots, configuration files, etc.)
+      placeholder: |
+        - Using enhanced monitoring
+        - Large dataset (10,000 files)
+        - Custom configuration profile
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      description: Please confirm the following
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
+        - label: I have included all relevant information above
+          required: true
+        - label: I am using a supported Python version (3.9+)
+          required: true

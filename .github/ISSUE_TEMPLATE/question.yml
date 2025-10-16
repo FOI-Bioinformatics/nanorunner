@@ -1,0 +1,82 @@
+name: Question
+description: Ask a question about using NanoRunner
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question? We're here to help! Please provide details below.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know?
+      placeholder: How do I...? / What is the best way to...? / Can NanoRunner...?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Question Category
+      description: What is your question about?
+      options:
+        - Installation and Setup
+        - Basic Usage
+        - Timing Models
+        - Configuration Profiles
+        - Parallel Processing
+        - Monitoring and Progress
+        - Pipeline Integration
+        - Performance and Optimization
+        - Testing and CI/CD
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Provide context for your question
+      placeholder: |
+        I'm trying to...
+        My setup: ...
+        What I've tried: ...
+    validations:
+      required: false
+
+  - type: textarea
+    id: attempted
+    attributes:
+      label: What Have You Tried?
+      description: What have you already attempted?
+      placeholder: |
+        - Read the README
+        - Checked the examples
+        - Searched existing issues
+        - Tried command: nanorunner ...
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: NanoRunner Version
+      description: Output of `nanorunner --version` (if applicable)
+      placeholder: "nanorunner 2.0.0"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues and discussions
+          required: true
+        - label: I have checked the documentation
+          required: true

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/FOI-Bioinformatics/nanorunner#readme
+    about: Read the comprehensive documentation and examples
+  - name: Discussions
+    url: https://github.com/FOI-Bioinformatics/nanorunner/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: Security Issue
+    url: https://github.com/FOI-Bioinformatics/nanorunner/security/policy
+    about: Report security vulnerabilities privately

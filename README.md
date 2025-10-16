@@ -1,5 +1,11 @@
 # NanoRunner - Advanced Nanopore Sequencing Simulator
 
+![CI](https://github.com/FOI-Bioinformatics/nanorunner/workflows/CI/badge.svg)
+![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue)
+![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
+![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)
+![Coverage](https://img.shields.io/badge/coverage-93%25-brightgreen)
+
 NanoRunner is a comprehensive Python application designed for rigorous testing of nanopore sequencing analysis pipelines. The simulator accurately replicates the temporal and structural characteristics of Oxford Nanopore Technologies sequencing workflows by transferring FASTQ and POD5 files with sophisticated timing models, parallel processing capabilities, and real-time monitoring. This tool facilitates robust validation of bioinformatics pipelines under realistic sequencing conditions.
 
 ## Key Features
@@ -25,12 +31,33 @@ NanoRunner is a comprehensive Python application designed for rigorous testing o
 
 ## Installation
 
-```bash
-# Basic installation
-pip install nanorunner
+### From GitHub (Recommended)
 
-# Installation with enhanced monitoring capabilities
-pip install nanorunner[enhanced]
+```bash
+# Latest stable release (v2.0.0)
+pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0
+
+# Development version (main branch)
+pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@main
+
+# With enhanced monitoring features
+pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0"
+```
+
+### For Development
+
+```bash
+git clone https://github.com/FOI-Bioinformatics/nanorunner.git
+cd nanorunner
+pip install -e .[enhanced,dev]
+```
+
+### Verify Installation
+
+```bash
+nanorunner --version  # Should output: nanorunner 2.0.0
+nanorunner --help     # Display all available options
+nanorunner --list-profiles  # Show built-in configuration profiles
 ```
 
 ## Usage
@@ -337,10 +364,52 @@ mypy nanopore_simulator/
 flake8 nanopore_simulator/
 ```
 
+## Troubleshooting
+
+### Installation Issues
+
+**Git not found**
+```bash
+# Install git first
+# Ubuntu/Debian: sudo apt-get install git
+# macOS: brew install git
+```
+
+**Permission denied when installing**
+```bash
+# Use --user flag
+pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0
+```
+
+**Python version incompatibility**
+```bash
+# Check your Python version
+python --version  # Should be 3.9 or higher
+
+# Use specific Python version
+python3.11 -m pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0
+```
+
+### Common Runtime Issues
+
+- **Import errors**: Ensure Python 3.9+ is being used
+- **Permission denied on target directory**: Check write permissions
+- **Out of memory**: Reduce batch size or worker count
+- **Slow performance**: Enable parallel processing with `--parallel`
+- **Enhanced monitoring not working**: Install with `pip install "nanorunner[enhanced] @ git+..."`
+
+### Getting Help
+
+- **Documentation**: See [docs/](docs/) directory
+- **Examples**: Check [examples/](examples/) for working code
+- **Issues**: Search [existing issues](https://github.com/FOI-Bioinformatics/nanorunner/issues)
+- **New Issue**: [Open a new issue](https://github.com/FOI-Bioinformatics/nanorunner/issues/new/choose)
+- **Discussions**: Ask questions in [GitHub Discussions](https://github.com/FOI-Bioinformatics/nanorunner/discussions)
+
 ## License and Attribution
 
 This software is distributed under the MIT License and developed for research applications in bioinformatics pipeline validation. The simulator is designed to complement the nanometanf taxonomic classification pipeline and supports the broader Oxford Nanopore Technologies ecosystem.
 
-**Developed by**: [FOI Bioinformatics](https://github.com/FOI-Bioinformatics) - Swedish Defence Research Agency  
-**Repository**: https://github.com/FOI-Bioinformatics/nanorunner  
+**Developed by**: [FOI Bioinformatics](https://github.com/FOI-Bioinformatics) - Swedish Defence Research Agency
+**Repository**: https://github.com/FOI-Bioinformatics/nanorunner
 **Documentation**: Comprehensive user guides and API documentation available in the repository
