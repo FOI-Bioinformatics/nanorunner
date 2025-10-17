@@ -1,45 +1,95 @@
 # NanoRunner Documentation
 
-This directory contains detailed documentation for the NanoRunner nanopore sequencing simulator.
+Comprehensive guides and references for the NanoRunner nanopore sequencing simulator.
 
-## Available Documentation
+## Table of Contents
 
-### Testing Documentation
-- [`testing.md`](testing.md) - Comprehensive testing guide with 58-test suite overview
-- [`test-coverage-report.md`](test-coverage-report.md) - Detailed coverage analysis
-- [`testing-strategy.md`](testing-strategy.md) - Testing framework and methodology
+- [User Guides](#user-guides)
+- [Developer Documentation](#developer-documentation)
+- [Testing Documentation](#testing-documentation)
+- [Quick Links](#quick-links)
 
-## Quick Navigation
+## User Guides
 
-### For Users
-- **Getting Started**: See the main [README.md](../README.md) in the repository root
-- **Testing**: Review [testing.md](testing.md) for test suite information
+### Getting Started
+- **[Quick Start Guide](quickstart.md)**: Step-by-step setup and first simulation
+- **[Troubleshooting Guide](troubleshooting.md)**: Solutions for common installation and runtime issues
+- **[Main README](../README.md)**: Complete feature documentation, examples, and usage
+
+### Working Examples
+- **[Examples Directory](../examples/)**: Working code demonstrating timing models, profiles, and pipeline integration
+- **[Sample Data](../examples/sample_data/)**: Test FASTQ files for immediate experimentation
+
+## Developer Documentation
+
+### Development Setup
+- **[CLAUDE.md](../CLAUDE.md)**: Developer guide for AI assistants and contributors
+- **[CONTRIBUTING.md](../CONTRIBUTING.md)**: Contribution guidelines and development workflow
+- **[CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md)**: Community standards and expectations
+
+### Architecture & Design
+- **Core Components**: See [CLAUDE.md - Architecture](../CLAUDE.md#architecture)
+- **Timing Models**: Uniform, Random, Poisson, Adaptive implementations
+- **Pipeline Adapters**: Framework for nanometanf, Kraken, miniknife integration
+
+## Testing Documentation
+
+### Test Suite Overview
+- **[Testing Guide](testing.md)**: Comprehensive test suite overview
+- **[Coverage Report](test-coverage-report.md)**: Detailed coverage analysis (95%+ on core components)
+- **[Testing Strategy](testing-strategy.md)**: Framework methodology and best practices
+
+### Current Status
+- **Test Count**: 48 comprehensive tests
+- **Pass Rate**: 100% (48/48)
+- **Coverage**: 95%+ on monitoring.py and simulator.py
+
+## Quick Links
+
+### For First-Time Users
+1. [Quick Start Guide](quickstart.md) - Get running in 5 minutes
+2. [Main README](../README.md) - Full feature documentation
+3. [Examples](../examples/) - Working code samples
 
 ### For Developers
-- **Testing Strategy**: Follow [testing-strategy.md](testing-strategy.md) for development testing
-- **Coverage Goals**: Check [test-coverage-report.md](test-coverage-report.md) for coverage targets
+1. [CLAUDE.md](../CLAUDE.md) - Development guidelines
+2. [Testing Strategy](testing-strategy.md) - How to write tests
+3. [CONTRIBUTING.md](../CONTRIBUTING.md) - Contribution workflow
 
-### For Contributors
-- **Test Suite**: Understanding the 58-test comprehensive validation suite
-- **Unit Tests**: 32 isolated component tests
-- **Integration Tests**: 26 realistic workflow tests
+### For Troubleshooting
+1. [Troubleshooting Guide](troubleshooting.md) - Common issues
+2. [GitHub Issues](https://github.com/FOI-Bioinformatics/nanorunner/issues) - Report problems
+3. [GitHub Discussions](https://github.com/FOI-Bioinformatics/nanorunner/discussions) - Ask questions
 
-## Documentation Standards
-
-All documentation follows these standards:
-- **Markdown format** for consistency and readability
-- **Clear headings** and table of contents where appropriate
-- **Code examples** with expected output
-- **Current information** reflecting the actual codebase state
-
-## Repository Structure
+## Documentation Structure
 
 ```
-docs/
-├── README.md                 # This file - documentation index
-├── testing.md               # Comprehensive testing guide (NEW)
-├── test-coverage-report.md  # Coverage analysis and goals
-└── testing-strategy.md      # Testing framework methodology
+nanorunner/
+├── README.md                       # Main user documentation
+├── CLAUDE.md                       # Developer guide
+├── CONTRIBUTING.md                 # Contribution guidelines
+├── CODE_OF_CONDUCT.md              # Community standards
+├── CHANGELOG.md                    # Version history
+├── docs/
+│   ├── README.md                   # This file - documentation index
+│   ├── quickstart.md               # Quick start guide
+│   ├── troubleshooting.md          # Common issues and solutions
+│   ├── testing.md                  # Test suite guide
+│   ├── test-coverage-report.md     # Coverage analysis
+│   └── testing-strategy.md         # Testing methodology
+└── examples/
+    ├── README.md                   # Examples overview
+    ├── basic_usage.py
+    ├── timing_models.py
+    ├── parallel_processing.py
+    ├── profiles_demo.py
+    ├── pipeline_integration.py
+    └── sample_data/                # Test FASTQ files
 ```
 
-The main project documentation is in the repository root [README.md](../README.md), which provides complete usage instructions, examples, and feature documentation.
+## Version Information
+
+- **Current Version**: 2.0.1
+- **Python Requirement**: 3.9+
+- **Status**: Production/Stable
+- **Last Updated**: 2025-10-17

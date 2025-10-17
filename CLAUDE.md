@@ -4,7 +4,73 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is `nanorun` - a comprehensive nanopore sequencing run simulator designed for testing bioinformatics pipelines. It implements sophisticated temporal modeling, parallel processing capabilities, and real-time monitoring to accurately simulate nanopore sequencing workflows. The system supports multiple timing models (uniform, random, Poisson, adaptive), configuration profiles for different experimental scenarios, pipeline-specific adapters, and enhanced progress monitoring with resource tracking.
+This is `nanorunner` - a comprehensive nanopore sequencing run simulator designed for testing bioinformatics pipelines. It implements sophisticated temporal modeling, parallel processing capabilities, and real-time monitoring to accurately simulate nanopore sequencing workflows. The system supports multiple timing models (uniform, random, Poisson, adaptive), configuration profiles for different experimental scenarios, pipeline-specific adapters, and enhanced progress monitoring with resource tracking.
+
+## Project Standards
+
+This project adheres to strict quality principles in all code, documentation, and development practices:
+
+### 1. Completeness
+- **All features must be fully documented**: Every CLI parameter, configuration option, and API method requires comprehensive documentation
+- **No partial implementations**: Features should be complete before merging, including error handling, validation, and edge cases
+- **Test coverage**: All documented functionality must have corresponding tests
+- **Examples provided**: Each major feature should have working code examples in the `examples/` directory
+
+### 2. Consistency
+- **Naming conventions**: Use consistent terminology across code, documentation, and user interfaces
+  - Package name: `nanorunner` (not `nanorun` or `nanopore-simulator`)
+  - Python version: Always specify `3.9+` consistently
+  - Version numbers: Keep synchronized across `__init__.py`, CLI, README, and CHANGELOG
+- **Code style**: Follow black formatting, mypy type checking, and flake8 linting
+- **Documentation format**: Use consistent markdown formatting, heading levels, and code block syntax
+- **API design**: Maintain consistent parameter names and patterns across similar functions
+
+### 3. Organization
+- **Logical structure**: Documentation and code should follow intuitive hierarchies
+  - Core components in `nanopore_simulator/core/`
+  - CLI interface in `nanopore_simulator/cli/`
+  - User guides in `docs/`
+  - Examples in `examples/`
+- **Clear navigation**: All documentation must be linked from README.md or docs/README.md
+- **No orphaned files**: Every file should be referenced and serve a clear purpose
+- **Proper separation**: Keep concerns separated (e.g., business logic vs. CLI parsing, testing vs. production code)
+
+### 4. Accessibility
+- **Progressive disclosure**: Present information from simple to complex
+  - README.md: High-level overview and quick start
+  - docs/quickstart.md: Beginner-friendly step-by-step guide
+  - CLAUDE.md: Technical details for developers
+- **Multiple entry points**: Users should find relevant information regardless of their experience level
+- **Clear examples**: Provide concrete, runnable examples for all features
+- **Troubleshooting guides**: Anticipate common issues and provide solutions
+
+### 5. Cleanliness
+- **No legacy code**: Remove deprecated files, functions, and comments
+- **No build artifacts**: Keep repository free of generated files (use .gitignore)
+- **No redundancy**: Avoid duplicating information across multiple files
+- **Clear git history**: Meaningful commit messages and organized branches
+- **Minimal dependencies**: Use standard library where possible; justify each external dependency
+
+### 6. Scientific Language
+- **Modest tone**: Avoid superlatives, marketing language, and exaggeration
+  - ✅ "Provides realistic timing simulation"
+  - ❌ "Revolutionary ultra-advanced next-generation timing"
+- **Precise terminology**: Use established scientific and technical terms
+  - Use "temporal patterns" not "timing stuff"
+  - Use "throughput optimization" not "making it faster"
+- **Evidence-based claims**: Support statements with data
+  - ✅ "95%+ test coverage on core components"
+  - ❌ "Extremely well-tested"
+- **Professional objectivity**: Focus on facts and capabilities, not opinions
+- **Appropriate detail**: Balance technical accuracy with readability
+
+### Enforcement
+When working on this project:
+- **Before committing**: Verify changes maintain all six standards
+- **Code reviews**: Check for adherence to these principles
+- **Documentation updates**: Ensure any code changes are reflected in documentation
+- **Version bumps**: Update ALL version references (not just one file)
+- **New features**: Must include tests, documentation, and examples
 
 ## Key Commands
 
@@ -55,10 +121,10 @@ flake8 nanopore_simulator/
 python -m build
 
 # Test console script functionality
-nanorun --help
-nanorun --list-profiles
-nanorun --list-adapters
-nanorun /source /target --profile rapid_sequencing --monitor enhanced
+nanorunner --help
+nanorunner --list-profiles
+nanorunner --list-adapters
+nanorunner /source /target --profile rapid_sequencing --monitor enhanced
 ```
 
 ## Architecture
@@ -144,9 +210,14 @@ Extensions: `.fastq`, `.fq`, `.fastq.gz`, `.fq.gz`, `.pod5`
 - Thread-safe operations with proper resource cleanup
 
 **Coverage Standards:**
-- Minimum coverage threshold: 90% (currently >99%)
+- Minimum coverage threshold: 90% (currently 95%+)
 - Comprehensive integration testing with multiple timing models and configurations
 - Performance regression testing for parallel processing scenarios
+
+**Recent Fixes (v2.0.1):**
+- Fixed critical bug in `DetailedProgressMonitor` parameter handling (`monitoring.py:956-962`)
+- Added CLI parameters for adaptive timing model: `--adaptation-rate` and `--history-size`
+- Enhanced test suite now achieves 100% pass rate (48 tests)
 
 ## Integration Context
 
@@ -179,12 +250,12 @@ The timing models provide biologically-motivated temporal patterns:
 ## Configuration Notes
 
 - **Dependencies**: Standard library only for core functionality; optional psutil for enhanced monitoring
-- **Python compatibility**: 3.7+ with full type hint support
+- **Python compatibility**: 3.9+ with full type hint support
 - **Performance**: Optimized for datasets ranging from development (10s of files) to production scale (10,000+ files)
 - **Resource monitoring**: Optional CPU, memory, and disk I/O tracking with performance warnings
 - **Extensibility**: Plugin architecture for custom timing models, adapters, and monitoring components
-- **Console script entry point**: `nanorun`
-- **Enhanced features**: Available via `pip install nanorun[enhanced]` for resource monitoring capabilities
+- **Console script entry point**: `nanorunner`
+- **Enhanced features**: Available via `pip install nanorunner[enhanced]` for resource monitoring capabilities
 
 ## Development Patterns
 
@@ -195,3 +266,11 @@ When extending functionality:
 4. **Testing**: Include both unit tests and integration tests with performance considerations
 5. **Configuration**: Add new parameters to `SimulationConfig` with appropriate validation
 6. **Documentation**: Update both technical documentation and user-facing examples
+
+## User Documentation
+
+For end-user guides and tutorials, see:
+- **[README.md](README.md)**: Main user documentation with installation, usage, and examples
+- **[docs/quickstart.md](docs/quickstart.md)**: Quick start guide for new users
+- **[docs/troubleshooting.md](docs/troubleshooting.md)**: Common issues and solutions
+- **[examples/](examples/)**: Working code examples demonstrating all features

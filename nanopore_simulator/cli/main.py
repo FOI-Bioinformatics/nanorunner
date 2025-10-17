@@ -230,6 +230,16 @@ Examples:
         type=float,
         help="Randomness factor for random timing model (0.0-1.0)",
     )
+    parser.add_argument(
+        "--adaptation-rate",
+        type=float,
+        help="Adaptation rate for adaptive timing model (0.0-1.0, default: 0.1)",
+    )
+    parser.add_argument(
+        "--history-size",
+        type=int,
+        help="History size for adaptive timing model (default: 10)",
+    )
 
     # Parallel processing options
     parser.add_argument(
@@ -260,7 +270,7 @@ Examples:
         help="Validate output for specific pipeline compatibility",
     )
 
-    parser.add_argument("--version", action="version", version="%(prog)s 2.0.0")
+    parser.add_argument("--version", action="version", version="%(prog)s 2.0.1")
 
     args = parser.parse_args()
 
@@ -299,6 +309,14 @@ Examples:
     if args.burst_rate_multiplier is not None and args.burst_rate_multiplier <= 0:
         parser.error("Burst rate multiplier must be positive")
 
+    if args.adaptation_rate is not None and (
+        args.adaptation_rate < 0.0 or args.adaptation_rate > 1.0
+    ):
+        parser.error("Adaptation rate must be between 0.0 and 1.0")
+
+    if args.history_size is not None and args.history_size < 1:
+        parser.error("History size must be at least 1")
+
     # Create configuration
     try:
         if args.profile:
@@ -320,6 +338,12 @@ Examples:
             # Handle random model parameters
             if args.random_factor is not None:
                 timing_model_params["random_factor"] = args.random_factor
+
+            # Handle adaptive model parameters
+            if args.adaptation_rate is not None:
+                timing_model_params["adaptation_rate"] = args.adaptation_rate
+            if args.history_size is not None:
+                timing_model_params["history_size"] = args.history_size
 
             # Create config from profile with overrides
             overrides = {}
@@ -362,6 +386,11 @@ Examples:
                     timing_model_params["burst_rate_multiplier"] = (
                         args.burst_rate_multiplier
                     )
+            elif timing_model == "adaptive":
+                if args.adaptation_rate is not None:
+                    timing_model_params["adaptation_rate"] = args.adaptation_rate
+                if args.history_size is not None:
+                    timing_model_params["history_size"] = args.history_size
 
             # Create standard configuration
             config = SimulationConfig(

@@ -4,7 +4,7 @@
 ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
 ![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)
-![Coverage](https://img.shields.io/badge/coverage-93%25-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen)
 
 NanoRunner is a comprehensive Python application designed for rigorous testing of nanopore sequencing analysis pipelines. The simulator accurately replicates the temporal and structural characteristics of Oxford Nanopore Technologies sequencing workflows by transferring FASTQ and POD5 files with sophisticated timing models, parallel processing capabilities, and real-time monitoring. This tool facilitates robust validation of bioinformatics pipelines under realistic sequencing conditions.
 
@@ -34,14 +34,14 @@ NanoRunner is a comprehensive Python application designed for rigorous testing o
 ### From GitHub (Recommended)
 
 ```bash
-# Latest stable release (v2.0.0)
-pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0
+# Latest stable release (v2.0.1)
+pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.1
 
 # Development version (main branch)
 pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@main
 
 # With enhanced monitoring features
-pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0"
+pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.1"
 ```
 
 ### For Development
@@ -55,7 +55,7 @@ pip install -e .[enhanced,dev]
 ### Verify Installation
 
 ```bash
-nanorunner --version  # Should output: nanorunner 2.0.0
+nanorunner --version  # Should output: nanorunner 2.0.1
 nanorunner --help     # Display all available options
 nanorunner --list-profiles  # Show built-in configuration profiles
 ```
@@ -145,6 +145,8 @@ nanorunner --validate-pipeline kraken /path/to/output
 - `--random-factor FACTOR`: Variation magnitude for random model (0.0-1.0)
 - `--burst-probability PROB`: Burst event probability for Poisson model
 - `--burst-rate-multiplier MULT`: Rate increase during burst events
+- `--adaptation-rate RATE`: Learning speed for adaptive model (0.0-1.0, default: 0.1)
+- `--history-size SIZE`: Lookback window for adaptive model (integer ≥1, default: 10)
 
 #### Processing Options
 - `--parallel`: Enable concurrent file processing within batches
@@ -180,10 +182,26 @@ nanorunner /data /output --timing-model poisson --burst-probability 0.15 --burst
 ```
 
 ### Adaptive Model
-Dynamically adjusts intervals based on historical performance, simulating feedback mechanisms in real sequencing systems.
+Dynamically adjusts intervals based on historical performance, simulating feedback mechanisms in real sequencing systems. The model maintains a history of recent intervals and adapts the timing based on observed patterns.
 
+#### Parameters
+- `--adaptation-rate`: Controls learning speed (0.0-1.0, default: 0.1)
+  - Higher values: Faster adaptation to changing conditions
+  - Lower values: More stable, conservative timing
+- `--history-size`: Number of recent intervals to consider (default: 10)
+  - Larger values: Smoother adaptation, less reactive
+  - Smaller values: More responsive to recent changes
+
+#### Examples
 ```bash
-nanorunner /data /output --timing-model adaptive --adaptation-rate 0.2
+# Default adaptive behavior
+nanorunner /data /output --timing-model adaptive
+
+# Fast adaptation for dynamic environments
+nanorunner /data /output --timing-model adaptive --adaptation-rate 0.5
+
+# Conservative adaptation with extended history
+nanorunner /data /output --timing-model adaptive --adaptation-rate 0.05 --history-size 30
 ```
 
 ## Experimental Design Support
@@ -310,12 +328,12 @@ The simulator accommodates diverse experimental scales:
 
 ## Technical Requirements
 
-- **Python**: Version 3.7 or higher with full type annotation support
+- **Python**: Version 3.9 or higher with full type annotation support
 - **Core dependencies**: Standard library only for basic functionality
 - **Enhanced features**: Optional psutil dependency for resource monitoring
 - **Platform compatibility**: POSIX-compliant operating systems (Linux, macOS, Unix)
 - **Storage**: Minimal footprint with optional symbolic linking for large datasets
-- **Testing**: Comprehensive test suite with 58 tests covering unit and integration scenarios
+- **Testing**: Comprehensive test suite with 48 tests achieving 100% pass rate
 
 ## Development and Contribution
 
@@ -328,25 +346,19 @@ pip install -e .[enhanced,dev]
 
 ### Testing Framework
 
-**Comprehensive Test Suite: 58 Tests (100% Success Rate)**
-- **32 Unit Tests**: Core component testing in isolation
-- **26 Integration Tests**: End-to-end workflow validation
-- **Realistic scenarios**: MinION/PromethION workflows, multiplex/singleplex structures
-- **Edge cases**: Permissions, symlinks, corruption handling
-- **Performance optimization**: 69-second runtime for full test suite
+The test suite validates all documented functionality with comprehensive coverage of core components, integration scenarios, and edge cases.
 
 ```bash
-# Run complete test suite (58 tests)
+# Run complete test suite
 pytest
 
 # Run fast tests only (exclude slow integration tests)
 pytest -m "not slow"
 
-# Run unit tests only
-pytest tests/test_unit_core_components.py
-
-# Run realistic integration tests
-pytest tests/test_realistic_scenarios.py tests/test_realistic_edge_cases.py tests/test_realistic_long_running.py
+# Run specific test modules
+pytest tests/test_cli.py                    # CLI interface tests
+pytest tests/test_timing_models.py          # Timing model validation
+pytest tests/test_enhanced_monitoring.py    # Advanced monitoring features
 
 # Generate coverage report
 pytest --cov=nanopore_simulator --cov-report=html --cov-report=term-missing
@@ -364,47 +376,29 @@ mypy nanopore_simulator/
 flake8 nanopore_simulator/
 ```
 
+## Documentation
+
+Comprehensive guides and references are available in the [docs/](docs/) directory:
+
+- **[Quick Start Guide](docs/quickstart.md)**: Step-by-step setup and first simulation
+- **[Troubleshooting Guide](docs/troubleshooting.md)**: Solutions for common installation and runtime issues
+- **[Examples](examples/)**: Working code demonstrating timing models, profiles, and pipeline integration
+
 ## Troubleshooting
 
-### Installation Issues
+Common issues and solutions:
+- **Python version errors**: Ensure Python 3.9+ is installed
+- **Permission denied**: Use `--user` flag or check target directory permissions
+- **Import errors**: Verify installation with `pip show nanorunner`
+- **Enhanced monitoring unavailable**: Install with `pip install "nanorunner[enhanced] @ git+..."`
 
-**Git not found**
-```bash
-# Install git first
-# Ubuntu/Debian: sudo apt-get install git
-# macOS: brew install git
-```
+For detailed troubleshooting steps, see [docs/troubleshooting.md](docs/troubleshooting.md).
 
-**Permission denied when installing**
-```bash
-# Use --user flag
-pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0
-```
+## Support and Contribution
 
-**Python version incompatibility**
-```bash
-# Check your Python version
-python --version  # Should be 3.9 or higher
-
-# Use specific Python version
-python3.11 -m pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0
-```
-
-### Common Runtime Issues
-
-- **Import errors**: Ensure Python 3.9+ is being used
-- **Permission denied on target directory**: Check write permissions
-- **Out of memory**: Reduce batch size or worker count
-- **Slow performance**: Enable parallel processing with `--parallel`
-- **Enhanced monitoring not working**: Install with `pip install "nanorunner[enhanced] @ git+..."`
-
-### Getting Help
-
-- **Documentation**: See [docs/](docs/) directory
-- **Examples**: Check [examples/](examples/) for working code
-- **Issues**: Search [existing issues](https://github.com/FOI-Bioinformatics/nanorunner/issues)
-- **New Issue**: [Open a new issue](https://github.com/FOI-Bioinformatics/nanorunner/issues/new/choose)
-- **Discussions**: Ask questions in [GitHub Discussions](https://github.com/FOI-Bioinformatics/nanorunner/discussions)
+- **Issues**: [Search existing issues](https://github.com/FOI-Bioinformatics/nanorunner/issues) or [report a new issue](https://github.com/FOI-Bioinformatics/nanorunner/issues/new/choose)
+- **Discussions**: [Ask questions](https://github.com/FOI-Bioinformatics/nanorunner/discussions)
+- **Contributing**: See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines
 
 ## License and Attribution
 

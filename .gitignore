@@ -209,3 +209,9 @@ __marimo__/
 # NanoRunner specific
 test_output/
 simulation_checkpoint.json
+
+# macOS system files
+.DS_Store
+
+# Benchmark artifacts
+.benchmarks/

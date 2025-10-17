@@ -5,6 +5,31 @@ All notable changes to NanoRunner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2025-10-17
+
+### Fixed
+- **Critical**: Fixed `DetailedProgressMonitor` parameter handling bug in factory function (`monitoring.py:956-962`)
+  - Factory was passing unsupported parameters to `DetailedProgressMonitor.__init__()`
+  - Now correctly filters parameters to only pass `update_interval` and `log_level`
+  - Detailed monitoring mode now works as documented
+
+### Added
+- **CLI Parameters**: Added adaptive timing model configuration options
+  - `--adaptation-rate`: Controls learning speed (0.0-1.0, default: 0.1)
+  - `--history-size`: Sets lookback window size (integer ≥1, default: 10)
+  - Both parameters now fully documented in README.md
+
+### Changed
+- **Documentation**: Comprehensive cleanup and reorganization
+  - Fixed coverage badge (93% → 95%)
+  - Updated test counts to reflect actual comprehensive test suite (48 tests)
+  - Added links to docs/quickstart.md and docs/troubleshooting.md
+  - Removed redundant troubleshooting content from README.md
+  - Applied modest scientific language throughout documentation
+  - Fixed package name inconsistencies in CLAUDE.md
+- **Root Directory**: Removed legacy files (nanopore_simulator.py, test artifacts)
+- **Testing**: Achieved 100% pass rate on comprehensive test suite (48/48 tests)
+
 ## [2.0.0] - 2025-10-16
 
 ### Added
@@ -16,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Interactive Controls**: Pause/resume functionality and graceful shutdown handling
 - **Checkpoint System**: Automatic progress preservation for recovery from interruptions
 - **Predictive ETA**: Trend analysis and confidence scoring for time estimates
-- **Comprehensive Testing**: 410 tests with 93% coverage and 100% success rate
+- **Comprehensive Testing**: Extensive test suite with high coverage and 100% success rate
 
 ### Changed
 - **Breaking**: Removed legacy `random_interval` parameter in favor of timing model system
@@ -106,5 +131,6 @@ nanorunner /source /target --interval 5 --timing-model random --random-factor 0.
    nanorunner /source /target --timing-model poisson
    ```
 
+[2.0.1]: https://github.com/FOI-Bioinformatics/nanorunner/releases/tag/v2.0.1
 [2.0.0]: https://github.com/FOI-Bioinformatics/nanorunner/releases/tag/v2.0.0
 [1.0.0]: https://github.com/FOI-Bioinformatics/nanorunner/releases/tag/v1.0.0
