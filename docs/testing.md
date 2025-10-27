@@ -2,14 +2,14 @@
 
 ## Overview
 
-NanoRunner has a comprehensive test suite with **58 tests achieving 100% success rate**, designed to validate both individual components and complete workflows. The testing framework ensures reliability, performance, and compatibility across different nanopore sequencing scenarios.
+NanoRunner has a comprehensive test suite with **480 tests achieving 99.8% success rate**, designed to validate both individual components and complete workflows. The testing framework ensures reliability, performance, and compatibility across different nanopore sequencing scenarios.
 
 ## Test Suite Summary
 
-- **Total Tests**: 58 tests
-- **Success Rate**: 100% (58/58 passing)
-- **Runtime**: ~69 seconds for complete suite
-- **Coverage**: Comprehensive unit and integration testing
+- **Total Tests**: 480 tests
+- **Success Rate**: 99.8% (479/480 passing)
+- **Runtime**: ~201 seconds for complete suite with coverage
+- **Coverage**: 97% on core components
 
 ### Test Categories
 

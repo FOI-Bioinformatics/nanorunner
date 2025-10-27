@@ -21,7 +21,7 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md) to keep our com
 
 ### Prerequisites
 
-- Python 3.7 or higher
+- Python 3.9 or higher
 - Git
 - Basic familiarity with nanopore sequencing and bioinformatics pipelines
 

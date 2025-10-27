@@ -956,8 +956,8 @@ def create_progress_monitor(
     if monitor_type.lower() == "detailed":
         # Extract only parameters supported by DetailedProgressMonitor
         detailed_kwargs = {
-            'update_interval': kwargs.get('update_interval', 1.0),
-            'log_level': kwargs.get('log_level', logging.INFO),
+            "update_interval": kwargs.get("update_interval", 1.0),
+            "log_level": kwargs.get("log_level", logging.INFO),
         }
         return DetailedProgressMonitor(total_files, **detailed_kwargs)
     elif monitor_type.lower() == "enhanced":

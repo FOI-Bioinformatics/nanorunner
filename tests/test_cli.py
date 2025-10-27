@@ -104,7 +104,7 @@ class TestCLI:
 
                 assert excinfo.value.code == 0
                 version_output = mock_stdout.getvalue()
-                assert "2.0.0" in version_output
+                assert "2.0.2" in version_output
 
     def test_cli_invalid_operation(self):
         """Test CLI with invalid operation argument"""

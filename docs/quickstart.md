@@ -8,17 +8,17 @@ Get up and running with NanoRunner in 5 minutes.
 
 ```bash
 # Latest stable release
-pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0
+pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.1
 
 # With enhanced monitoring (optional but recommended)
-pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0"
+pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.1"
 ```
 
 ### Verify Installation
 
 ```bash
 nanorunner --version
-# Output: nanorunner 2.0.0
+# Output: nanorunner 2.0.1
 
 nanorunner --help
 # Shows all available options
@@ -225,14 +225,14 @@ python examples/05_pipeline_integration.py
 **Problem**: `Command not found: nanorunner`
 ```bash
 # Solution: Ensure pip install location is in PATH
-pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0
+pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.1
 # Add to PATH: export PATH="$HOME/.local/bin:$PATH"
 ```
 
 **Problem**: `Python version mismatch`
 ```bash
 # Solution: Use Python 3.9+
-python3.11 -m pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0
+python3.11 -m pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.1
 ```
 
 ### Runtime Issues

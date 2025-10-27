@@ -40,9 +40,9 @@ Comprehensive guides and references for the NanoRunner nanopore sequencing simul
 - **[Testing Strategy](testing-strategy.md)**: Framework methodology and best practices
 
 ### Current Status
-- **Test Count**: 48 comprehensive tests
-- **Pass Rate**: 100% (48/48)
-- **Coverage**: 95%+ on monitoring.py and simulator.py
+- **Test Count**: 480 comprehensive tests
+- **Pass Rate**: 99.8% (479/480)
+- **Coverage**: 97% on core components
 
 ## Quick Links
 

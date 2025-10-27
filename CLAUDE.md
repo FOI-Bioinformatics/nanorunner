@@ -217,7 +217,7 @@ Extensions: `.fastq`, `.fq`, `.fastq.gz`, `.fq.gz`, `.pod5`
 **Recent Fixes (v2.0.1):**
 - Fixed critical bug in `DetailedProgressMonitor` parameter handling (`monitoring.py:956-962`)
 - Added CLI parameters for adaptive timing model: `--adaptation-rate` and `--history-size`
-- Enhanced test suite now achieves 100% pass rate (48 tests)
+- Enhanced test suite now achieves 99.8% pass rate (480 tests, 97% coverage)
 
 ## Integration Context
 

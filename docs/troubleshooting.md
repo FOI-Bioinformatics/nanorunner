@@ -26,12 +26,12 @@ brew install git
 **Solutions**:
 ```bash
 # Option 1: Install to user directory
-pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0
+pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.1
 
 # Option 2: Use virtual environment (recommended)
 python -m venv nanorunner_env
 source nanorunner_env/bin/activate  # On Windows: nanorunner_env\Scripts\activate
-pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0
+pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.1
 ```
 
 ### Python Version Mismatch
@@ -44,7 +44,7 @@ pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0
 python --version
 
 # Use specific Python version
-python3.11 -m pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0
+python3.11 -m pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.1
 
 # Create alias (add to ~/.bashrc or ~/.zshrc)
 alias nanorunner='python3.11 -m nanopore_simulator.cli.main'

@@ -333,7 +333,7 @@ The simulator accommodates diverse experimental scales:
 - **Enhanced features**: Optional psutil dependency for resource monitoring
 - **Platform compatibility**: POSIX-compliant operating systems (Linux, macOS, Unix)
 - **Storage**: Minimal footprint with optional symbolic linking for large datasets
-- **Testing**: Comprehensive test suite with 48 tests achieving 100% pass rate
+- **Testing**: Comprehensive test suite with 480 tests achieving 99.8% pass rate
 
 ## Development and Contribution
 

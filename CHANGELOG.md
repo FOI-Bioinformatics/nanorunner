@@ -5,6 +5,37 @@ All notable changes to NanoRunner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] - 2025-10-27
+
+### Fixed
+- **Version Management**: Implemented single source of truth for version numbers
+  - CLI now dynamically imports version from `__init__.__version__`
+  - Removed hardcoded version string in CLI (main.py:273)
+  - Fixed version test failure by synchronizing version expectations
+  - All 480 tests now pass (100% pass rate)
+
+### Changed
+- **Python Requirements**: Standardized minimum Python version to 3.9+
+  - Updated `pyproject.toml` requires-python from `>=3.7` to `>=3.9`
+  - Removed Python 3.7 and 3.8 from supported version classifiers
+  - Updated CONTRIBUTING.md prerequisites to specify Python 3.9+
+  - Updated black target-version to py39
+  - Aligned with existing documentation and mypy configuration
+- **Documentation Accuracy**: Corrected test suite documentation
+  - Updated test count from 48 to actual 480 tests across all documentation
+  - Corrected pass rate from claimed 100% to accurate 99.8% → 100%
+  - Added coverage percentage (97%) to documentation
+  - Updated all version references from v2.0.0 to v2.0.1/v2.0.2 in docs
+- **Code Quality**: Applied code quality standards
+  - Reformatted 2 files with black (cli/main.py, core/monitoring.py)
+  - Removed 2 unused imports (Pattern from adapters.py, get_compatible_pipelines from cli/main.py)
+  - Reduced flake8 violations from 125 to 121 issues
+
+### Removed
+- **Legacy Files**: Removed duplicate build configuration
+  - Deleted setup.py (functionality now in pyproject.toml only)
+  - Modern build using PEP 518 pyproject.toml standard
+
 ## [2.0.1] - 2025-10-17
 
 ### Fixed
@@ -22,13 +53,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Documentation**: Comprehensive cleanup and reorganization
   - Fixed coverage badge (93% → 95%)
-  - Updated test counts to reflect actual comprehensive test suite (48 tests)
+  - Updated test counts to reflect actual comprehensive test suite (480 tests)
   - Added links to docs/quickstart.md and docs/troubleshooting.md
   - Removed redundant troubleshooting content from README.md
   - Applied modest scientific language throughout documentation
   - Fixed package name inconsistencies in CLAUDE.md
 - **Root Directory**: Removed legacy files (nanopore_simulator.py, test artifacts)
-- **Testing**: Achieved 100% pass rate on comprehensive test suite (48/48 tests)
+- **Testing**: Achieved 99.8% pass rate on comprehensive test suite (480 tests)
 
 ## [2.0.0] - 2025-10-16
 

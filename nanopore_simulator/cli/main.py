@@ -1,9 +1,9 @@
 """Command line interface for nanopore simulator"""
 
 import argparse
-import sys
 from pathlib import Path
 
+from .. import __version__
 from ..core.config import SimulationConfig
 from ..core.simulator import NanoporeSimulator
 from ..core.profiles import (
@@ -15,7 +15,6 @@ from ..core.profiles import (
 from ..core.adapters import (
     get_available_adapters,
     validate_for_pipeline,
-    get_compatible_pipelines,
 )
 from ..core.detector import FileStructureDetector
 
@@ -270,7 +269,9 @@ Examples:
         help="Validate output for specific pipeline compatibility",
     )
 
-    parser.add_argument("--version", action="version", version="%(prog)s 2.0.1")
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}"
+    )
 
     args = parser.parse_args()
 

@@ -9,7 +9,7 @@ from .core.config import SimulationConfig
 from .core.detector import FileStructureDetector
 from .core.simulator import NanoporeSimulator
 
-__version__ = "2.0.1"
+__version__ = "2.0.2"
 __author__ = "Andreas Sjodin"
 __email__ = "andreas@example.com"
 
