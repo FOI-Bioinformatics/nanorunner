@@ -34,14 +34,14 @@ NanoRunner is a comprehensive Python application designed for rigorous testing o
 ### From GitHub (Recommended)
 
 ```bash
-# Latest stable release (v2.0.1)
-pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.1
+# Latest stable release (v2.0.2)
+pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2
 
 # Development version (main branch)
 pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@main
 
 # With enhanced monitoring features
-pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.1"
+pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2"
 ```
 
 ### For Development
@@ -55,7 +55,7 @@ pip install -e .[enhanced,dev]
 ### Verify Installation
 
 ```bash
-nanorunner --version  # Should output: nanorunner 2.0.1
+nanorunner --version  # Should output: nanorunner 2.0.2
 nanorunner --help     # Display all available options
 nanorunner --list-profiles  # Show built-in configuration profiles
 ```

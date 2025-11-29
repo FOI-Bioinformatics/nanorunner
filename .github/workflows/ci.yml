@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 jobs:
   test:
@@ -16,43 +16,24 @@ jobs:
         python-version: ["3.9", "3.11", "3.12"]
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e .[test]
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
 
-    - name: Run tests
-      run: |
-        pytest -v
+      - name: Run tests
+        run: pytest -v
 
-  lint:
-    name: Code Quality
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install black mypy
-
-    - name: Check formatting with black
-      run: |
-        black --check nanopore_simulator/ tests/
-
-    - name: Type check with mypy
-      run: |
-        mypy nanopore_simulator/ || echo "Type checking completed with warnings (non-blocking)"
+      - name: Lint (Python 3.11 only)
+        if: matrix.python-version == '3.11'
+        run: |
+          black --check nanopore_simulator/ tests/
+          mypy nanopore_simulator/ || true

@@ -26,12 +26,12 @@ brew install git
 **Solutions**:
 ```bash
 # Option 1: Install to user directory
-pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.1
+pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2
 
 # Option 2: Use virtual environment (recommended)
 python -m venv nanorunner_env
 source nanorunner_env/bin/activate  # On Windows: nanorunner_env\Scripts\activate
-pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.1
+pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2
 ```
 
 ### Python Version Mismatch
@@ -44,7 +44,7 @@ pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.1
 python --version
 
 # Use specific Python version
-python3.11 -m pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.1
+python3.11 -m pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2
 
 # Create alias (add to ~/.bashrc or ~/.zshrc)
 alias nanorunner='python3.11 -m nanopore_simulator.cli.main'
@@ -66,7 +66,7 @@ export PATH="$HOME/.local/bin:$PATH"
 python -m nanopore_simulator.cli.main --help
 
 # Or reinstall with user flag
-pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0
+pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2
 ```
 
 ---
@@ -178,7 +178,7 @@ nanorunner /source /target --profile high_throughput
 pip install psutil
 
 # Or install with enhanced extras
-pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0"
+pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2"
 
 # Verify psutil
 python -c "import psutil; print('OK')"

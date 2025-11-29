@@ -89,7 +89,7 @@ nanorunner/
 
 ## Version Information
 
-- **Current Version**: 2.0.1
+- **Current Version**: 2.0.2
 - **Python Requirement**: 3.9+
 - **Status**: Production/Stable
 - **Last Updated**: 2025-10-17

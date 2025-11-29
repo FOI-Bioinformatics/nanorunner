@@ -214,10 +214,15 @@ Extensions: `.fastq`, `.fq`, `.fastq.gz`, `.fq.gz`, `.pod5`
 - Comprehensive integration testing with multiple timing models and configurations
 - Performance regression testing for parallel processing scenarios
 
-**Recent Fixes (v2.0.1):**
+**Recent Fixes (v2.0.2):**
+- Version management improvements and documentation accuracy
+- Stabilized flaky Poisson timing tests with appropriate statistical thresholds
+- Simplified CI workflow with pip caching
+
+**Fixes (v2.0.1):**
 - Fixed critical bug in `DetailedProgressMonitor` parameter handling (`monitoring.py:956-962`)
 - Added CLI parameters for adaptive timing model: `--adaptation-rate` and `--history-size`
-- Enhanced test suite now achieves 99.8% pass rate (480 tests, 97% coverage)
+- Enhanced test suite achieves 99%+ pass rate (480 tests, 97% coverage)
 
 ## Integration Context
 
