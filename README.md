@@ -1,37 +1,49 @@
-# NanoRunner - Advanced Nanopore Sequencing Simulator
+# NanoRunner - Nanopore Sequencing Simulator
 
 ![CI](https://github.com/FOI-Bioinformatics/nanorunner/workflows/CI/badge.svg)
 ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
 ![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)
-![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen)
 
-NanoRunner is a comprehensive Python application designed for rigorous testing of nanopore sequencing analysis pipelines. The simulator accurately replicates the temporal and structural characteristics of Oxford Nanopore Technologies sequencing workflows by transferring FASTQ and POD5 files with sophisticated timing models, parallel processing capabilities, and real-time monitoring. This tool facilitates robust validation of bioinformatics pipelines under realistic sequencing conditions.
+NanoRunner is a Python tool for testing nanopore sequencing analysis pipelines. It operates in two modes:
+
+- **Replay mode**: Transfers existing FASTQ and POD5 files from a source directory to a target directory with configurable timing, replicating the temporal characteristics of a real sequencing run.
+- **Generate mode**: Produces simulated nanopore FASTQ reads from genome FASTA files, delivering them incrementally with the same timing models.
+
+Both modes support singleplex and multiplex (barcoded) output structures, multiple timing models, parallel processing, and real-time monitoring. The output is compatible with downstream pipelines such as nanometanf, Kraken, and miniknife.
 
 ## Key Features
 
-### Core Simulation Capabilities
-- **Automated structure detection**: Intelligent recognition of singleplex and multiplex experimental designs through directory analysis
-- **Multi-format file support**: Processing of FASTQ files (`.fastq`, `.fq`, `.fastq.gz`, `.fq.gz`) and Oxford Nanopore POD5 signal files (`.pod5`)
-- **Advanced timing models**: Four distinct temporal simulation approaches for realistic sequencing pattern modeling
-- **Parallel processing**: Concurrent file operations with configurable worker threads for high-throughput scenarios
-- **Configuration profiles**: Pre-defined parameter sets optimized for specific sequencing applications and experimental scales
+### Core Capabilities
+- **Two operation modes**: Replay existing sequencing files or generate simulated reads from genomes
+- **Automated structure detection**: Recognition of singleplex and multiplex experimental designs through directory analysis
+- **Multi-format file support**: FASTQ files (`.fastq`, `.fq`, `.fastq.gz`, `.fq.gz`), POD5 signal files (`.pod5`), and genome FASTA files (`.fa`, `.fasta`, gzipped variants)
+- **Timing models**: Four temporal simulation approaches (uniform, random, Poisson, adaptive)
+- **Parallel processing**: Concurrent file operations with configurable worker threads
+- **Configuration profiles**: Pre-defined parameter sets for common sequencing and generation scenarios
 
-### Enhanced Monitoring and Control
+### Read Generation
+- **Built-in generator**: Random subsequences with log-normal length distribution and simulated quality scores. No external dependencies.
+- **Badread integration**: Optional wrapper for the badread simulator (requires separate installation)
+- **NanoSim integration**: Optional wrapper for NanoSim (requires separate installation)
+- **Auto-detection**: Automatically selects the best available backend
+- **Multiplex output**: Each genome assigned to a barcode directory (`barcode01/`, `barcode02/`, ...)
+- **Singleplex output**: Files in target root, optionally mixing reads from multiple genomes
+
+### Monitoring and Control
 - **Real-time progress tracking**: Live monitoring with predictive ETA calculation and performance trend analysis
 - **Resource utilization monitoring**: CPU, memory, and disk I/O tracking with automatic performance warnings
 - **Interactive controls**: Pause/resume functionality with graceful shutdown handling
-- **Checkpoint system**: Automatic progress preservation for recovery from interruptions during long simulations
-- **Performance analytics**: Throughput analysis with confidence scoring and bottleneck identification
+- **Checkpoint system**: Automatic progress preservation for recovery from interruptions
 
 ### Pipeline Integration
-- **Multi-pipeline support**: Built-in adapters for nanometanf, Kraken, miniknife, and generic bioinformatics workflows
+- **Multi-pipeline support**: Built-in adapters for nanometanf, Kraken, miniknife, and generic workflows
 - **Validation framework**: Automated structure and format verification for pipeline compatibility
-- **Flexible output formats**: Support for both file copying and symbolic linking to accommodate storage constraints
+- **Flexible output**: Support for file copying, symbolic linking, and read generation
 
 ## Installation
 
-### From GitHub (Recommended)
+### From GitHub
 
 ```bash
 # Latest stable release (v2.0.2)
@@ -57,19 +69,22 @@ pip install -e .[enhanced,dev]
 ```bash
 nanorunner --version  # Should output: nanorunner 2.0.2
 nanorunner --help     # Display all available options
-nanorunner --list-profiles  # Show built-in configuration profiles
+nanorunner --list-profiles    # Show built-in configuration profiles
+nanorunner --list-generators  # Show available read generation backends
 ```
 
 ## Usage
 
-### Basic Invocation
+### Replay Mode
+
+Transfer existing sequencing files with configurable timing:
+
 ```bash
 nanorunner <source_dir> <target_dir> [options]
 ```
 
-### Essential Examples
+#### Examples
 
-#### Timing Model Selection
 ```bash
 # Uniform intervals for deterministic testing
 nanorunner /data/source /watch/output --timing-model uniform --interval 5
@@ -82,24 +97,86 @@ nanorunner /data/source /watch/output --timing-model poisson --burst-probability
 
 # Adaptive timing responding to processing bottlenecks
 nanorunner /data/source /watch/output --timing-model adaptive
-```
 
-#### Configuration Profiles
-```bash
-# Rapid sequencing scenario with optimized parameters
+# Use a configuration profile
 nanorunner /data/source /watch/output --profile rapid_sequencing
 
-# High-throughput simulation with parallel processing
-nanorunner /data/source /watch/output --profile high_throughput
-
-# Development testing with accelerated intervals
-nanorunner /data/source /watch/output --profile development_testing
-
-# List available profiles and their descriptions
-nanorunner --list-profiles
+# High-throughput with parallel processing
+nanorunner /data/source /watch/output --profile high_throughput --parallel
 ```
 
-#### Enhanced Monitoring
+### Generate Mode
+
+Produce simulated reads from genome FASTA files:
+
+```bash
+nanorunner --genomes <fasta_files...> <target_dir> [options]
+```
+
+When `--genomes` is provided, the tool enters generate mode automatically. No source directory is needed.
+
+#### Examples
+
+```bash
+# Generate reads from two genomes (multiplex: each genome gets a barcode directory)
+nanorunner --genomes genome1.fa genome2.fa /watch/output --interval 5
+
+# Singleplex output (flat directory)
+nanorunner --genomes genome.fa /watch/output --force-structure singleplex
+
+# Mix reads from multiple genomes into shared files
+nanorunner --genomes g1.fa g2.fa /watch/output --force-structure singleplex --mix-reads
+
+# Specify generation parameters
+nanorunner --genomes genome.fa /watch/output \
+    --read-count 5000 \
+    --mean-read-length 8000 \
+    --reads-per-file 200 \
+    --output-format fastq.gz
+
+# Use a specific backend
+nanorunner --genomes genome.fa /watch/output --generator-backend builtin
+
+# Use a generation profile with Poisson timing
+nanorunner --genomes genome.fa /watch/output --profile generate_realistic
+
+# List available backends
+nanorunner --list-generators
+```
+
+#### Generate Mode Output Structure
+
+**Multiplex** (default when multiple genomes provided):
+```
+target_dir/
+├── barcode01/
+│   ├── genome1_reads_0000.fastq.gz
+│   └── genome1_reads_0001.fastq.gz
+└── barcode02/
+    ├── genome2_reads_0000.fastq.gz
+    └── genome2_reads_0001.fastq.gz
+```
+
+**Singleplex** (`--force-structure singleplex`):
+```
+target_dir/
+├── genome1_reads_0000.fastq.gz
+├── genome1_reads_0001.fastq.gz
+├── genome2_reads_0000.fastq.gz
+└── genome2_reads_0001.fastq.gz
+```
+
+#### Read Generation Backends
+
+| Backend | Dependencies | Description |
+|---------|-------------|-------------|
+| `builtin` | None | Random subsequences with log-normal length distribution and simulated quality scores |
+| `badread` | [badread](https://github.com/rrwick/Badread) | Realistic nanopore read simulation with error models |
+| `nanosim` | [NanoSim](https://github.com/bcgsc/NanoSim) | Statistical read simulation from training data |
+| `auto` | Varies | Selects the best available backend (badread > nanosim > builtin) |
+
+### Enhanced Monitoring
+
 ```bash
 # Enable comprehensive monitoring with resource tracking
 nanorunner /data/source /watch/output --monitor enhanced
@@ -111,16 +188,8 @@ nanorunner /data/source /watch/output --monitor detailed
 nanorunner /data/source /watch/output --monitor none --quiet
 ```
 
-#### Parallel Processing
-```bash
-# Enable parallel processing with custom worker count
-nanorunner /data/source /watch/output --parallel --worker-count 8
+### Pipeline Validation
 
-# Combine with configuration profile for optimized performance
-nanorunner /data/source /watch/output --profile high_throughput --parallel
-```
-
-#### Pipeline Validation
 ```bash
 # Validate output compatibility with specific pipeline
 nanorunner /data/source /watch/output --pipeline nanometanf
@@ -132,27 +201,49 @@ nanorunner --list-adapters
 nanorunner --validate-pipeline kraken /path/to/output
 ```
 
-### Configuration Parameters
+### Configuration Profiles
 
-#### Core Options
+```bash
+# List all available profiles
+nanorunner --list-profiles
+
+# Get recommendations based on source data
+nanorunner --recommend /path/to/data
+```
+
+Built-in profiles include: `rapid_sequencing`, `accurate_mode`, `development_testing`, `high_throughput`, `long_read_nanopore`, `adaptive_learning`, `minion_simulation`, `promethion_simulation`, `legacy_random`, `generate_quick_test`, `generate_realistic`.
+
+## Configuration Parameters
+
+### Core Options
 - `--interval SECONDS`: Base time interval between file operations (default: 5.0)
-- `--operation {copy,link}`: File transfer method (default: copy)
+- `--operation {copy,link}`: File transfer method for replay mode (default: copy)
 - `--force-structure {singleplex,multiplex}`: Override automatic structure detection
 - `--batch-size COUNT`: Files processed per time interval (default: 1)
+- `--profile NAME`: Use a predefined configuration profile
 
-#### Timing Model Configuration
+### Timing Model Configuration
 - `--timing-model {uniform,random,poisson,adaptive}`: Temporal pattern selection
 - `--random-factor FACTOR`: Variation magnitude for random model (0.0-1.0)
 - `--burst-probability PROB`: Burst event probability for Poisson model
 - `--burst-rate-multiplier MULT`: Rate increase during burst events
 - `--adaptation-rate RATE`: Learning speed for adaptive model (0.0-1.0, default: 0.1)
-- `--history-size SIZE`: Lookback window for adaptive model (integer ≥1, default: 10)
+- `--history-size SIZE`: Lookback window for adaptive model (default: 10)
 
-#### Processing Options
+### Read Generation Options
+- `--genomes FASTA [FASTA ...]`: Input genome FASTA files (activates generate mode)
+- `--generator-backend {auto,builtin,badread,nanosim}`: Read generation backend (default: auto)
+- `--read-count INT`: Reads to generate per genome (default: 1000)
+- `--mean-read-length INT`: Mean read length in bases (default: 5000)
+- `--reads-per-file INT`: Reads per output file (default: 100)
+- `--output-format {fastq,fastq.gz}`: Output file format (default: fastq.gz)
+- `--mix-reads`: Mix reads from all genomes into shared files (singleplex mode)
+
+### Processing Options
 - `--parallel`: Enable concurrent file processing within batches
 - `--worker-count COUNT`: Number of parallel worker threads (default: 4)
 
-#### Monitoring Configuration
+### Monitoring Configuration
 - `--monitor {default,detailed,enhanced,none}`: Progress monitoring level
 - `--quiet`: Suppress progress output for automated workflows
 
@@ -169,12 +260,12 @@ nanorunner /data /output --timing-model uniform --interval 10
 Introduces symmetric stochastic variation around the base interval, suitable for robustness testing under moderate temporal irregularity.
 
 ```bash
-# ±30% variation around base interval
+# +/-30% variation around base interval
 nanorunner /data /output --timing-model random --interval 5 --random-factor 0.3
 ```
 
 ### Poisson Model
-Implements biologically-motivated timing with burst behavior, accurately modeling the irregular nature of actual sequencing data generation.
+Implements biologically-motivated timing with burst behavior, modeling the irregular nature of actual sequencing data generation.
 
 ```bash
 # 15% probability of burst events with 3x rate increase
@@ -182,17 +273,8 @@ nanorunner /data /output --timing-model poisson --burst-probability 0.15 --burst
 ```
 
 ### Adaptive Model
-Dynamically adjusts intervals based on historical performance, simulating feedback mechanisms in real sequencing systems. The model maintains a history of recent intervals and adapts the timing based on observed patterns.
+Dynamically adjusts intervals based on historical performance, simulating feedback mechanisms in real sequencing systems.
 
-#### Parameters
-- `--adaptation-rate`: Controls learning speed (0.0-1.0, default: 0.1)
-  - Higher values: Faster adaptation to changing conditions
-  - Lower values: More stable, conservative timing
-- `--history-size`: Number of recent intervals to consider (default: 10)
-  - Larger values: Smoother adaptation, less reactive
-  - Smaller values: More responsive to recent changes
-
-#### Examples
 ```bash
 # Default adaptive behavior
 nanorunner /data /output --timing-model adaptive
@@ -216,31 +298,11 @@ source_dir/
 └── sample3.pod5
 ```
 
-Output preserves the flat structure:
-```
-target_dir/
-├── sample1.fastq
-├── sample2.fastq.gz
-└── sample3.pod5
-```
-
 ### Multiplex Configuration
 Barcode-based sample organization for multiplexed experiments:
 
 ```
 source_dir/
-├── barcode01/
-│   ├── reads1.fastq
-│   └── reads2.fastq.gz
-├── barcode02/
-│   └── reads.fastq.gz
-└── unclassified/
-    └── unassigned.fastq
-```
-
-Hierarchical structure is preserved:
-```
-target_dir/
 ├── barcode01/
 │   ├── reads1.fastq
 │   └── reads2.fastq.gz
@@ -261,19 +323,8 @@ Supported naming conventions for automatic multiplex detection:
 
 ### Real-time Progress Display
 ```
-[██████████████████████████████] 75.2% | 1,847/2,455 files | 12.3 files/sec | ETA: 2.1m ↗★★ | CPU: 45% | RAM: 62% | Elapsed: 2.5m
+[==============================] 75.2% | 1,847/2,455 files | 12.3 files/sec | ETA: 2.1m | CPU: 45% | RAM: 62% | Elapsed: 2.5m
 ```
-
-### Performance Indicators
-- **Progress bar**: Visual completion status with file count
-- **Throughput**: Current processing rate in files per second
-- **ETA prediction**: Estimated time to completion with trend analysis
-  - ↗ Improving performance
-  - ↘ Degrading performance  
-  - → Stable performance
-- **Confidence**: Star rating (★) indicating prediction reliability
-- **Resource usage**: Real-time CPU and memory utilization
-- **Elapsed time**: Total simulation duration
 
 ### Interactive Controls
 - **Ctrl+C**: Graceful shutdown with summary statistics
@@ -283,7 +334,7 @@ Supported naming conventions for automatic multiplex detection:
 ## Pipeline Integration
 
 ### Primary Integration: nanometanf
-Optimized for testing the nanometanf real-time taxonomic classification pipeline:
+Both replay and generate modes produce output compatible with nanometanf's real-time monitoring:
 
 ```bash
 # Configure nanometanf for simulated data consumption
@@ -303,37 +354,14 @@ Built-in adapters provide validation for multiple bioinformatics workflows:
 - **miniknife**: Lightweight classification for resource-constrained environments
 - **Generic**: Customizable adapter for arbitrary pipeline requirements
 
-### Validation Workflow
-```bash
-# Simulate data with pipeline-specific validation
-nanorunner /data/source /watch/output --pipeline nanometanf --monitor enhanced
-
-# Post-simulation validation report
-nanorunner --validate-pipeline kraken /watch/output
-```
-
-## Performance Characteristics
-
-### Throughput Optimization
-- **Sequential processing**: Suitable for development and small datasets (< 100 files)
-- **Parallel processing**: Optimized for production workflows (> 1,000 files)
-- **Batch processing**: Configurable batch sizes for memory management
-- **Resource monitoring**: Automatic detection of CPU, memory, and I/O bottlenecks
-
-### Scalability Testing
-The simulator accommodates diverse experimental scales:
-- **Development**: 10-100 files with rapid intervals
-- **Validation**: 100-1,000 files with realistic timing
-- **Production**: 1,000-10,000+ files with parallel processing
-
 ## Technical Requirements
 
-- **Python**: Version 3.9 or higher with full type annotation support
-- **Core dependencies**: Standard library only for basic functionality
+- **Python**: Version 3.9 or higher
+- **Core dependencies**: Standard library only for basic functionality (including built-in read generation)
 - **Enhanced features**: Optional psutil dependency for resource monitoring
+- **Optional read generators**: badread and/or NanoSim for higher-fidelity read simulation
 - **Platform compatibility**: POSIX-compliant operating systems (Linux, macOS, Unix)
-- **Storage**: Minimal footprint with optional symbolic linking for large datasets
-- **Testing**: Comprehensive test suite with 480 tests achieving 99.8% pass rate
+- **Testing**: 513 tests across 30 test files
 
 ## Development and Contribution
 
@@ -346,8 +374,6 @@ pip install -e .[enhanced,dev]
 
 ### Testing Framework
 
-The test suite validates all documented functionality with comprehensive coverage of core components, integration scenarios, and edge cases.
-
 ```bash
 # Run complete test suite
 pytest
@@ -358,7 +384,8 @@ pytest -m "not slow"
 # Run specific test modules
 pytest tests/test_cli.py                    # CLI interface tests
 pytest tests/test_timing_models.py          # Timing model validation
-pytest tests/test_enhanced_monitoring.py    # Advanced monitoring features
+pytest tests/test_generators.py             # Read generation backends
+pytest tests/test_generate_integration.py   # Generate mode end-to-end
 
 # Generate coverage report
 pytest --cov=nanopore_simulator --cov-report=html --cov-report=term-missing
@@ -378,11 +405,11 @@ flake8 nanopore_simulator/
 
 ## Documentation
 
-Comprehensive guides and references are available in the [docs/](docs/) directory:
+Guides and references are available in the [docs/](docs/) directory:
 
 - **[Quick Start Guide](docs/quickstart.md)**: Step-by-step setup and first simulation
 - **[Troubleshooting Guide](docs/troubleshooting.md)**: Solutions for common installation and runtime issues
-- **[Examples](examples/)**: Working code demonstrating timing models, profiles, and pipeline integration
+- **[Examples](examples/)**: Working code demonstrating timing models, profiles, generation, and pipeline integration
 
 ## Troubleshooting
 
@@ -406,4 +433,3 @@ This software is distributed under the MIT License and developed for research ap
 
 **Developed by**: [FOI Bioinformatics](https://github.com/FOI-Bioinformatics) - Swedish Defence Research Agency
 **Repository**: https://github.com/FOI-Bioinformatics/nanorunner
-**Documentation**: Comprehensive user guides and API documentation available in the repository

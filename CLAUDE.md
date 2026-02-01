@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is `nanorunner` - a comprehensive nanopore sequencing run simulator designed for testing bioinformatics pipelines. It implements sophisticated temporal modeling, parallel processing capabilities, and real-time monitoring to accurately simulate nanopore sequencing workflows. The system supports multiple timing models (uniform, random, Poisson, adaptive), configuration profiles for different experimental scenarios, pipeline-specific adapters, and enhanced progress monitoring with resource tracking.
+This is `nanorunner` - a nanopore sequencing run simulator designed for testing bioinformatics pipelines. It operates in two modes: **replay mode** transfers existing FASTQ/POD5 files with configurable timing, while **generate mode** produces simulated nanopore reads from genome FASTA files. Both modes support multiple timing models (uniform, random, Poisson, adaptive), parallel processing, configuration profiles, pipeline-specific adapters, and progress monitoring with resource tracking.
 
 ## Project Standards
 
@@ -53,14 +53,11 @@ This project adheres to strict quality principles in all code, documentation, an
 
 ### 6. Scientific Language
 - **Modest tone**: Avoid superlatives, marketing language, and exaggeration
-  - ✅ "Provides realistic timing simulation"
-  - ❌ "Revolutionary ultra-advanced next-generation timing"
+  - Use "provides realistic timing simulation" not "revolutionary ultra-advanced next-generation timing"
 - **Precise terminology**: Use established scientific and technical terms
   - Use "temporal patterns" not "timing stuff"
   - Use "throughput optimization" not "making it faster"
 - **Evidence-based claims**: Support statements with data
-  - ✅ "95%+ test coverage on core components"
-  - ❌ "Extremely well-tested"
 - **Professional objectivity**: Focus on facts and capabilities, not opinions
 - **Appropriate detail**: Balance technical accuracy with readability
 
@@ -85,7 +82,7 @@ pip install -e .[enhanced]
 # Run all tests with coverage
 pytest
 
-# Run specific test categories  
+# Run specific test categories
 pytest tests/test_cli.py                    # CLI interface tests
 pytest tests/test_cli_enhanced.py           # Enhanced CLI feature tests
 pytest tests/test_enhanced_monitoring.py    # Advanced monitoring tests
@@ -94,6 +91,8 @@ pytest tests/test_timing_models.py          # Timing model tests
 pytest tests/test_profiles.py               # Configuration profile tests
 pytest tests/test_adapters.py               # Pipeline adapter tests
 pytest tests/test_integration.py            # End-to-end integration tests
+pytest tests/test_generators.py             # Read generation backend tests
+pytest tests/test_generate_integration.py   # Generate mode end-to-end tests
 pytest tests/test_performance.py -m slow    # Performance benchmarks
 
 # Run with coverage reporting
@@ -108,7 +107,7 @@ pytest -m "not slow"
 # Format code
 black nanopore_simulator/ tests/
 
-# Type checking  
+# Type checking
 mypy nanopore_simulator/
 
 # Lint code
@@ -124,7 +123,9 @@ python -m build
 nanorunner --help
 nanorunner --list-profiles
 nanorunner --list-adapters
+nanorunner --list-generators
 nanorunner /source /target --profile rapid_sequencing --monitor enhanced
+nanorunner --genomes genome.fa /target --interval 2
 ```
 
 ## Architecture
@@ -132,33 +133,53 @@ nanorunner /source /target --profile rapid_sequencing --monitor enhanced
 ### Core Components
 
 **nanopore_simulator/core/**
-- `config.py`: SimulationConfig dataclass with comprehensive validation for all simulation parameters
+- `config.py`: SimulationConfig dataclass with validation for all simulation parameters including generate mode fields
 - `detector.py`: FileStructureDetector for automatic singleplex/multiplex structure recognition
-- `simulator.py`: NanoporeSimulator orchestration class with enhanced error handling and resource management
+- `simulator.py`: NanoporeSimulator orchestration class handling both replay (copy/link) and generate operations
 - `timing.py`: Timing model implementations (UniformTimingModel, RandomTimingModel, PoissonTimingModel, AdaptiveTimingModel)
-- `profiles.py`: Configuration profile system with built-in profiles for common sequencing scenarios
+- `generators.py`: Read generation backends (BuiltinGenerator, BadreadGenerator, NanoSimGenerator) with ABC, factory, and FASTA parsing
+- `profiles.py`: Configuration profile system with built-in profiles for sequencing and generation scenarios
 - `adapters.py`: Pipeline adapter framework for nanometanf, Kraken, miniknife, and generic pipelines
 - `monitoring.py`: Enhanced progress monitoring with resource tracking, predictive ETA, and interactive controls
 
 **nanopore_simulator/cli/**
-- `main.py`: Comprehensive command-line interface with profile support, timing model selection, and monitoring options
+- `main.py`: Command-line interface with profile support, timing model selection, monitoring options, and read generation arguments
 
 ### Key Design Patterns
 
-**Data Flow:**
+**Operation Modes:**
+- **Replay mode** (`copy`/`link`): Transfers existing sequencing files from source to target with timing
+- **Generate mode** (`generate`): Produces simulated FASTQ reads from FASTA genomes with timing
+
+**Data Flow (Replay):**
 1. CLI parses arguments and handles profile/adapter commands
 2. Configuration created from profiles or direct parameters with timing model specification
-3. FileStructureDetector analyzes source directory structure  
+3. FileStructureDetector analyzes source directory structure
 4. NanoporeSimulator initializes with timing model, parallel processing, and monitoring components
-5. Enhanced progress monitoring tracks performance with resource usage and predictive analytics
-6. Files processed in batches with sophisticated timing models and optional parallelization
+5. Files processed in batches with timing models and optional parallelization
+
+**Data Flow (Generate):**
+1. CLI receives `--genomes` argument, sets `operation="generate"`
+2. Configuration created with genome paths and generation parameters
+3. NanoporeSimulator initializes ReadGenerator via factory (auto/builtin/badread/nanosim)
+4. `_create_generate_manifest()` builds file plan: multiplex assigns each genome to a barcode directory, singleplex places files in target root (optionally mixed)
+5. Each manifest entry processed through `_process_generate()` which calls `generator.generate_reads()`
+6. Output files appear incrementally with timing, compatible with downstream pipelines
 
 **Timing Model Architecture:**
 - Abstract `TimingModel` base class with factory pattern implementation
 - Uniform: Constant intervals for deterministic testing
 - Random: Symmetric variation around base interval with configurable randomness factor
-- Poisson: Biologically-realistic intervals with burst behavior modeling
+- Poisson: Biologically-motivated intervals with burst behavior modeling
 - Adaptive: Dynamic interval adjustment based on historical performance
+
+**Read Generator Architecture:**
+- Abstract `ReadGenerator` base class with factory pattern (`create_read_generator()`)
+- BuiltinGenerator: Random subsequences from FASTA with log-normal length distribution, simulated quality scores. No external dependencies.
+- BadreadGenerator: Wraps `badread simulate` via subprocess
+- NanoSimGenerator: Wraps NanoSim via subprocess
+- Auto mode tries badread, nanosim, then builtin in order of preference
+- `detect_available_backends()` reports which backends are installed
 
 **Enhanced Monitoring System:**
 - Thread-safe `ProgressMonitor` with real-time resource tracking
@@ -168,7 +189,7 @@ nanorunner /source /target --profile rapid_sequencing --monitor enhanced
 - Performance warning detection (high CPU/memory usage, low throughput)
 
 **Configuration Profile System:**
-- Built-in profiles: `rapid_sequencing`, `accurate_mode`, `development_testing`, `high_throughput`, etc.
+- Built-in profiles: `rapid_sequencing`, `accurate_mode`, `development_testing`, `high_throughput`, `generate_quick_test`, `generate_realistic`, etc.
 - Profile recommendations based on file count and use case
 - Override capability for profile-based configurations
 
@@ -178,13 +199,15 @@ nanorunner /source /target --profile rapid_sequencing --monitor enhanced
 - File pattern validation and structure requirements checking
 
 ### Supported File Types
-Extensions: `.fastq`, `.fq`, `.fastq.gz`, `.fq.gz`, `.pod5`
+- **Replay mode input**: `.fastq`, `.fq`, `.fastq.gz`, `.fq.gz`, `.pod5`
+- **Generate mode input**: `.fa`, `.fasta`, `.fa.gz`, `.fasta.gz` (genome FASTA files)
+- **Generate mode output**: `.fastq`, `.fastq.gz`
 
 ### Parallel Processing
 - Optional ThreadPoolExecutor-based parallel file processing within batches
 - Configurable worker thread count with automatic scaling
 - Thread-safe progress monitoring and error handling
-- Performance optimization for high-throughput scenarios
+- Applies to both replay and generate modes
 
 ## Testing Architecture
 
@@ -199,6 +222,8 @@ Extensions: `.fastq`, `.fq`, `.fastq.gz`, `.fq.gz`, `.pod5`
 - `test_enhanced_monitoring.py`: Advanced monitoring features and resource tracking
 - `test_profiles.py`: Configuration profile system validation
 - `test_adapters.py`: Pipeline adapter functionality and validation
+- `test_generators.py`: Read generation backends, FASTA parsing, factory, config validation
+- `test_generate_integration.py`: End-to-end generate mode with multiplex, singleplex, mixed, and timing
 - `test_integration.py`: End-to-end workflow testing with various configurations
 - `test_timing_integration.py`: Timing model integration with simulation workflow
 - `test_edge_cases.py`: Error handling, permissions, and boundary conditions
@@ -210,24 +235,17 @@ Extensions: `.fastq`, `.fq`, `.fastq.gz`, `.fq.gz`, `.pod5`
 - Thread-safe operations with proper resource cleanup
 
 **Coverage Standards:**
-- Minimum coverage threshold: 90% (currently 95%+)
+- Minimum coverage threshold: 90%
+- 513 tests across 30 test files
 - Comprehensive integration testing with multiple timing models and configurations
-- Performance regression testing for parallel processing scenarios
-
-**Recent Fixes (v2.0.2):**
-- Version management improvements and documentation accuracy
-- Stabilized flaky Poisson timing tests with appropriate statistical thresholds
-- Simplified CI workflow with pip caching
-
-**Fixes (v2.0.1):**
-- Fixed critical bug in `DetailedProgressMonitor` parameter handling (`monitoring.py:956-962`)
-- Added CLI parameters for adaptive timing model: `--adaptation-rate` and `--history-size`
-- Enhanced test suite achieves 99%+ pass rate (480 tests, 97% coverage)
 
 ## Integration Context
 
 ### Primary Integration: nanometanf Pipeline
-The simulator is optimized for testing the nanometanf real-time taxonomic classification pipeline:
+The simulator is designed for testing the nanometanf real-time taxonomic classification pipeline. Both replay and generate modes produce output compatible with nanometanf's `watchPath()` behavior:
+- Same barcode directory patterns (`barcode01/`, `barcode02/`, `unclassified/`)
+- Same file extensions (`.fastq`, `.fastq.gz`)
+- Files appear incrementally with timing
 
 ```bash
 # Configure nanometanf for simulated data consumption
@@ -254,11 +272,11 @@ The timing models provide biologically-motivated temporal patterns:
 
 ## Configuration Notes
 
-- **Dependencies**: Standard library only for core functionality; optional psutil for enhanced monitoring
+- **Dependencies**: Standard library only for core functionality; optional psutil for enhanced monitoring; optional badread/NanoSim for external read generation backends
 - **Python compatibility**: 3.9+ with full type hint support
 - **Performance**: Optimized for datasets ranging from development (10s of files) to production scale (10,000+ files)
 - **Resource monitoring**: Optional CPU, memory, and disk I/O tracking with performance warnings
-- **Extensibility**: Plugin architecture for custom timing models, adapters, and monitoring components
+- **Extensibility**: Plugin architecture for custom timing models, adapters, read generators, and monitoring components
 - **Console script entry point**: `nanorunner`
 - **Enhanced features**: Available via `pip install nanorunner[enhanced]` for resource monitoring capabilities
 
@@ -266,11 +284,12 @@ The timing models provide biologically-motivated temporal patterns:
 
 When extending functionality:
 1. **Timing models**: Inherit from `TimingModel` abstract base class with `next_interval()` implementation
-2. **Pipeline adapters**: Implement `PipelineAdapter` interface with validation logic
-3. **Monitoring**: Use thread-safe `ProgressMonitor` methods for metrics collection
-4. **Testing**: Include both unit tests and integration tests with performance considerations
-5. **Configuration**: Add new parameters to `SimulationConfig` with appropriate validation
-6. **Documentation**: Update both technical documentation and user-facing examples
+2. **Read generators**: Inherit from `ReadGenerator` ABC with `generate_reads()` and `is_available()` implementations; register in `_BACKENDS` dict in `generators.py`
+3. **Pipeline adapters**: Implement `PipelineAdapter` interface with validation logic
+4. **Monitoring**: Use thread-safe `ProgressMonitor` methods for metrics collection
+5. **Testing**: Include both unit tests and integration tests with performance considerations
+6. **Configuration**: Add new parameters to `SimulationConfig` with appropriate validation
+7. **Documentation**: Update both technical documentation and user-facing examples
 
 ## User Documentation
 
