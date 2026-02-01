@@ -17,6 +17,7 @@ from ..core.adapters import (
     validate_for_pipeline,
 )
 from ..core.detector import FileStructureDetector
+from ..core.generators import detect_available_backends
 
 
 def list_profiles_command() -> int:
@@ -36,6 +37,17 @@ def list_adapters_command() -> int:
     print("=" * 50)
     for name, description in adapters.items():
         print(f"  {name:15} - {description}")
+    return 0
+
+
+def list_generators_command() -> int:
+    """List available read generation backends"""
+    backends = detect_available_backends()
+    print("Available Read Generation Backends:")
+    print("=" * 50)
+    for name, available in backends.items():
+        status = "available" if available else "not found"
+        print(f"  {name:15} - {status}")
     return 0
 
 
@@ -136,6 +148,15 @@ Examples:
   # Validate for specific pipeline
   nanorunner --validate-pipeline kraken /target/dir
 
+  # Generate reads from genome FASTA files
+  nanorunner --genomes genome1.fa genome2.fa /watch/output --interval 5
+
+  # Generate with builtin backend and singleplex mixed output
+  nanorunner --genomes genome.fa /watch/output --generator-backend builtin --force-structure singleplex --mix-reads
+
+  # List available generation backends
+  nanorunner --list-generators
+
   # Enhanced features require: pip install nanorunner[enhanced]
         """,
     )
@@ -162,6 +183,56 @@ Examples:
         nargs=2,
         metavar=("PIPELINE", "TARGET_DIR"),
         help="Validate target directory for a specific pipeline",
+    )
+    parser.add_argument(
+        "--list-generators",
+        action="store_true",
+        help="List available read generation backends",
+    )
+
+    # Read generation arguments
+    gen_group = parser.add_argument_group("Read Generation")
+    gen_group.add_argument(
+        "--genomes",
+        type=Path,
+        nargs="+",
+        metavar="FASTA",
+        help="Input genome FASTA files for read generation mode",
+    )
+    gen_group.add_argument(
+        "--generator-backend",
+        choices=["auto", "builtin", "badread", "nanosim"],
+        default="auto",
+        help="Read generation backend (default: auto)",
+    )
+    gen_group.add_argument(
+        "--read-count",
+        type=int,
+        default=1000,
+        help="Number of reads to generate per genome (default: 1000)",
+    )
+    gen_group.add_argument(
+        "--mean-read-length",
+        type=int,
+        default=5000,
+        help="Mean read length in bases (default: 5000)",
+    )
+    gen_group.add_argument(
+        "--reads-per-file",
+        type=int,
+        default=100,
+        help="Number of reads per output file (default: 100)",
+    )
+    gen_group.add_argument(
+        "--output-format",
+        choices=["fastq", "fastq.gz"],
+        default="fastq.gz",
+        help="Output file format (default: fastq.gz)",
+    )
+    gen_group.add_argument(
+        "--mix-reads",
+        action="store_true",
+        help="Mix reads from all genomes into shared files (singleplex mode)",
     )
 
     # Main simulation arguments (optional for some commands)
@@ -289,12 +360,30 @@ Examples:
         pipeline_name, target_dir = args.validate_pipeline
         return validate_pipeline_command(Path(target_dir), pipeline_name)
 
-    # Main simulation requires source and target directories
-    if not args.source_dir or not args.target_dir:
-        parser.error("source_dir and target_dir are required for simulation")
+    if args.list_generators:
+        return list_generators_command()
 
-    if not args.source_dir.exists():
-        parser.error(f"Source directory does not exist: {args.source_dir}")
+    # Determine operation mode
+    is_generate = args.genomes is not None
+
+    if is_generate:
+        # Generate mode: only target_dir required
+        if not args.target_dir:
+            # If source_dir was provided but not target_dir, treat source_dir as target_dir
+            if args.source_dir:
+                args.target_dir = args.source_dir
+                args.source_dir = None
+            else:
+                parser.error("target_dir is required for generate mode")
+        for gpath in args.genomes:
+            if not gpath.exists():
+                parser.error(f"Genome file does not exist: {gpath}")
+    else:
+        # Copy/link mode: both dirs required
+        if not args.source_dir or not args.target_dir:
+            parser.error("source_dir and target_dir are required for simulation")
+        if not args.source_dir.exists():
+            parser.error(f"Source directory does not exist: {args.source_dir}")
 
     # Validate arguments
     if args.random_factor is not None and (
@@ -365,6 +454,16 @@ Examples:
             if args.force_structure:
                 overrides["force_structure"] = args.force_structure
 
+            if is_generate:
+                overrides["operation"] = "generate"
+                overrides["genome_inputs"] = args.genomes
+                overrides["generator_backend"] = args.generator_backend
+                overrides["read_count"] = args.read_count
+                overrides["mean_read_length"] = args.mean_read_length
+                overrides["reads_per_file"] = args.reads_per_file
+                overrides["output_format"] = args.output_format
+                overrides["mix_reads"] = args.mix_reads
+
             config = create_config_from_profile(
                 args.profile,
                 args.source_dir,
@@ -393,19 +492,32 @@ Examples:
                 if args.history_size is not None:
                     timing_model_params["history_size"] = args.history_size
 
-            # Create standard configuration
-            config = SimulationConfig(
-                source_dir=args.source_dir,
-                target_dir=args.target_dir,
-                interval=args.interval,
-                operation=args.operation,
-                force_structure=args.force_structure,
-                batch_size=args.batch_size,
-                timing_model=timing_model,
-                timing_model_params=timing_model_params,
-                parallel_processing=args.parallel,
-                worker_count=args.worker_count,
-            )
+            # Build base config kwargs
+            config_kwargs = {
+                "target_dir": args.target_dir,
+                "interval": args.interval,
+                "force_structure": args.force_structure,
+                "batch_size": args.batch_size,
+                "timing_model": timing_model,
+                "timing_model_params": timing_model_params,
+                "parallel_processing": args.parallel,
+                "worker_count": args.worker_count,
+            }
+
+            if is_generate:
+                config_kwargs["operation"] = "generate"
+                config_kwargs["genome_inputs"] = args.genomes
+                config_kwargs["generator_backend"] = args.generator_backend
+                config_kwargs["read_count"] = args.read_count
+                config_kwargs["mean_read_length"] = args.mean_read_length
+                config_kwargs["reads_per_file"] = args.reads_per_file
+                config_kwargs["output_format"] = args.output_format
+                config_kwargs["mix_reads"] = args.mix_reads
+            else:
+                config_kwargs["source_dir"] = args.source_dir
+                config_kwargs["operation"] = args.operation
+
+            config = SimulationConfig(**config_kwargs)
 
         # Determine monitoring settings
         enable_monitoring = not args.quiet and args.monitor != "none"

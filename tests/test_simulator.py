@@ -196,7 +196,7 @@ class TestNanoporeSimulator:
     def test_process_file_invalid_operation(self):
         """Test error handling for invalid operation"""
         # Should raise ValueError during config validation
-        with pytest.raises(ValueError, match="operation must be 'copy' or 'link'"):
+        with pytest.raises(ValueError, match="operation must be 'copy', 'link', or 'generate'"):
             SimulationConfig(
                 source_dir=self.source_dir,
                 target_dir=self.target_dir,

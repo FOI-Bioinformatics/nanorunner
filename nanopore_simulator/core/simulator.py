@@ -10,6 +10,12 @@ from typing import List, Dict, Union, Optional, Any
 
 from .config import SimulationConfig
 from .detector import FileStructureDetector
+from .generators import (
+    ReadGeneratorConfig,
+    GenomeInput,
+    ReadGenerator,
+    create_read_generator,
+)
 from .timing import create_timing_model, TimingModel
 from .monitoring import ProgressMonitor, create_progress_monitor
 
@@ -43,6 +49,22 @@ class NanoporeSimulator:
         self.monitor_type = monitor_type
         self.progress_monitor: Optional[ProgressMonitor] = None
 
+        # Initialize read generator for generate mode
+        self.read_generator: Optional[ReadGenerator] = None
+        if config.operation == "generate":
+            gen_config = ReadGeneratorConfig(
+                num_reads=config.read_count,
+                mean_read_length=config.mean_read_length,
+                std_read_length=config.std_read_length,
+                min_read_length=config.min_read_length,
+                mean_quality=config.mean_quality,
+                reads_per_file=config.reads_per_file,
+                output_format=config.output_format,
+            )
+            self.read_generator = create_read_generator(
+                config.generator_backend, gen_config
+            )
+
         # Interactive control flags
         self._simulation_paused = False
         self._shutdown_requested = False
@@ -59,25 +81,37 @@ class NanoporeSimulator:
     def run_simulation(self) -> None:
         """Run the complete simulation"""
         self.logger.info(f"Starting nanopore simulation")
-        self.logger.info(f"Source: {self.config.source_dir}")
-        self.logger.info(f"Target: {self.config.target_dir}")
 
-        # Detect or use forced structure
-        if self.config.force_structure:
-            structure = self.config.force_structure
-            self.logger.info(f"Using forced structure: {structure}")
+        if self.config.operation == "generate":
+            self.logger.info(
+                f"Mode: generate reads from {len(self.config.genome_inputs)} genome(s)"
+            )
         else:
-            structure = FileStructureDetector.detect_structure(self.config.source_dir)
-            self.logger.info(f"Detected structure: {structure}")
+            self.logger.info(f"Source: {self.config.source_dir}")
+        self.logger.info(f"Target: {self.config.target_dir}")
 
         # Prepare target directory
         self._prepare_target_directory()
 
-        # Get file manifest
-        if structure == "singleplex":
-            file_manifest = self._create_singleplex_manifest()
+        if self.config.operation == "generate":
+            structure = self.config.force_structure or "multiplex"
+            file_manifest = self._create_generate_manifest(structure)
         else:
-            file_manifest = self._create_multiplex_manifest()
+            # Detect or use forced structure
+            if self.config.force_structure:
+                structure = self.config.force_structure
+                self.logger.info(f"Using forced structure: {structure}")
+            else:
+                structure = FileStructureDetector.detect_structure(
+                    self.config.source_dir
+                )
+                self.logger.info(f"Detected structure: {structure}")
+
+            # Get file manifest
+            if structure == "singleplex":
+                file_manifest = self._create_singleplex_manifest()
+            else:
+                file_manifest = self._create_multiplex_manifest()
 
         self.logger.info(f"Found {len(file_manifest)} files to simulate")
 
@@ -164,6 +198,67 @@ class NanoporeSimulator:
                         "barcode": barcode_name,
                     }
                 )
+
+        return manifest
+
+    def _create_generate_manifest(self, structure: str) -> List[Dict[str, Any]]:
+        """Create file manifest for read generation mode.
+
+        Args:
+            structure: "multiplex" assigns each genome to a barcode directory,
+                       "singleplex" places files in the target root.
+        """
+        import math
+
+        manifest = []
+        genome_inputs = self.config.genome_inputs
+        files_per_genome = math.ceil(
+            self.config.read_count / self.config.reads_per_file
+        )
+
+        if structure == "multiplex":
+            for idx, genome_path in enumerate(genome_inputs):
+                barcode = f"barcode{idx + 1:02d}"
+                barcode_dir = self.config.target_dir / barcode
+                genome = GenomeInput(fasta_path=genome_path, barcode=barcode)
+                for fi in range(files_per_genome):
+                    manifest.append(
+                        {
+                            "genome": genome,
+                            "target": barcode_dir,
+                            "file_index": fi,
+                            "barcode": barcode,
+                        }
+                    )
+        elif self.config.mix_reads:
+            # Singleplex mixed: pool reads from all genomes into shared files
+            total_files = files_per_genome * len(genome_inputs)
+            genomes = [
+                GenomeInput(fasta_path=gp) for gp in genome_inputs
+            ]
+            for fi in range(total_files):
+                genome = genomes[fi % len(genomes)]
+                manifest.append(
+                    {
+                        "genome": genome,
+                        "target": self.config.target_dir,
+                        "file_index": fi,
+                        "barcode": None,
+                    }
+                )
+        else:
+            # Singleplex separate: each genome gets named files
+            for genome_path in genome_inputs:
+                genome = GenomeInput(fasta_path=genome_path)
+                for fi in range(files_per_genome):
+                    manifest.append(
+                        {
+                            "genome": genome,
+                            "target": self.config.target_dir,
+                            "file_index": fi,
+                            "barcode": None,
+                        }
+                    )
 
         return manifest
 
@@ -340,69 +435,105 @@ class NanoporeSimulator:
             raise exceptions[0]
 
     def _process_file(self, file_info: Dict[str, Any]) -> None:
-        """Process a single file (copy or link)"""
-        source = file_info["source"]
-        target = file_info["target"]
-        barcode = file_info["barcode"]
-
+        """Process a single file (copy, link, or generate)"""
         operation_start = time.time()
 
         try:
             # Check for shutdown before processing
             if self.progress_monitor and self.progress_monitor.should_stop():
-                self.logger.info(f"Skipping {source.name} due to shutdown signal")
+                self.logger.info("Skipping file due to shutdown signal")
                 return
 
-            # Create target directory if needed
-            dir_start = time.time()
-            target.parent.mkdir(parents=True, exist_ok=True)
-            dir_duration = time.time() - dir_start
-
-            # Record directory creation time
-            if self.progress_monitor:
-                self.progress_monitor.record_timing("directory_creation", dir_duration)
-
-            # Perform operation
-            file_op_start = time.time()
-            if self.config.operation == "copy":
-                shutil.copy2(source, target)
-                operation = "Copied"
-            elif self.config.operation == "link":
-                if target.exists():
-                    target.unlink()
-                target.symlink_to(source.absolute())
-                operation = "Linked"
+            if self.config.operation == "generate":
+                self._process_generate(file_info, operation_start)
             else:
-                raise ValueError(f"Unknown operation: {self.config.operation}")
-
-            file_op_duration = time.time() - file_op_start
-            total_operation_duration = time.time() - operation_start
-
-            # Update monitoring with detailed timing
-            if self.progress_monitor:
-                self.progress_monitor.record_file_processed(
-                    target, total_operation_duration
-                )
-                self.progress_monitor.record_timing("file_operations", file_op_duration)
-
-            # Log operation (only for detailed monitoring to reduce noise)
-            if self.monitor_type == "detailed":
-                if barcode:
-                    self.logger.info(
-                        f"{operation}: {source.name} -> {barcode}/{target.name} ({total_operation_duration:.3f}s)"
-                    )
-                else:
-                    self.logger.info(
-                        f"{operation}: {source.name} -> {target.name} ({total_operation_duration:.3f}s)"
-                    )
+                self._process_copy_or_link(file_info, operation_start)
 
         except Exception as e:
-            # Record error in monitoring
             if self.progress_monitor:
                 self.progress_monitor.record_error(
                     f"file_operation: {type(e).__name__}"
                 )
-
-            self.logger.error(f"Failed to process {source}: {e}")
-            # Re-raise the exception
+            self.logger.error(f"Failed to process file: {e}")
             raise
+
+    def _process_generate(
+        self, file_info: Dict[str, Any], operation_start: float
+    ) -> None:
+        """Process a generate operation for a single manifest entry."""
+        genome = file_info["genome"]
+        output_dir = file_info["target"]
+        file_index = file_info["file_index"]
+        barcode = file_info["barcode"]
+
+        dir_start = time.time()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        dir_duration = time.time() - dir_start
+
+        if self.progress_monitor:
+            self.progress_monitor.record_timing("directory_creation", dir_duration)
+
+        file_op_start = time.time()
+        output_path = self.read_generator.generate_reads(
+            genome, output_dir, file_index
+        )
+        file_op_duration = time.time() - file_op_start
+        total_duration = time.time() - operation_start
+
+        if self.progress_monitor:
+            self.progress_monitor.record_file_processed(output_path, total_duration)
+            self.progress_monitor.record_timing("file_operations", file_op_duration)
+
+        if self.monitor_type == "detailed":
+            if barcode:
+                self.logger.info(
+                    f"Generated: {output_path.name} in {barcode}/ ({total_duration:.3f}s)"
+                )
+            else:
+                self.logger.info(
+                    f"Generated: {output_path.name} ({total_duration:.3f}s)"
+                )
+
+    def _process_copy_or_link(
+        self, file_info: Dict[str, Any], operation_start: float
+    ) -> None:
+        """Process a copy or link operation."""
+        source = file_info["source"]
+        target = file_info["target"]
+        barcode = file_info["barcode"]
+
+        dir_start = time.time()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        dir_duration = time.time() - dir_start
+
+        if self.progress_monitor:
+            self.progress_monitor.record_timing("directory_creation", dir_duration)
+
+        file_op_start = time.time()
+        if self.config.operation == "copy":
+            shutil.copy2(source, target)
+            operation = "Copied"
+        elif self.config.operation == "link":
+            if target.exists():
+                target.unlink()
+            target.symlink_to(source.absolute())
+            operation = "Linked"
+        else:
+            raise ValueError(f"Unknown operation: {self.config.operation}")
+
+        file_op_duration = time.time() - file_op_start
+        total_duration = time.time() - operation_start
+
+        if self.progress_monitor:
+            self.progress_monitor.record_file_processed(target, total_duration)
+            self.progress_monitor.record_timing("file_operations", file_op_duration)
+
+        if self.monitor_type == "detailed":
+            if barcode:
+                self.logger.info(
+                    f"{operation}: {source.name} -> {barcode}/{target.name} ({total_duration:.3f}s)"
+                )
+            else:
+                self.logger.info(
+                    f"{operation}: {source.name} -> {target.name} ({total_duration:.3f}s)"
+                )

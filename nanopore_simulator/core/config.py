@@ -1,6 +1,6 @@
 """Configuration management for nanopore simulator"""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
@@ -9,10 +9,10 @@ from typing import List, Optional, Dict, Any
 class SimulationConfig:
     """Configuration for the simulation run"""
 
-    source_dir: Path
-    target_dir: Path
+    source_dir: Optional[Path] = None
+    target_dir: Optional[Path] = None
     interval: float = 5.0  # base seconds between file operations
-    operation: str = "copy"  # "copy" or "link"
+    operation: str = "copy"  # "copy", "link", or "generate"
     file_types: Optional[List[str]] = None
     force_structure: Optional[str] = None  # "singleplex" or "multiplex"
     batch_size: int = 1  # files to process per interval
@@ -28,6 +28,18 @@ class SimulationConfig:
     # Parallel processing parameters
     parallel_processing: bool = False  # enable parallel file processing within batches
     worker_count: int = 4  # number of worker threads for parallel processing
+
+    # Read generation parameters (for operation="generate")
+    genome_inputs: Optional[List[Path]] = None
+    generator_backend: str = "auto"
+    read_count: int = 1000
+    mean_read_length: int = 5000
+    std_read_length: int = 2000
+    min_read_length: int = 200
+    mean_quality: float = 10.0
+    reads_per_file: int = 100
+    output_format: str = "fastq.gz"
+    mix_reads: bool = False  # singleplex: mix genomes into shared files
 
     def __post_init__(self) -> None:
         if self.file_types is None:
@@ -92,8 +104,38 @@ class SimulationConfig:
                 raise ValueError("history_size must be at least 1")
 
         # Validate operation
-        if self.operation not in {"copy", "link"}:
-            raise ValueError("operation must be 'copy' or 'link'")
+        if self.operation not in {"copy", "link", "generate"}:
+            raise ValueError("operation must be 'copy', 'link', or 'generate'")
+
+        # Validate generate-specific parameters
+        if self.operation == "generate":
+            if not self.genome_inputs:
+                raise ValueError(
+                    "genome_inputs must be provided for generate operation"
+                )
+            for gpath in self.genome_inputs:
+                if not gpath.exists():
+                    raise ValueError(f"Genome file does not exist: {gpath}")
+            if self.target_dir is None:
+                raise ValueError(
+                    "target_dir must be provided for generate operation"
+                )
+            if self.read_count < 1:
+                raise ValueError("read_count must be at least 1")
+            if self.mean_read_length < 1:
+                raise ValueError("mean_read_length must be at least 1")
+            if self.min_read_length < 1:
+                raise ValueError("min_read_length must be at least 1")
+            if self.reads_per_file < 1:
+                raise ValueError("reads_per_file must be at least 1")
+            if self.output_format not in ("fastq", "fastq.gz"):
+                raise ValueError("output_format must be 'fastq' or 'fastq.gz'")
+        else:
+            # Non-generate operations require source_dir
+            if self.source_dir is None:
+                raise ValueError(
+                    "source_dir is required for copy/link operations"
+                )
 
         # Validate force_structure
         if self.force_structure is not None and self.force_structure not in {
