@@ -39,6 +39,10 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "coverage: marks tests specifically for coverage improvement"
     )
+    config.addinivalue_line(
+        "markers",
+        "practical: marks tests that download real genomes from NCBI (requires datasets CLI)",
+    )
 
     # Pipeline-specific markers
     config.addinivalue_line(
