@@ -1,8 +1,8 @@
 # NanoRunner Quick Start Guide
 
-Get up and running with NanoRunner in 5 minutes.
+Get up and running with NanoRunner.
 
-## 1. Installation (2 minutes)
+## 1. Installation
 
 ### Install from GitHub
 
@@ -26,7 +26,9 @@ nanorunner --help
 
 ---
 
-## 2. Basic Usage (5 minutes)
+## 2. Replay Mode - Replaying Existing Files
+
+Transfer existing FASTQ/POD5 files from a source directory to a target directory with controlled timing.
 
 ### Your First Simulation
 
@@ -45,38 +47,116 @@ nanorunner /data/nanopore_reads /watch/simulated_output --interval 5
 3. Progress is displayed in real-time
 4. Output structure matches source (preserves barcode directories)
 
----
-
-## 3. Common Use Cases
-
-### Development Testing (Fast)
+### Common Replay Examples
 
 ```bash
-# Fast intervals with symlinks for quick testing
+# Fast testing with symlinks
 nanorunner /data/source /test/output \
   --interval 0.5 \
   --operation link \
   --timing-model uniform
-```
 
-### Realistic Sequencing Simulation
-
-```bash
-# Poisson model with burst behavior (biologically realistic)
+# Realistic sequencing with Poisson timing
 nanorunner /data/source /watch/output \
   --timing-model poisson \
   --burst-probability 0.15 \
   --interval 5
-```
 
-### High-Throughput with Monitoring
-
-```bash
-# Parallel processing with enhanced monitoring
+# High-throughput parallel processing with monitoring
 nanorunner /data/source /watch/output \
   --profile high_throughput \
   --monitor enhanced
 ```
+
+---
+
+## 3. Generate Mode - Simulating Reads from Genomes
+
+Produce simulated nanopore FASTQ reads from genome FASTA files, delivered incrementally with the same timing models.
+
+### Your First Read Generation
+
+```bash
+# Basic syntax (no source directory needed)
+nanorunner --genomes <fasta_files...> <target_directory> [options]
+
+# Example: Generate reads from a genome with 5-second intervals
+nanorunner --genomes genome.fa /watch/output --interval 5
+```
+
+### What Happens
+
+1. NanoRunner reads the genome FASTA file(s)
+2. A read generation backend (builtin, badread, or nanosim) produces simulated FASTQ reads
+3. Reads are written to output files and delivered with the configured timing model
+4. In multiplex mode, each genome is assigned to a barcode directory (`barcode01/`, `barcode02/`, ...)
+
+### Generate Mode Examples
+
+```bash
+# Multiple genomes in multiplex mode (each genome gets a barcode directory)
+nanorunner --genomes genome1.fa genome2.fa /watch/output --interval 5
+
+# Singleplex output (all files in target root)
+nanorunner --genomes genome.fa /watch/output --force-structure singleplex
+
+# Mix reads from multiple genomes into shared files
+nanorunner --genomes g1.fa g2.fa /watch/output \
+  --force-structure singleplex \
+  --mix-reads
+
+# Custom generation parameters
+nanorunner --genomes genome.fa /watch/output \
+  --read-count 5000 \
+  --mean-read-length 8000 \
+  --reads-per-file 200 \
+  --output-format fastq.gz
+
+# Use a specific backend
+nanorunner --genomes genome.fa /watch/output --generator-backend builtin
+
+# Use a generation profile
+nanorunner --genomes genome.fa /watch/output --profile generate_realistic
+```
+
+### Output Structure
+
+**Multiplex** (default):
+```
+target_dir/
+├── barcode01/
+│   ├── genome1_reads_0000.fastq.gz
+│   └── genome1_reads_0001.fastq.gz
+└── barcode02/
+    ├── genome2_reads_0000.fastq.gz
+    └── genome2_reads_0001.fastq.gz
+```
+
+**Singleplex** (`--force-structure singleplex`):
+```
+target_dir/
+├── genome1_reads_0000.fastq.gz
+├── genome1_reads_0001.fastq.gz
+├── genome2_reads_0000.fastq.gz
+└── genome2_reads_0001.fastq.gz
+```
+
+### Read Generation Backends
+
+Check which backends are available on your system:
+
+```bash
+nanorunner --list-generators
+```
+
+| Backend | Dependencies | Description |
+|---------|-------------|-------------|
+| `builtin` | None | Random subsequences with log-normal length distribution and simulated quality scores |
+| `badread` | [badread](https://github.com/rrwick/Badread) | Realistic nanopore read simulation with error models |
+| `nanosim` | [NanoSim](https://github.com/bcgsc/NanoSim) | Statistical read simulation from training data |
+| `auto` | Varies | Selects the best available backend (badread > nanosim > builtin) |
+
+The `builtin` backend requires no external dependencies and is always available. For higher-fidelity reads, install badread or NanoSim separately.
 
 ---
 
@@ -91,11 +171,13 @@ nanorunner --list-profiles
 ```
 
 **Built-in profiles:**
-- `development_testing` - Fast, for development
+- `development_testing` - Fast intervals, symlinks, for development
 - `rapid_sequencing` - High-throughput with bursts
 - `accurate_mode` - Steady, minimal variation
 - `minion_simulation` - MinION device pattern
 - `promethion_simulation` - PromethION device pattern
+- `generate_quick_test` - Quick read generation (100 reads, builtin)
+- `generate_realistic` - Realistic read generation with Poisson timing
 
 ### Use a Profile
 
@@ -108,18 +190,21 @@ nanorunner /data/source /watch/output \
   --profile rapid_sequencing \
   --interval 3 \
   --worker-count 8
+
+# Combine a profile with generate mode
+nanorunner --genomes genome.fa /watch/output --profile generate_realistic
 ```
 
 ---
 
-## 5. Monitoring & Progress (10 minutes)
+## 5. Monitoring & Progress
 
 ### Default Monitoring
 
 Basic progress bar with file counts:
 
 ```
-[████████████████████          ] 65.3% | 653/1000 files | 12.5 files/sec | ETA: 28s
+[====================          ] 65.3% | 653/1000 files | 12.5 files/sec | ETA: 28s
 ```
 
 ### Enhanced Monitoring
@@ -127,7 +212,7 @@ Basic progress bar with file counts:
 With resource tracking (requires psutil):
 
 ```
-[████████████████████          ] 65.3% | 653/1000 files | 12.5 files/sec | ETA: 28s ↗★★ | CPU: 42% | RAM: 58%
+[====================          ] 65.3% | 653/1000 files | 12.5 files/sec | ETA: 28s | CPU: 42% | RAM: 58%
 ```
 
 Enable with:
@@ -167,6 +252,8 @@ nanorunner --list-adapters
 - `kraken` - k-mer based classification
 - `miniknife` - Lightweight classification
 
+Both replay and generate modes produce output that is compatible with these pipelines.
+
 ---
 
 ## 7. Examples
@@ -195,18 +282,31 @@ python examples/05_pipeline_integration.py
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--interval SECONDS` | Base time between operations | 5.0 |
-| `--operation {copy,link}` | Copy files or create symlinks | copy |
+| `--operation {copy,link}` | Copy files or create symlinks (replay mode) | copy |
 | `--batch-size N` | Files per batch | 1 |
 | `--timing-model MODEL` | Timing pattern | uniform |
+| `--force-structure {singleplex,multiplex}` | Override structure detection | auto |
 
 ### Timing Models
 
-| Model | Use Case | Options |
-|-------|----------|---------|
+| Model | Use Case | Key Options |
+|-------|----------|-------------|
 | `uniform` | Testing, deterministic | None |
 | `random` | Robustness testing | `--random-factor 0.3` |
 | `poisson` | Realistic sequencing | `--burst-probability 0.15` |
 | `adaptive` | Bottleneck detection | `--adaptation-rate 0.1` |
+
+### Read Generation Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--genomes FASTA [...]` | Input genome files (activates generate mode) | - |
+| `--generator-backend` | Backend: auto, builtin, badread, nanosim | auto |
+| `--read-count N` | Reads per genome | 1000 |
+| `--mean-read-length N` | Mean read length in bases | 5000 |
+| `--reads-per-file N` | Reads per output file | 100 |
+| `--output-format` | fastq or fastq.gz | fastq.gz |
+| `--mix-reads` | Mix genomes into shared files (singleplex) | false |
 
 ### Processing Options
 
@@ -259,38 +359,48 @@ nanorunner /data /output --parallel --worker-count 8
 
 ## 10. Next Steps
 
-Now that you're familiar with the basics:
+Now that you are familiar with the basics:
 
 1. **Explore timing models**: Try different patterns to match your needs
-2. **Optimize performance**: Experiment with batch sizes and workers
-3. **Integrate with pipelines**: Validate output for your target pipeline
-4. **Read full documentation**: See [README.md](../README.md) for complete reference
-5. **Review examples**: Study [examples/](../examples/) for advanced usage
-6. **Join community**: Ask questions in [GitHub Discussions](https://github.com/FOI-Bioinformatics/nanorunner/discussions)
+2. **Try generate mode**: Simulate reads from reference genomes without needing existing FASTQ files
+3. **Optimize performance**: Experiment with batch sizes and workers
+4. **Integrate with pipelines**: Validate output for your target pipeline
+5. **Read full documentation**: See [README.md](../README.md) for complete reference
+6. **Review examples**: Study [examples/](../examples/) for advanced usage
 
 ---
 
 ## Quick Reference Card
 
 ```bash
-# Basic simulation
+# Replay: basic simulation
 nanorunner /source /target
 
-# Fast testing
+# Replay: fast testing with symlinks
 nanorunner /source /target --interval 0.5 --operation link
 
-# Realistic simulation
+# Replay: realistic Poisson timing
 nanorunner /source /target --timing-model poisson
 
-# High-throughput
+# Replay: high-throughput profile
 nanorunner /source /target --profile high_throughput
 
-# With validation
+# Generate: reads from genome
+nanorunner --genomes genome.fa /target --interval 5
+
+# Generate: multiplex from multiple genomes
+nanorunner --genomes g1.fa g2.fa /target
+
+# Generate: singleplex with mixed reads
+nanorunner --genomes g1.fa g2.fa /target --force-structure singleplex --mix-reads
+
+# Replay with pipeline validation
 nanorunner /source /target --pipeline nanometanf
 
 # List options
 nanorunner --list-profiles
 nanorunner --list-adapters
+nanorunner --list-generators
 nanorunner --help
 ```
 
