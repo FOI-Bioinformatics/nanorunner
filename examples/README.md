@@ -42,6 +42,11 @@ python examples/01_basic_simulation.py
 **Time**: ~3 minutes
 **Description**: Pipeline adapter validation and integration testing
 
+### 06_practical_genome_test.py
+**Level**: Advanced
+**Time**: ~5 minutes (first run downloads genomes)
+**Description**: End-to-end generate mode test using real NCBI genomes (Lambda phage, S. aureus, E. coli). Requires the NCBI datasets CLI.
+
 ## Sample Data
 
 The `sample_data/` directory contains minimal test files for running examples:
@@ -64,6 +69,9 @@ After running examples, temporary output directories are created:
 ```bash
 # Remove all example output
 rm -rf /tmp/nanorunner_*
+
+# Remove cached genomes from practical example
+rm -rf ~/.cache/nanorunner_genomes/
 ```
 
 ## Troubleshooting

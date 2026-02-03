@@ -93,6 +93,7 @@ pytest tests/test_adapters.py               # Pipeline adapter tests
 pytest tests/test_integration.py            # End-to-end integration tests
 pytest tests/test_generators.py             # Read generation backend tests
 pytest tests/test_generate_integration.py   # Generate mode end-to-end tests
+pytest tests/test_practical.py -m practical # Practical tests with real NCBI genomes
 pytest tests/test_performance.py -m slow    # Performance benchmarks
 
 # Run with coverage reporting
@@ -224,6 +225,7 @@ nanorunner --genomes genome.fa /target --interval 2
 - `test_adapters.py`: Pipeline adapter functionality and validation
 - `test_generators.py`: Read generation backends, FASTA parsing, factory, config validation
 - `test_generate_integration.py`: End-to-end generate mode with multiplex, singleplex, mixed, and timing
+- `test_practical.py`: Practical tests using real NCBI genomes (Lambda, S. aureus, E. coli); requires datasets CLI
 - `test_integration.py`: End-to-end workflow testing with various configurations
 - `test_timing_integration.py`: Timing model integration with simulation workflow
 - `test_edge_cases.py`: Error handling, permissions, and boundary conditions
@@ -236,7 +238,7 @@ nanorunner --genomes genome.fa /target --interval 2
 
 **Coverage Standards:**
 - Minimum coverage threshold: 90%
-- 513 tests across 30 test files
+- 524 tests across 31 test files
 - Comprehensive integration testing with multiple timing models and configurations
 
 ## Integration Context

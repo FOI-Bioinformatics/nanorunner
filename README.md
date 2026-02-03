@@ -361,7 +361,7 @@ Built-in adapters provide validation for multiple bioinformatics workflows:
 - **Enhanced features**: Optional psutil dependency for resource monitoring
 - **Optional read generators**: badread and/or NanoSim for higher-fidelity read simulation
 - **Platform compatibility**: POSIX-compliant operating systems (Linux, macOS, Unix)
-- **Testing**: 513 tests across 30 test files
+- **Testing**: 524 tests across 31 test files
 
 ## Development and Contribution
 
@@ -386,6 +386,7 @@ pytest tests/test_cli.py                    # CLI interface tests
 pytest tests/test_timing_models.py          # Timing model validation
 pytest tests/test_generators.py             # Read generation backends
 pytest tests/test_generate_integration.py   # Generate mode end-to-end
+pytest tests/test_practical.py              # Practical tests with real NCBI genomes
 
 # Generate coverage report
 pytest --cov=nanopore_simulator --cov-report=html --cov-report=term-missing
