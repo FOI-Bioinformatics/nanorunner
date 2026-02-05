@@ -2,7 +2,13 @@
 
 import pytest
 
-from nanopore_simulator.core.mocks import MockCommunity, MockOrganism
+from nanopore_simulator.core.mocks import (
+    MockOrganism,
+    MockCommunity,
+    BUILTIN_MOCKS,
+    get_mock_community,
+    list_mock_communities,
+)
 
 
 class TestMockOrganism:
@@ -87,3 +93,50 @@ class TestMockCommunity:
         """Test that empty organisms list raises ValueError."""
         with pytest.raises(ValueError, match="at least one organism"):
             MockCommunity("test", "Test", [])
+
+
+class TestBuiltinMocks:
+    """Tests for built-in mock communities."""
+
+    def test_zymo_d6300_exists(self):
+        """Test that Zymo D6300 mock exists."""
+        assert "zymo_d6300" in BUILTIN_MOCKS
+
+    def test_zymo_d6300_has_10_organisms(self):
+        """Test that Zymo D6300 has 10 organisms (8 bacteria + 2 yeasts)."""
+        mock = BUILTIN_MOCKS["zymo_d6300"]
+        assert len(mock.organisms) == 10
+
+    def test_zymo_d6300_has_fungi(self):
+        """Test that Zymo D6300 has fungi using NCBI resolver."""
+        mock = BUILTIN_MOCKS["zymo_d6300"]
+        ncbi_orgs = [o for o in mock.organisms if o.resolver == "ncbi"]
+        assert len(ncbi_orgs) == 2  # Two yeasts
+
+    def test_quick_3species_exists(self):
+        """Test that quick_3species mock exists."""
+        assert "quick_3species" in BUILTIN_MOCKS
+
+    def test_quick_3species_equal_abundances(self):
+        """Test that quick_3species has equal abundances."""
+        mock = BUILTIN_MOCKS["quick_3species"]
+        for org in mock.organisms:
+            assert abs(org.abundance - 1 / 3) < 0.01
+
+    def test_get_mock_community_exists(self):
+        """Test getting a mock community that exists."""
+        mock = get_mock_community("zymo_d6300")
+        assert mock is not None
+        assert mock.name == "zymo_d6300"
+
+    def test_get_mock_community_not_found(self):
+        """Test getting a mock community that does not exist."""
+        mock = get_mock_community("nonexistent")
+        assert mock is None
+
+    def test_list_mock_communities(self):
+        """Test listing all mock communities."""
+        mocks = list_mock_communities()
+        assert "zymo_d6300" in mocks
+        assert "quick_3species" in mocks
+        assert isinstance(mocks["zymo_d6300"], str)  # Description
