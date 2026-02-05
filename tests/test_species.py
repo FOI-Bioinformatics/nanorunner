@@ -10,6 +10,7 @@ from nanopore_simulator.core.species import (
     GTDBIndex,
     NCBIResolver,
     SpeciesResolver,
+    download_genome,
 )
 
 
@@ -176,7 +177,7 @@ class TestNCBIResolver:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
-                stdout='{"accession": "GCF_000146045.2", "organism_name": "Saccharomyces cerevisiae"}'
+                stdout='{"accession": "GCF_000146045.2", "organism_name": "Saccharomyces cerevisiae"}',
             )
             ref = resolver.resolve_by_taxid(4932)
             assert ref is not None
@@ -190,7 +191,7 @@ class TestNCBIResolver:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
-                stdout='{"accession": "GCF_000146045.2", "organism_name": "Saccharomyces cerevisiae", "tax_id": 4932}'
+                stdout='{"accession": "GCF_000146045.2", "organism_name": "Saccharomyces cerevisiae", "tax_id": 4932}',
             )
             ref = resolver.resolve_by_name("Saccharomyces cerevisiae")
             assert ref is not None
@@ -316,3 +317,118 @@ class TestSpeciesResolver:
         # Should not raise, indicating default path was used
         ref = resolver.resolve("Nonexistent")
         assert ref is None
+
+
+class TestGenomeDownload:
+    """Tests for download_genome function"""
+
+    def test_download_genome(self, tmp_path):
+        """Test downloading a genome via datasets CLI"""
+        cache = GenomeCache(cache_dir=tmp_path)
+        ref = GenomeRef("E. coli", "GCF_000005845.2", "gtdb", "bacteria")
+
+        with patch("nanopore_simulator.core.species.subprocess.run") as mock_run:
+            # Simulate datasets download creating a zip
+            def create_mock_download(*args, **kwargs):
+                # Create the expected output structure in the temp dir
+                # The function uses a tempfile.TemporaryDirectory, so we need
+                # to extract the path from the command arguments
+                cmd = args[0]
+                # Find the --filename argument
+                for i, arg in enumerate(cmd):
+                    if arg == "--filename":
+                        zip_path = cmd[i + 1]
+                        break
+                else:
+                    zip_path = None
+
+                if zip_path:
+                    import zipfile
+                    from pathlib import Path
+
+                    zip_path = Path(zip_path)
+                    zip_path.parent.mkdir(parents=True, exist_ok=True)
+
+                    # Create temp dir for fna file
+                    fna_content = ">chr\nATCG\n"
+
+                    # Create zip with the expected structure
+                    with zipfile.ZipFile(zip_path, "w") as zf:
+                        zf.writestr(
+                            "ncbi_dataset/data/GCF_000005845.2/"
+                            "GCF_000005845.2_genomic.fna",
+                            fna_content,
+                        )
+
+                return MagicMock(returncode=0, stdout="", stderr="")
+
+            mock_run.side_effect = create_mock_download
+
+            path = download_genome(ref, cache)
+            assert path.exists()
+            assert path.suffix == ".gz"
+
+    def test_download_uses_cache(self, tmp_path):
+        """Test that download_genome returns cached file if it exists"""
+        cache = GenomeCache(cache_dir=tmp_path)
+        ref = GenomeRef("E. coli", "GCF_000005845.2", "gtdb", "bacteria")
+
+        # Pre-create cached file
+        cached_path = cache.get_cached_path(ref)
+        cached_path.parent.mkdir(parents=True, exist_ok=True)
+        cached_path.write_text("cached")
+
+        # Should not call subprocess
+        with patch("nanopore_simulator.core.species.subprocess.run") as mock_run:
+            path = download_genome(ref, cache)
+            mock_run.assert_not_called()
+            assert path == cached_path
+
+    def test_download_genome_failure(self, tmp_path):
+        """Test that download_genome raises error on datasets failure"""
+        cache = GenomeCache(cache_dir=tmp_path)
+        ref = GenomeRef("E. coli", "GCF_000005845.2", "gtdb", "bacteria")
+
+        with patch("nanopore_simulator.core.species.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=1,
+                stdout="",
+                stderr="Error: genome not found",
+            )
+
+            with pytest.raises(RuntimeError, match="Failed to download"):
+                download_genome(ref, cache)
+
+    def test_download_genome_no_fna_file(self, tmp_path):
+        """Test that download_genome raises error when no .fna file found"""
+        cache = GenomeCache(cache_dir=tmp_path)
+        ref = GenomeRef("E. coli", "GCF_000005845.2", "gtdb", "bacteria")
+
+        with patch("nanopore_simulator.core.species.subprocess.run") as mock_run:
+
+            def create_empty_zip(*args, **kwargs):
+                cmd = args[0]
+                for i, arg in enumerate(cmd):
+                    if arg == "--filename":
+                        zip_path = cmd[i + 1]
+                        break
+                else:
+                    zip_path = None
+
+                if zip_path:
+                    import zipfile
+                    from pathlib import Path
+
+                    zip_path = Path(zip_path)
+                    zip_path.parent.mkdir(parents=True, exist_ok=True)
+
+                    # Create empty zip
+                    with zipfile.ZipFile(zip_path, "w") as zf:
+                        zf.writestr("ncbi_dataset/README.md", "Empty dataset")
+
+                return MagicMock(returncode=0, stdout="", stderr="")
+
+            mock_run.side_effect = create_empty_zip
+
+            with pytest.raises(RuntimeError, match="No .fna file found"):
+                download_genome(ref, cache)

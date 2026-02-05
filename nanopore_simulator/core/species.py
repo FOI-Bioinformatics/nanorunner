@@ -4,13 +4,19 @@ This module provides data structures for referencing and caching genome
 sequences from taxonomic databases such as GTDB and NCBI.
 """
 
+import gzip as gzip_module
 import json
+import logging
 import os
 import shutil
 import subprocess
+import tempfile
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 # Valid values for source and domain fields
@@ -208,8 +214,13 @@ class NCBIResolver:
         try:
             result = subprocess.run(
                 [
-                    "datasets", "summary", "genome", "taxon", str(taxid),
-                    "--reference", "--as-json-lines",
+                    "datasets",
+                    "summary",
+                    "genome",
+                    "taxon",
+                    str(taxid),
+                    "--reference",
+                    "--as-json-lines",
                 ],
                 capture_output=True,
                 text=True,
@@ -246,8 +257,13 @@ class NCBIResolver:
         try:
             result = subprocess.run(
                 [
-                    "datasets", "summary", "genome", "taxon", name,
-                    "--reference", "--as-json-lines",
+                    "datasets",
+                    "summary",
+                    "genome",
+                    "taxon",
+                    name,
+                    "--reference",
+                    "--as-json-lines",
                 ],
                 capture_output=True,
                 text=True,
@@ -350,3 +366,74 @@ class SpeciesResolver:
             GenomeCache instance for checking and accessing cached genomes.
         """
         return self._cache
+
+
+def download_genome(ref: GenomeRef, cache: GenomeCache) -> Path:
+    """Download a genome and cache it.
+
+    Uses the NCBI datasets CLI to download the genome sequence for the
+    given reference. Downloaded genomes are compressed with gzip and
+    stored in the cache directory.
+
+    Args:
+        ref: Genome reference specifying the accession to download.
+        cache: Genome cache instance for storing the downloaded genome.
+
+    Returns:
+        Path to the cached genome file (gzip compressed).
+
+    Raises:
+        RuntimeError: If the download fails or no .fna file is found.
+    """
+    # Check cache first
+    cached_path = cache.get_cached_path(ref)
+    if cached_path.exists():
+        logger.info(f"Using cached genome: {cached_path}")
+        return cached_path
+
+    # Download via datasets CLI
+    logger.info(f"Downloading genome: {ref.accession}")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        zip_path = tmpdir_path / "ncbi_dataset.zip"
+
+        result = subprocess.run(
+            [
+                "datasets",
+                "download",
+                "genome",
+                "accession",
+                ref.accession,
+                "--include",
+                "genome",
+                "--filename",
+                str(zip_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Failed to download genome {ref.accession}: {result.stderr}"
+            )
+
+        # Extract and find the .fna file
+        extract_dir = tmpdir_path / "extract"
+        with zipfile.ZipFile(zip_path) as zf:
+            zf.extractall(extract_dir)
+
+        fna_files = list(extract_dir.rglob("*.fna"))
+        if not fna_files:
+            raise RuntimeError(f"No .fna file found for {ref.accession}")
+
+        # Compress and move to cache
+        cached_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(fna_files[0], "rb") as f_in:
+            with gzip_module.open(cached_path, "wb") as f_out:
+                f_out.write(f_in.read())
+
+        logger.info(f"Cached genome: {cached_path}")
+        return cached_path
