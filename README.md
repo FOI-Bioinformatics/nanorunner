@@ -175,6 +175,43 @@ target_dir/
 | `nanosim` | [NanoSim](https://github.com/bcgsc/NanoSim) | Statistical read simulation from training data |
 | `auto` | Varies | Selects the best available backend (badread > nanosim > builtin) |
 
+### Species and Mock Community Generation
+
+Generate reads from species names or preset mock communities without providing genome files directly:
+
+```bash
+# Generate from species names (resolves via GTDB/NCBI)
+nanorunner --species "Escherichia coli" "Staphylococcus aureus" /output
+
+# Use a preset mock community
+nanorunner --mock zymo_d6300 /output
+
+# Pure samples (each species in separate barcode)
+nanorunner --species "E. coli" "S. aureus" --sample-type pure /output
+
+# Mixed samples with custom abundances
+nanorunner --species "E. coli" "S. aureus" --sample-type mixed --abundances 0.7 0.3 /output
+
+# List available mock communities
+nanorunner --list-mocks
+
+# Pre-download genomes for offline use
+nanorunner download --mock zymo_d6300
+```
+
+#### Available Mock Communities
+
+| Mock ID | Description | Species Count |
+|---------|-------------|---------------|
+| `zymo_d6300` | ZymoBIOMICS Microbial Community Standard | 8 bacteria, 2 yeasts |
+| `zymo_d6310` | ZymoBIOMICS Gut Microbiome Standard | 21 strains |
+| `atcc_msa1000` | ATCC 10-strain Even Mix Genomic Material | 10 strains |
+| `atcc_msa1001` | ATCC 10-strain Staggered Mix Genomic Material | 10 strains |
+| `atcc_msa1002` | ATCC 20-strain Even Mix Genomic Material | 20 strains |
+| `quick_3species` | Quick test with 3 common species | 3 strains |
+
+Use `nanorunner --list-mocks` to see detailed information about each community including species composition and default abundances.
+
 ### Enhanced Monitoring
 
 ```bash
