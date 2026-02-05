@@ -290,3 +290,59 @@ class TestListMocksWithAliases:
         mocks = list_mock_communities()
         assert "alias" in mocks["d6305"].lower()
         assert "zymo_d6300" in mocks["d6305"]
+
+
+class TestZymoD6331:
+    """Tests for Zymo D6331 Gut Microbiome Standard mock community."""
+
+    def test_zymo_d6331_exists(self):
+        """D6331 mock should exist."""
+        mock = get_mock_community("zymo_d6331")
+        assert mock is not None
+        assert mock.name == "zymo_d6331"
+
+    def test_zymo_d6331_has_17_organisms(self):
+        """D6331 should have 17 species (E. coli strains collapsed)."""
+        mock = get_mock_community("zymo_d6331")
+        assert len(mock.organisms) == 17
+
+    def test_zymo_d6331_cross_kingdom(self):
+        """D6331 should include bacteria, archaea, and fungi."""
+        mock = get_mock_community("zymo_d6331")
+        # Check for fungi (NCBI resolver)
+        ncbi_orgs = [o for o in mock.organisms if o.resolver == "ncbi"]
+        assert len(ncbi_orgs) >= 3  # Candida, Saccharomyces, Methanobrevibacter
+
+    def test_zymo_d6331_has_archaea(self):
+        """D6331 should include Methanobrevibacter smithii (archaea)."""
+        mock = get_mock_community("zymo_d6331")
+        archaea = [o for o in mock.organisms if "Methanobrevibacter" in o.name]
+        assert len(archaea) == 1
+
+    def test_zymo_d6331_has_fungi(self):
+        """D6331 should include both Candida and Saccharomyces."""
+        mock = get_mock_community("zymo_d6331")
+        fungi_names = [o.name for o in mock.organisms]
+        assert any("Candida" in name for name in fungi_names)
+        assert any("Saccharomyces" in name for name in fungi_names)
+
+    def test_zymo_d6331_log_distribution(self):
+        """D6331 abundances should span multiple orders of magnitude."""
+        mock = get_mock_community("zymo_d6331")
+        abundances = [org.abundance for org in mock.organisms]
+        max_abundance = max(abundances)
+        min_abundance = min(abundances)
+        # Should span at least 5 orders of magnitude (14% to 0.0001%)
+        assert max_abundance / min_abundance >= 100000
+
+    def test_alias_d6331_resolves(self):
+        """d6331 alias should resolve to zymo_d6331."""
+        mock = get_mock_community("d6331")
+        assert mock is not None
+        assert mock.name == "zymo_d6331"
+
+    def test_alias_d6331_case_insensitive(self):
+        """D6331 alias should be case-insensitive."""
+        mock = get_mock_community("D6331")
+        assert mock is not None
+        assert mock.name == "zymo_d6331"

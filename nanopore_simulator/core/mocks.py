@@ -156,6 +156,32 @@ _ATCC_MSA1003_ORGANISMS = [
     MockOrganism("Schaalia odontolytica", "gtdb", 0.0002),
 ]
 
+# Zymo D6331 Gut Microbiome Standard - 17 species (bacteria, archaea, fungi)
+# E. coli strains collapsed into single entry at 14% total
+_ZYMO_D6331_ORGANISMS = [
+    # High abundance (14%)
+    MockOrganism("Faecalibacterium prausnitzii", "gtdb", 0.14),
+    MockOrganism("Veillonella rogosae", "gtdb", 0.14),
+    MockOrganism("Roseburia hominis", "gtdb", 0.14),
+    MockOrganism("Bacteroides fragilis", "gtdb", 0.14),
+    MockOrganism("Escherichia coli", "gtdb", 0.14),  # 5 strains collapsed
+    # Medium abundance (6%)
+    MockOrganism("Prevotella corporis", "gtdb", 0.06),
+    MockOrganism("Bifidobacterium adolescentis", "gtdb", 0.06),
+    MockOrganism("Fusobacterium nucleatum", "gtdb", 0.06),
+    MockOrganism("Lactobacillus fermentum", "gtdb", 0.06),
+    # Low abundance (1.4-1.5%)
+    MockOrganism("Clostridioides difficile", "gtdb", 0.015),
+    MockOrganism("Akkermansia muciniphila", "gtdb", 0.015),
+    MockOrganism("Candida albicans", "ncbi", 0.015, "GCF_000182965.3"),
+    MockOrganism("Saccharomyces cerevisiae", "ncbi", 0.014, "GCF_000146045.2"),
+    # Very low abundance (0.1% and below)
+    MockOrganism("Methanobrevibacter smithii", "ncbi", 0.001),  # Archaea
+    MockOrganism("Salmonella enterica", "gtdb", 0.0001),
+    MockOrganism("Enterococcus faecalis", "gtdb", 0.00001),
+    MockOrganism("Clostridium perfringens", "gtdb", 0.000001),
+]
+
 BUILTIN_MOCKS: Dict[str, MockCommunity] = {
     "zymo_d6300": MockCommunity(
         name="zymo_d6300",
@@ -192,6 +218,11 @@ BUILTIN_MOCKS: Dict[str, MockCommunity] = {
         description="ATCC MSA-1003 20-strain staggered mix (0.02%-18%)",
         organisms=_ATCC_MSA1003_ORGANISMS,
     ),
+    "zymo_d6331": MockCommunity(
+        name="zymo_d6331",
+        description="Zymo D6331 Gut Microbiome Standard - 17 species (bacteria, archaea, fungi)",
+        organisms=_ZYMO_D6331_ORGANISMS,
+    ),
 }
 
 # Aliases for product codes (lowercase keys for case-insensitive lookup)
@@ -203,6 +234,7 @@ MOCK_ALIASES: Dict[str, str] = {
     "d6310": "zymo_d6310",
     "d6311": "zymo_d6310",
     "zymo_d6311": "zymo_d6310",
+    "d6331": "zymo_d6331",
 }
 
 
