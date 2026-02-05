@@ -255,7 +255,7 @@ class TestATCCMSA1003:
         abundances = sorted([org.abundance for org in mock.organisms])
         # Check range spans from ~0.02% to ~18%
         assert abundances[0] < 0.001  # Smallest should be < 0.1%
-        assert abundances[-1] > 0.1   # Largest should be > 10%
+        assert abundances[-1] > 0.1  # Largest should be > 10%
 
     def test_atcc_msa1003_log_spread(self):
         """MSA-1003 abundances should span ~3 orders of magnitude."""
