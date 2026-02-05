@@ -170,3 +170,39 @@ class TestMockAliasesAndCaseInsensitivity:
         mock = get_mock_community("zymo_d6305")
         assert mock is not None
         assert mock.name == "zymo_d6300"
+
+
+class TestZymoD6310:
+    """Tests for Zymo D6310 Log Distribution mock community."""
+
+    def test_zymo_d6310_exists(self):
+        """D6310 mock should exist."""
+        mock = get_mock_community("zymo_d6310")
+        assert mock is not None
+        assert mock.name == "zymo_d6310"
+
+    def test_zymo_d6310_has_10_organisms(self):
+        """D6310 should have same 10 organisms as D6300."""
+        mock = get_mock_community("zymo_d6310")
+        assert len(mock.organisms) == 10
+
+    def test_zymo_d6310_log_distribution(self):
+        """D6310 abundances should span multiple orders of magnitude."""
+        mock = get_mock_community("zymo_d6310")
+        abundances = [org.abundance for org in mock.organisms]
+        max_abundance = max(abundances)
+        min_abundance = min(abundances)
+        # Should span at least 4 orders of magnitude
+        assert max_abundance / min_abundance >= 10000
+
+    def test_alias_d6310_resolves(self):
+        """d6310 alias should resolve to zymo_d6310."""
+        mock = get_mock_community("d6310")
+        assert mock is not None
+        assert mock.name == "zymo_d6310"
+
+    def test_alias_d6311_resolves(self):
+        """D6311 should resolve to zymo_d6310."""
+        mock = get_mock_community("D6311")
+        assert mock is not None
+        assert mock.name == "zymo_d6310"

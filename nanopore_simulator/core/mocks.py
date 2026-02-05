@@ -67,6 +67,21 @@ _ZYMO_D6300_ORGANISMS = [
     MockOrganism("Cryptococcus neoformans", "ncbi", 0.1, "GCF_000149245.1"),
 ]
 
+# Zymo D6310 Log Distribution - same species as D6300, log-distributed abundances
+_ZYMO_D6310_ORGANISMS = [
+    MockOrganism("Listeria monocytogenes", "gtdb", 0.891),
+    MockOrganism("Pseudomonas aeruginosa", "gtdb", 0.089),
+    MockOrganism("Bacillus subtilis", "gtdb", 0.0089),
+    MockOrganism("Escherichia coli", "gtdb", 0.00089),
+    MockOrganism("Salmonella enterica", "gtdb", 0.000089),
+    MockOrganism("Lactobacillus fermentum", "gtdb", 0.0000089),
+    MockOrganism("Enterococcus faecalis", "gtdb", 0.00000089),
+    MockOrganism("Staphylococcus aureus", "gtdb", 0.000000089),
+    # Fungi - use NCBI resolver
+    MockOrganism("Saccharomyces cerevisiae", "ncbi", 0.0002, "GCF_000146045.2"),
+    MockOrganism("Cryptococcus neoformans", "ncbi", 0.00002, "GCF_000149245.1"),
+]
+
 _QUICK_3SPECIES_ORGANISMS = [
     MockOrganism("Escherichia coli", "gtdb", 1 / 3),
     MockOrganism("Staphylococcus aureus", "gtdb", 1 / 3),
@@ -95,6 +110,11 @@ BUILTIN_MOCKS: Dict[str, MockCommunity] = {
         description="Zymo D6300 Standard (even) - 8 bacteria + 2 yeasts",
         organisms=_ZYMO_D6300_ORGANISMS,
     ),
+    "zymo_d6310": MockCommunity(
+        name="zymo_d6310",
+        description="Zymo D6310 Log Distribution - 8 bacteria + 2 yeasts",
+        organisms=_ZYMO_D6310_ORGANISMS,
+    ),
     "quick_3species": MockCommunity(
         name="quick_3species",
         description="Minimal 3-species test mock (E. coli, S. aureus, B. subtilis)",
@@ -118,6 +138,9 @@ MOCK_ALIASES: Dict[str, str] = {
     "d6306": "zymo_d6300",
     "zymo_d6305": "zymo_d6300",
     "zymo_d6306": "zymo_d6300",
+    "d6310": "zymo_d6310",
+    "d6311": "zymo_d6310",
+    "zymo_d6311": "zymo_d6310",
 }
 
 
