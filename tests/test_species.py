@@ -177,13 +177,14 @@ class TestNCBIResolver:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
-                stdout='{"accession": "GCF_000146045.2", "organism_name": "Saccharomyces cerevisiae"}',
+                stdout='{"accession": "GCF_000146045.2", "organism": {"organism_name": "Saccharomyces cerevisiae"}}',
             )
             ref = resolver.resolve_by_taxid(4932)
             assert ref is not None
             assert ref.accession == "GCF_000146045.2"
             assert ref.source == "ncbi"
             assert ref.domain == "eukaryota"
+            assert ref.name == "Saccharomyces cerevisiae"
 
     def test_resolve_by_name(self, tmp_path):
         """Test resolving genome by organism name"""
@@ -191,7 +192,7 @@ class TestNCBIResolver:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
-                stdout='{"accession": "GCF_000146045.2", "organism_name": "Saccharomyces cerevisiae", "tax_id": 4932}',
+                stdout='{"accession": "GCF_000146045.2", "organism": {"organism_name": "Saccharomyces cerevisiae"}, "tax_id": 4932}',
             )
             ref = resolver.resolve_by_name("Saccharomyces cerevisiae")
             assert ref is not None
