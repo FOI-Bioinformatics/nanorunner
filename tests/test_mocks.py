@@ -264,3 +264,29 @@ class TestATCCMSA1003:
         max_abundance = max(abundances)
         min_abundance = min(abundances)
         assert max_abundance / min_abundance >= 100
+
+
+class TestListMocksWithAliases:
+    """Tests for list_mock_communities including aliases."""
+
+    def test_list_includes_primary_mocks(self):
+        """list_mock_communities should include all primary mocks."""
+        mocks = list_mock_communities()
+        assert "zymo_d6300" in mocks
+        assert "zymo_d6310" in mocks
+        assert "atcc_msa1002" in mocks
+        assert "atcc_msa1003" in mocks
+
+    def test_list_includes_aliases(self):
+        """list_mock_communities should include aliases."""
+        mocks = list_mock_communities()
+        assert "d6305" in mocks
+        assert "d6306" in mocks
+        assert "d6310" in mocks
+        assert "d6311" in mocks
+
+    def test_alias_descriptions_indicate_target(self):
+        """Alias descriptions should indicate they are aliases."""
+        mocks = list_mock_communities()
+        assert "alias" in mocks["d6305"].lower()
+        assert "zymo_d6300" in mocks["d6305"]

@@ -229,5 +229,11 @@ def list_mock_communities() -> Dict[str, str]:
 
     Returns:
         Dictionary mapping mock community names to their descriptions.
+        Includes aliases with "(alias for X)" notation.
     """
-    return {name: mock.description for name, mock in BUILTIN_MOCKS.items()}
+    result = {name: mock.description for name, mock in BUILTIN_MOCKS.items()}
+    # Add aliases
+    for alias, target in MOCK_ALIASES.items():
+        if target in BUILTIN_MOCKS:
+            result[alias] = f"(alias for {target})"
+    return result
