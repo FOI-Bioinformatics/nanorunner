@@ -41,6 +41,14 @@ class SimulationConfig:
     output_format: str = "fastq.gz"
     mix_reads: bool = False  # singleplex: mix genomes into shared files
 
+    # Species-based generation parameters
+    species_inputs: Optional[List[str]] = None  # Species names to resolve
+    mock_name: Optional[str] = None  # Preset mock community name
+    taxid_inputs: Optional[List[int]] = None  # Direct NCBI taxonomy IDs
+    sample_type: Optional[str] = None  # "pure" or "mixed"
+    abundances: Optional[List[float]] = None  # Custom abundances for mixed samples
+    offline_mode: bool = False  # Use only cached genomes
+
     def __post_init__(self) -> None:
         if self.file_types is None:
             self.file_types = ["fastq", "fq", "fastq.gz", "fq.gz", "pod5"]
@@ -109,13 +117,21 @@ class SimulationConfig:
 
         # Validate generate-specific parameters
         if self.operation == "generate":
-            if not self.genome_inputs:
+            # Must have either genome_inputs OR species-based inputs
+            has_genome_inputs = bool(self.genome_inputs)
+            has_species_inputs = bool(
+                self.species_inputs or self.mock_name or self.taxid_inputs
+            )
+            if not has_genome_inputs and not has_species_inputs:
                 raise ValueError(
-                    "genome_inputs must be provided for generate operation"
+                    "generate operation requires genome_inputs, species_inputs, "
+                    "mock_name, or taxid_inputs"
                 )
-            for gpath in self.genome_inputs:
-                if not gpath.exists():
-                    raise ValueError(f"Genome file does not exist: {gpath}")
+            # Validate genome_inputs if provided
+            if self.genome_inputs:
+                for gpath in self.genome_inputs:
+                    if not gpath.exists():
+                        raise ValueError(f"Genome file does not exist: {gpath}")
             if self.target_dir is None:
                 raise ValueError(
                     "target_dir must be provided for generate operation"
@@ -143,6 +159,39 @@ class SimulationConfig:
             "multiplex",
         }:
             raise ValueError("force_structure must be 'singleplex' or 'multiplex'")
+
+        # Validate species-based generation
+        if self.species_inputs or self.mock_name or self.taxid_inputs:
+            # Validate sample_type
+            if self.sample_type is None:
+                # Default: mixed for mock, pure for species
+                if self.mock_name:
+                    object.__setattr__(self, "sample_type", "mixed")
+                else:
+                    object.__setattr__(self, "sample_type", "pure")
+
+            if self.sample_type not in {"pure", "mixed"}:
+                raise ValueError("sample_type must be 'pure' or 'mixed'")
+
+            # Validate abundances
+            if self.abundances is not None:
+                if self.mock_name:
+                    raise ValueError(
+                        "abundances cannot be used with mock communities"
+                    )
+                input_count = len(self.species_inputs or []) + len(
+                    self.taxid_inputs or []
+                )
+                if len(self.abundances) != input_count:
+                    raise ValueError(
+                        f"abundances count ({len(self.abundances)}) must match "
+                        f"species/taxid count ({input_count})"
+                    )
+                total = sum(self.abundances)
+                if not 0.99 <= total <= 1.01:
+                    raise ValueError(
+                        f"abundances must sum to 1.0 (got {total:.3f})"
+                    )
 
     def get_timing_model_config(self) -> Dict[str, Any]:
         """Get timing model configuration for factory function"""
