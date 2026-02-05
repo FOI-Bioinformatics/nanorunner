@@ -112,9 +112,19 @@ BUILTIN_MOCKS: Dict[str, MockCommunity] = {
     ),
 }
 
+# Aliases for product codes (lowercase keys for case-insensitive lookup)
+MOCK_ALIASES: Dict[str, str] = {
+    "d6305": "zymo_d6300",
+    "d6306": "zymo_d6300",
+    "zymo_d6305": "zymo_d6300",
+    "zymo_d6306": "zymo_d6300",
+}
+
 
 def get_mock_community(name: str) -> Optional[MockCommunity]:
     """Get a mock community by name.
+
+    Supports case-insensitive lookup and aliases (e.g., D6305 -> zymo_d6300).
 
     Args:
         name: The identifier of the mock community to retrieve.
@@ -122,7 +132,11 @@ def get_mock_community(name: str) -> Optional[MockCommunity]:
     Returns:
         The MockCommunity if found, None otherwise.
     """
-    return BUILTIN_MOCKS.get(name)
+    normalized = name.lower()
+    # Check aliases first
+    if normalized in MOCK_ALIASES:
+        normalized = MOCK_ALIASES[normalized]
+    return BUILTIN_MOCKS.get(normalized)
 
 
 def list_mock_communities() -> Dict[str, str]:

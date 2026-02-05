@@ -140,3 +140,33 @@ class TestBuiltinMocks:
         assert "zymo_d6300" in mocks
         assert "quick_3species" in mocks
         assert isinstance(mocks["zymo_d6300"], str)  # Description
+
+
+class TestMockAliasesAndCaseInsensitivity:
+    """Tests for case-insensitive lookup and product code aliases."""
+
+    def test_case_insensitive_lookup(self):
+        """Mock lookup should be case-insensitive."""
+        mock1 = get_mock_community("zymo_d6300")
+        mock2 = get_mock_community("ZYMO_D6300")
+        mock3 = get_mock_community("Zymo_D6300")
+        assert mock1 is not None
+        assert mock1 == mock2 == mock3
+
+    def test_alias_d6305_resolves(self):
+        """D6305 should resolve to zymo_d6300."""
+        mock = get_mock_community("d6305")
+        assert mock is not None
+        assert mock.name == "zymo_d6300"
+
+    def test_alias_d6306_resolves(self):
+        """D6306 should resolve to zymo_d6300."""
+        mock = get_mock_community("D6306")  # Test case-insensitivity too
+        assert mock is not None
+        assert mock.name == "zymo_d6300"
+
+    def test_alias_with_zymo_prefix(self):
+        """zymo_d6305 should also resolve to zymo_d6300."""
+        mock = get_mock_community("zymo_d6305")
+        assert mock is not None
+        assert mock.name == "zymo_d6300"
