@@ -217,3 +217,15 @@ class TestCLISpeciesArgs:
             config = mock_sim.call_args[0][0]
             assert config.species_inputs == ["E. coli"]
             assert config.operation == "generate"
+
+
+class TestListMocksOutput:
+
+    def test_list_mocks_shows_aliases_section(self, monkeypatch, capsys):
+        """--list-mocks should show aliases in separate section."""
+        monkeypatch.setattr(sys, "argv", ["nanorunner", "--list-mocks"])
+        result = main()
+        assert result == 0
+        captured = capsys.readouterr()
+        # Should have a separate "Aliases:" section header (not just inline alias text)
+        assert "\nAliases:" in captured.out
