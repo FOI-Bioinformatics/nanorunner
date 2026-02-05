@@ -2,7 +2,7 @@
 
 import pytest
 
-from nanopore_simulator.core.species import GenomeRef
+from nanopore_simulator.core.species import GenomeRef, GenomeCache
 
 
 class TestGenomeRef:
@@ -61,3 +61,48 @@ class TestGenomeRef:
                 source="gtdb",
                 domain="invalid",
             )
+
+
+class TestGenomeCache:
+    """Tests for GenomeCache class"""
+
+    def test_cache_dir_default(self, tmp_path, monkeypatch):
+        """Test default cache directory uses HOME environment variable"""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        cache = GenomeCache()
+        assert cache.cache_dir == tmp_path / ".nanorunner" / "genomes"
+
+    def test_cache_dir_custom(self, tmp_path):
+        """Test custom cache directory is used when provided"""
+        cache = GenomeCache(cache_dir=tmp_path / "custom")
+        assert cache.cache_dir == tmp_path / "custom"
+
+    def test_get_cached_path_gtdb(self, tmp_path):
+        """Test cached path for GTDB genome reference"""
+        cache = GenomeCache(cache_dir=tmp_path)
+        ref = GenomeRef("E. coli", "GCF_000005845.2", "gtdb", "bacteria")
+        expected = tmp_path / "gtdb" / "GCF_000005845.2.fna.gz"
+        assert cache.get_cached_path(ref) == expected
+
+    def test_get_cached_path_ncbi(self, tmp_path):
+        """Test cached path for NCBI genome reference"""
+        cache = GenomeCache(cache_dir=tmp_path)
+        ref = GenomeRef("S. cerevisiae", "GCF_000146045.2", "ncbi", "eukaryota")
+        expected = tmp_path / "ncbi" / "GCF_000146045.2.fna.gz"
+        assert cache.get_cached_path(ref) == expected
+
+    def test_is_cached_false(self, tmp_path):
+        """Test is_cached returns False when genome is not cached"""
+        cache = GenomeCache(cache_dir=tmp_path)
+        ref = GenomeRef("E. coli", "GCF_000005845.2", "gtdb", "bacteria")
+        assert cache.is_cached(ref) is False
+
+    def test_is_cached_true(self, tmp_path):
+        """Test is_cached returns True when genome file exists"""
+        cache = GenomeCache(cache_dir=tmp_path)
+        ref = GenomeRef("E. coli", "GCF_000005845.2", "gtdb", "bacteria")
+        # Create the cached file
+        cached_path = cache.get_cached_path(ref)
+        cached_path.parent.mkdir(parents=True, exist_ok=True)
+        cached_path.write_text("dummy")
+        assert cache.is_cached(ref) is True

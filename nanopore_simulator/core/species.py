@@ -4,7 +4,10 @@ This module provides data structures for referencing and caching genome
 sequences from taxonomic databases such as GTDB and NCBI.
 """
 
+import os
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
 
 
 # Valid values for source and domain fields
@@ -41,3 +44,49 @@ class GenomeRef:
             raise ValueError(
                 f"domain must be one of {VALID_DOMAINS}, got '{self.domain}'"
             )
+
+
+class GenomeCache:
+    """Manages cached genome files in ~/.nanorunner/genomes/.
+
+    Provides methods for determining cache paths and checking whether
+    genome files have been downloaded and cached locally.
+
+    Attributes:
+        cache_dir: Path to the genome cache directory.
+    """
+
+    def __init__(self, cache_dir: Optional[Path] = None) -> None:
+        """Initialize the genome cache.
+
+        Args:
+            cache_dir: Custom cache directory path. If None, defaults to
+                ~/.nanorunner/genomes/ using the HOME environment variable.
+        """
+        if cache_dir is None:
+            home = Path(os.environ.get("HOME", Path.home()))
+            self.cache_dir = home / ".nanorunner" / "genomes"
+        else:
+            self.cache_dir = cache_dir
+
+    def get_cached_path(self, ref: GenomeRef) -> Path:
+        """Get the path where a genome would be cached.
+
+        Args:
+            ref: Genome reference to get the cache path for.
+
+        Returns:
+            Path to the cached genome file, organized by source database.
+        """
+        return self.cache_dir / ref.source / f"{ref.accession}.fna.gz"
+
+    def is_cached(self, ref: GenomeRef) -> bool:
+        """Check if a genome is already cached.
+
+        Args:
+            ref: Genome reference to check.
+
+        Returns:
+            True if the genome file exists in the cache, False otherwise.
+        """
+        return self.get_cached_path(ref).exists()
