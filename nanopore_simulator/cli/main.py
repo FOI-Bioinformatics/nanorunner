@@ -1,7 +1,9 @@
 """Command line interface for nanopore simulator"""
 
 import argparse
+import sys
 from pathlib import Path
+from typing import Optional
 
 from .. import __version__
 from ..core.config import SimulationConfig
@@ -63,7 +65,7 @@ def list_mocks_command() -> int:
     return 0
 
 
-def download_command(args) -> int:
+def download_command(args: argparse.Namespace) -> int:
     """Download genomes for offline use.
 
     Downloads genomes specified by species names, mock communities, or
@@ -88,6 +90,7 @@ def download_command(args) -> int:
             print(f"Error: Unknown mock community: {args.mock}")
             return 1
         for org in mock.organisms:
+            ref: Optional[GenomeRef] = None
             if org.accession:
                 ref = GenomeRef(
                     name=org.name,
@@ -196,8 +199,6 @@ def validate_pipeline_command(target_dir: Path, pipeline: str) -> int:
 
 def main() -> int:
     """Main CLI entry point"""
-    import sys
-
     # Handle download subcommand separately to avoid conflicts with positional args
     if len(sys.argv) > 1 and sys.argv[1] == "download":
         download_parser = argparse.ArgumentParser(
