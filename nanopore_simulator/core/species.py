@@ -229,14 +229,23 @@ class NCBIResolver:
             if result.returncode != 0:
                 return None
 
-            data = json.loads(result.stdout)
+            # Parse first line only (--as-json-lines returns one JSON per line)
+            first_line = result.stdout.strip().split("\n")[0]
+            if not first_line:
+                return None
+
+            data = json.loads(first_line)
+            # Extract organism name from nested structure
+            organism_name = data.get("organism", {}).get(
+                "organism_name", f"taxid:{taxid}"
+            )
             return GenomeRef(
-                name=data.get("organism_name", f"taxid:{taxid}"),
+                name=organism_name,
                 accession=data["accession"],
                 source="ncbi",
                 domain="eukaryota",
             )
-        except (subprocess.TimeoutExpired, json.JSONDecodeError, KeyError):
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, KeyError, IndexError):
             return None
 
     def resolve_by_name(self, name: str) -> Optional[GenomeRef]:
@@ -272,14 +281,21 @@ class NCBIResolver:
             if result.returncode != 0:
                 return None
 
-            data = json.loads(result.stdout)
+            # Parse first line only (--as-json-lines returns one JSON per line)
+            first_line = result.stdout.strip().split("\n")[0]
+            if not first_line:
+                return None
+
+            data = json.loads(first_line)
+            # Extract organism name from nested structure
+            organism_name = data.get("organism", {}).get("organism_name", name)
             return GenomeRef(
-                name=data.get("organism_name", name),
+                name=organism_name,
                 accession=data["accession"],
                 source="ncbi",
                 domain="eukaryota",
             )
-        except (subprocess.TimeoutExpired, json.JSONDecodeError, KeyError):
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, KeyError, IndexError):
             return None
 
 
