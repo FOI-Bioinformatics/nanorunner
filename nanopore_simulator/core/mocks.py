@@ -128,6 +128,34 @@ _ATCC_MSA1002_ORGANISMS = [
     MockOrganism("Streptococcus mutans", "gtdb", 0.05),
 ]
 
+# ATCC MSA-1003 - 20 Strain Staggered Mix (0.02% to 18%)
+_ATCC_MSA1003_ORGANISMS = [
+    # High abundance (18%)
+    MockOrganism("Escherichia coli", "gtdb", 0.18),
+    MockOrganism("Porphyromonas gingivalis", "gtdb", 0.18),
+    MockOrganism("Cereibacter sphaeroides", "gtdb", 0.18),
+    MockOrganism("Staphylococcus epidermidis", "gtdb", 0.18),
+    MockOrganism("Streptococcus mutans", "gtdb", 0.18),
+    # Medium abundance (1.8%)
+    MockOrganism("Bacillus pacificus", "gtdb", 0.018),
+    MockOrganism("Clostridium beijerinckii", "gtdb", 0.018),
+    MockOrganism("Pseudomonas paraeruginosa", "gtdb", 0.018),
+    MockOrganism("Staphylococcus aureus", "gtdb", 0.018),
+    MockOrganism("Streptococcus agalactiae", "gtdb", 0.018),
+    # Low abundance (0.18%)
+    MockOrganism("Acinetobacter baumannii", "gtdb", 0.0018),
+    MockOrganism("Cutibacterium acnes", "gtdb", 0.0018),
+    MockOrganism("Helicobacter pylori", "gtdb", 0.0018),
+    MockOrganism("Lactobacillus gasseri", "gtdb", 0.0018),
+    MockOrganism("Neisseria meningitidis", "gtdb", 0.0018),
+    # Very low abundance (0.02%)
+    MockOrganism("Phocaeicola vulgatus", "gtdb", 0.0002),
+    MockOrganism("Bifidobacterium adolescentis", "gtdb", 0.0002),
+    MockOrganism("Deinococcus radiodurans", "gtdb", 0.0002),
+    MockOrganism("Enterococcus faecalis", "gtdb", 0.0002),
+    MockOrganism("Schaalia odontolytica", "gtdb", 0.0002),
+]
+
 BUILTIN_MOCKS: Dict[str, MockCommunity] = {
     "zymo_d6300": MockCommunity(
         name="zymo_d6300",
@@ -158,6 +186,11 @@ BUILTIN_MOCKS: Dict[str, MockCommunity] = {
         name="atcc_msa1002",
         description="ATCC MSA-1002 20-strain even mix (5% each)",
         organisms=_ATCC_MSA1002_ORGANISMS,
+    ),
+    "atcc_msa1003": MockCommunity(
+        name="atcc_msa1003",
+        description="ATCC MSA-1003 20-strain staggered mix (0.02%-18%)",
+        organisms=_ATCC_MSA1003_ORGANISMS,
     ),
 }
 

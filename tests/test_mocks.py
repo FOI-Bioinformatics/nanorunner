@@ -233,3 +233,34 @@ class TestATCCMSA1002:
         mock = get_mock_community("atcc_msa1002")
         for org in mock.organisms:
             assert org.resolver == "gtdb"
+
+
+class TestATCCMSA1003:
+    """Tests for ATCC MSA-1003 20-strain staggered mix mock community."""
+
+    def test_atcc_msa1003_exists(self):
+        """ATCC MSA-1003 mock should exist."""
+        mock = get_mock_community("atcc_msa1003")
+        assert mock is not None
+        assert mock.name == "atcc_msa1003"
+
+    def test_atcc_msa1003_has_20_organisms(self):
+        """MSA-1003 should have 20 bacterial strains."""
+        mock = get_mock_community("atcc_msa1003")
+        assert len(mock.organisms) == 20
+
+    def test_atcc_msa1003_staggered_distribution(self):
+        """MSA-1003 should have staggered distribution (0.02% to 18%)."""
+        mock = get_mock_community("atcc_msa1003")
+        abundances = sorted([org.abundance for org in mock.organisms])
+        # Check range spans from ~0.02% to ~18%
+        assert abundances[0] < 0.001  # Smallest should be < 0.1%
+        assert abundances[-1] > 0.1   # Largest should be > 10%
+
+    def test_atcc_msa1003_log_spread(self):
+        """MSA-1003 abundances should span ~3 orders of magnitude."""
+        mock = get_mock_community("atcc_msa1003")
+        abundances = [org.abundance for org in mock.organisms]
+        max_abundance = max(abundances)
+        min_abundance = min(abundances)
+        assert max_abundance / min_abundance >= 100
