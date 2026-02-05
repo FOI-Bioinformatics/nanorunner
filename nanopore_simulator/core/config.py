@@ -133,9 +133,7 @@ class SimulationConfig:
                     if not gpath.exists():
                         raise ValueError(f"Genome file does not exist: {gpath}")
             if self.target_dir is None:
-                raise ValueError(
-                    "target_dir must be provided for generate operation"
-                )
+                raise ValueError("target_dir must be provided for generate operation")
             if self.read_count < 1:
                 raise ValueError("read_count must be at least 1")
             if self.mean_read_length < 1:
@@ -149,9 +147,7 @@ class SimulationConfig:
         else:
             # Non-generate operations require source_dir
             if self.source_dir is None:
-                raise ValueError(
-                    "source_dir is required for copy/link operations"
-                )
+                raise ValueError("source_dir is required for copy/link operations")
 
         # Validate force_structure
         if self.force_structure is not None and self.force_structure not in {
@@ -176,9 +172,7 @@ class SimulationConfig:
             # Validate abundances
             if self.abundances is not None:
                 if self.mock_name:
-                    raise ValueError(
-                        "abundances cannot be used with mock communities"
-                    )
+                    raise ValueError("abundances cannot be used with mock communities")
                 input_count = len(self.species_inputs or []) + len(
                     self.taxid_inputs or []
                 )
@@ -189,9 +183,7 @@ class SimulationConfig:
                     )
                 total = sum(self.abundances)
                 if not 0.99 <= total <= 1.01:
-                    raise ValueError(
-                        f"abundances must sum to 1.0 (got {total:.3f})"
-                    )
+                    raise ValueError(f"abundances must sum to 1.0 (got {total:.3f})")
 
     def get_timing_model_config(self) -> Dict[str, Any]:
         """Get timing model configuration for factory function"""

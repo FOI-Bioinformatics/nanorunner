@@ -13,8 +13,7 @@ class TestCLISpeciesArgs:
         """Test --species argument passes species_inputs to config"""
         # Put target_dir before --species to avoid nargs="+" consuming it
         monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", str(tmp_path), "--species", "Escherichia coli"]
+            sys, "argv", ["nanorunner", str(tmp_path), "--species", "Escherichia coli"]
         )
         with patch("nanopore_simulator.cli.main.NanoporeSimulator") as mock_sim:
             mock_sim.return_value.run_simulation.return_value = None
@@ -26,8 +25,9 @@ class TestCLISpeciesArgs:
         """Test --species with multiple species names"""
         # Put target_dir before --species to avoid nargs="+" consuming it
         monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", str(tmp_path), "--species", "E. coli", "S. aureus"]
+            sys,
+            "argv",
+            ["nanorunner", str(tmp_path), "--species", "E. coli", "S. aureus"],
         )
         with patch("nanopore_simulator.cli.main.NanoporeSimulator") as mock_sim:
             mock_sim.return_value.run_simulation.return_value = None
@@ -40,8 +40,7 @@ class TestCLISpeciesArgs:
     def test_mock_argument(self, tmp_path, monkeypatch):
         """Test --mock argument passes mock_name to config"""
         monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", "--mock", "zymo_d6300", str(tmp_path)]
+            sys, "argv", ["nanorunner", "--mock", "zymo_d6300", str(tmp_path)]
         )
         with patch("nanopore_simulator.cli.main.NanoporeSimulator") as mock_sim:
             mock_sim.return_value.run_simulation.return_value = None
@@ -52,8 +51,16 @@ class TestCLISpeciesArgs:
     def test_sample_type_argument(self, tmp_path, monkeypatch):
         """Test --sample-type argument passes sample_type to config"""
         monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", "--species", "E. coli", "--sample-type", "mixed", str(tmp_path)]
+            sys,
+            "argv",
+            [
+                "nanorunner",
+                "--species",
+                "E. coli",
+                "--sample-type",
+                "mixed",
+                str(tmp_path),
+            ],
         )
         with patch("nanopore_simulator.cli.main.NanoporeSimulator") as mock_sim:
             mock_sim.return_value.run_simulation.return_value = None
@@ -65,13 +72,20 @@ class TestCLISpeciesArgs:
         """Test --abundances argument passes abundances to config"""
         # Put target_dir before options with nargs="+" to avoid consumption
         monkeypatch.setattr(
-            sys, "argv",
+            sys,
+            "argv",
             [
-                "nanorunner", str(tmp_path),
-                "--species", "E. coli", "S. aureus",
-                "--sample-type", "mixed",
-                "--abundances", "0.7", "0.3",
-            ]
+                "nanorunner",
+                str(tmp_path),
+                "--species",
+                "E. coli",
+                "S. aureus",
+                "--sample-type",
+                "mixed",
+                "--abundances",
+                "0.7",
+                "0.3",
+            ],
         )
         with patch("nanopore_simulator.cli.main.NanoporeSimulator") as mock_sim:
             mock_sim.return_value.run_simulation.return_value = None
@@ -83,8 +97,7 @@ class TestCLISpeciesArgs:
         """Test --taxid argument passes taxid_inputs to config"""
         # Put target_dir before --taxid to avoid nargs="+" consuming it
         monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", str(tmp_path), "--taxid", "562", "1280"]
+            sys, "argv", ["nanorunner", str(tmp_path), "--taxid", "562", "1280"]
         )
         with patch("nanopore_simulator.cli.main.NanoporeSimulator") as mock_sim:
             mock_sim.return_value.run_simulation.return_value = None
@@ -95,8 +108,9 @@ class TestCLISpeciesArgs:
     def test_offline_argument(self, tmp_path, monkeypatch):
         """Test --offline argument passes offline_mode to config"""
         monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", "--species", "E. coli", "--offline", str(tmp_path)]
+            sys,
+            "argv",
+            ["nanorunner", "--species", "E. coli", "--offline", str(tmp_path)],
         )
         with patch("nanopore_simulator.cli.main.NanoporeSimulator") as mock_sim:
             mock_sim.return_value.run_simulation.return_value = None
@@ -116,8 +130,16 @@ class TestCLISpeciesArgs:
     def test_species_and_mock_mutually_exclusive(self, tmp_path, monkeypatch):
         """Test --species and --mock are mutually exclusive"""
         monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", "--species", "E. coli", "--mock", "zymo_d6300", str(tmp_path)]
+            sys,
+            "argv",
+            [
+                "nanorunner",
+                "--species",
+                "E. coli",
+                "--mock",
+                "zymo_d6300",
+                str(tmp_path),
+            ],
         )
         with pytest.raises(SystemExit):
             main()
@@ -128,12 +150,16 @@ class TestCLISpeciesArgs:
         genome_file = tmp_path / "genome.fa"
         genome_file.write_text(">seq1\nACGT\n")
         monkeypatch.setattr(
-            sys, "argv",
+            sys,
+            "argv",
             [
-                "nanorunner", "--species", "E. coli",
-                "--genomes", str(genome_file),
-                str(tmp_path)
-            ]
+                "nanorunner",
+                "--species",
+                "E. coli",
+                "--genomes",
+                str(genome_file),
+                str(tmp_path),
+            ],
         )
         with pytest.raises(SystemExit):
             main()
@@ -141,8 +167,9 @@ class TestCLISpeciesArgs:
     def test_mock_and_taxid_mutually_exclusive(self, tmp_path, monkeypatch):
         """Test --mock and --taxid are mutually exclusive"""
         monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", "--mock", "zymo_d6300", "--taxid", "562", str(tmp_path)]
+            sys,
+            "argv",
+            ["nanorunner", "--mock", "zymo_d6300", "--taxid", "562", str(tmp_path)],
         )
         with pytest.raises(SystemExit):
             main()
@@ -151,8 +178,7 @@ class TestCLISpeciesArgs:
         """Test that --species sets operation to generate"""
         # Put target_dir before --species to avoid nargs="+" consuming it
         monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", str(tmp_path), "--species", "E. coli"]
+            sys, "argv", ["nanorunner", str(tmp_path), "--species", "E. coli"]
         )
         with patch("nanopore_simulator.cli.main.NanoporeSimulator") as mock_sim:
             mock_sim.return_value.run_simulation.return_value = None
@@ -163,8 +189,7 @@ class TestCLISpeciesArgs:
     def test_mock_sets_generate_operation(self, tmp_path, monkeypatch):
         """Test that --mock sets operation to generate"""
         monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", "--mock", "zymo_d6300", str(tmp_path)]
+            sys, "argv", ["nanorunner", "--mock", "zymo_d6300", str(tmp_path)]
         )
         with patch("nanopore_simulator.cli.main.NanoporeSimulator") as mock_sim:
             mock_sim.return_value.run_simulation.return_value = None
@@ -175,12 +200,16 @@ class TestCLISpeciesArgs:
     def test_species_with_profile(self, tmp_path, monkeypatch):
         """Test --species works with --profile"""
         monkeypatch.setattr(
-            sys, "argv",
+            sys,
+            "argv",
             [
-                "nanorunner", "--species", "E. coli",
-                "--profile", "generate_quick_test",
-                str(tmp_path)
-            ]
+                "nanorunner",
+                "--species",
+                "E. coli",
+                "--profile",
+                "generate_quick_test",
+                str(tmp_path),
+            ],
         )
         with patch("nanopore_simulator.cli.main.NanoporeSimulator") as mock_sim:
             mock_sim.return_value.run_simulation.return_value = None

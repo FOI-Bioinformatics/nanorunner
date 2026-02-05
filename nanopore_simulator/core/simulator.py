@@ -320,9 +320,7 @@ class NanoporeSimulator:
         elif self.config.mix_reads:
             # Singleplex mixed: pool reads from all genomes into shared files
             total_files = files_per_genome * len(genome_inputs)
-            genomes = [
-                GenomeInput(fasta_path=gp) for gp in genome_inputs
-            ]
+            genomes = [GenomeInput(fasta_path=gp) for gp in genome_inputs]
             for fi in range(total_files):
                 genome = genomes[fi % len(genomes)]
                 manifest.append(
@@ -561,9 +559,7 @@ class NanoporeSimulator:
             self.progress_monitor.record_timing("directory_creation", dir_duration)
 
         file_op_start = time.time()
-        output_path = self.read_generator.generate_reads(
-            genome, output_dir, file_index
-        )
+        output_path = self.read_generator.generate_reads(genome, output_dir, file_index)
         file_op_duration = time.time() - file_op_start
         total_duration = time.time() - operation_start
 

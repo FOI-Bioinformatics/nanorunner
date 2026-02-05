@@ -54,9 +54,9 @@ def validate_fastq(path: Path) -> int:
     for i in range(0, len(lines), 4):
         assert lines[i].startswith("@"), f"Line {i+1}: missing @ header"
         assert lines[i + 2].startswith("+"), f"Line {i+3}: missing + separator"
-        assert len(lines[i + 1]) == len(lines[i + 3]), (
-            f"Read {read_count+1}: seq/qual length mismatch"
-        )
+        assert len(lines[i + 1]) == len(
+            lines[i + 3]
+        ), f"Read {read_count+1}: seq/qual length mismatch"
         read_count += 1
 
     return read_count

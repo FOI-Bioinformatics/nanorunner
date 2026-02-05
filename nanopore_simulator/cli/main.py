@@ -528,12 +528,14 @@ Examples:
         return list_mocks_command()
 
     # Check mutual exclusivity of species/mock/taxid/genomes
-    species_mock_count = sum([
-        args.species is not None,
-        args.mock is not None,
-        args.taxid is not None,
-        args.genomes is not None,
-    ])
+    species_mock_count = sum(
+        [
+            args.species is not None,
+            args.mock is not None,
+            args.taxid is not None,
+            args.genomes is not None,
+        ]
+    )
     if species_mock_count > 1:
         parser.error("--species, --mock, --taxid, and --genomes are mutually exclusive")
 

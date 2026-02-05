@@ -282,9 +282,7 @@ class TestResourceMonitorEdgeCases:
         mock_psutil.AccessDenied = psutil.AccessDenied
 
         with patch("nanopore_simulator.core.monitoring.os.getcwd", return_value="/tmp"):
-            mock_psutil.disk_usage.return_value = MagicMock(
-                total=100, used=50, free=50
-            )
+            mock_psutil.disk_usage.return_value = MagicMock(total=100, used=50, free=50)
 
             monitor = ResourceMonitor()
             monitor.process = mock_process

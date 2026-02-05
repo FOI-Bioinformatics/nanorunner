@@ -172,7 +172,9 @@ class TestConfigValidationCoverage:
 
     def test_invalid_operation_validation(self):
         """Test validation error for invalid operation"""
-        with pytest.raises(ValueError, match="operation must be 'copy', 'link', or 'generate'"):
+        with pytest.raises(
+            ValueError, match="operation must be 'copy', 'link', or 'generate'"
+        ):
             SimulationConfig(
                 source_dir=self.source_dir,
                 target_dir=self.target_dir,

@@ -13,8 +13,7 @@ class TestDownloadCommand:
     def test_download_species(self, monkeypatch, tmp_path):
         """Test downloading genomes by species name."""
         monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", "download", "--species", "Escherichia coli"]
+            sys, "argv", ["nanorunner", "download", "--species", "Escherichia coli"]
         )
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
@@ -30,8 +29,7 @@ class TestDownloadCommand:
     def test_download_mock(self, monkeypatch, tmp_path):
         """Test downloading genomes for a mock community."""
         monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", "download", "--mock", "quick_3species"]
+            sys, "argv", ["nanorunner", "download", "--mock", "quick_3species"]
         )
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
@@ -55,10 +53,7 @@ class TestDownloadCommand:
 
     def test_download_taxid(self, monkeypatch, tmp_path):
         """Test downloading genomes by taxonomy ID."""
-        monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", "download", "--taxid", "562"]
-        )
+        monkeypatch.setattr(sys, "argv", ["nanorunner", "download", "--taxid", "562"])
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
             mock_cls.return_value = mock_resolver
@@ -75,8 +70,7 @@ class TestDownloadCommand:
     def test_download_unknown_mock(self, monkeypatch, capsys):
         """Test that unknown mock community returns error."""
         monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", "download", "--mock", "nonexistent_mock"]
+            sys, "argv", ["nanorunner", "download", "--mock", "nonexistent_mock"]
         )
         result = main()
         assert result == 1
@@ -86,8 +80,7 @@ class TestDownloadCommand:
     def test_download_unresolvable_species(self, monkeypatch, tmp_path, capsys):
         """Test warning for species that cannot be resolved."""
         monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", "download", "--species", "Nonexistent species"]
+            sys, "argv", ["nanorunner", "download", "--species", "Nonexistent species"]
         )
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
@@ -102,9 +95,15 @@ class TestDownloadCommand:
     def test_download_multiple_species(self, monkeypatch, tmp_path):
         """Test downloading multiple species at once."""
         monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", "download", "--species", "Escherichia coli",
-             "Staphylococcus aureus"]
+            sys,
+            "argv",
+            [
+                "nanorunner",
+                "download",
+                "--species",
+                "Escherichia coli",
+                "Staphylococcus aureus",
+            ],
         )
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
@@ -120,8 +119,7 @@ class TestDownloadCommand:
     def test_download_multiple_taxids(self, monkeypatch, tmp_path):
         """Test downloading multiple taxonomy IDs at once."""
         monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", "download", "--taxid", "562", "1280"]
+            sys, "argv", ["nanorunner", "download", "--taxid", "562", "1280"]
         )
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
@@ -139,8 +137,7 @@ class TestDownloadCommand:
     def test_download_handles_download_failure(self, monkeypatch, capsys):
         """Test that download failures are handled gracefully."""
         monkeypatch.setattr(
-            sys, "argv",
-            ["nanorunner", "download", "--species", "Escherichia coli"]
+            sys, "argv", ["nanorunner", "download", "--species", "Escherichia coli"]
         )
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
