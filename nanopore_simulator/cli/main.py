@@ -3,7 +3,7 @@
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 
 from .. import __version__
 from ..core.config import SimulationConfig
@@ -20,7 +20,7 @@ from ..core.adapters import (
 )
 from ..core.detector import FileStructureDetector
 from ..core.generators import detect_available_backends
-from ..core.mocks import list_mock_communities, get_mock_community
+from ..core.mocks import BUILTIN_MOCKS, MOCK_ALIASES, get_mock_community
 from ..core.species import SpeciesResolver, download_genome, GenomeRef
 
 
@@ -56,12 +56,25 @@ def list_generators_command() -> int:
 
 
 def list_mocks_command() -> int:
-    """List available mock communities"""
-    mocks = list_mock_communities()
+    """List available mock communities."""
     print("Available Mock Communities:")
-    print("=" * 50)
-    for name, description in mocks.items():
-        print(f"  {name:20} - {description}")
+    print("=" * 60)
+    for name, mock in sorted(BUILTIN_MOCKS.items()):
+        print(f"  {name:20} - {mock.description}")
+
+    if MOCK_ALIASES:
+        print("\nAliases:")
+        print("-" * 60)
+        # Group aliases by target
+        targets: Dict[str, List[str]] = {}
+        for alias, target in MOCK_ALIASES.items():
+            if target not in targets:
+                targets[target] = []
+            targets[target].append(alias)
+        for target, aliases in sorted(targets.items()):
+            alias_str = ", ".join(sorted(aliases))
+            print(f"  {alias_str:30} -> {target}")
+
     return 0
 
 
