@@ -265,3 +265,88 @@ class NCBIResolver:
             )
         except (subprocess.TimeoutExpired, json.JSONDecodeError, KeyError):
             return None
+
+
+class SpeciesResolver:
+    """Unified species resolution with GTDB-first, NCBI fallback strategy.
+
+    Provides a single interface for resolving species names to genome
+    references. Attempts GTDB lookup first (bacteria/archaea), then falls
+    back to NCBI for eukaryotes and other organisms not in GTDB.
+
+    Attributes:
+        cache: GenomeCache instance for accessing cached genome files.
+    """
+
+    def __init__(
+        self,
+        index_dir: Optional[Path] = None,
+        cache_dir: Optional[Path] = None,
+    ) -> None:
+        """Initialize the species resolver.
+
+        Args:
+            index_dir: Directory containing index files. If None, defaults to
+                ~/.nanorunner/indexes/ using the HOME environment variable.
+            cache_dir: Directory for genome cache. If None, defaults to
+                ~/.nanorunner/genomes/ using the HOME environment variable.
+        """
+        if index_dir is None:
+            home = Path(os.environ.get("HOME", Path.home()))
+            index_dir = home / ".nanorunner" / "indexes"
+
+        self._gtdb = GTDBIndex(index_dir / "gtdb_species.tsv")
+        self._ncbi = NCBIResolver()
+        self._cache = GenomeCache(cache_dir)
+
+    def resolve(self, species_name: str) -> Optional[GenomeRef]:
+        """Resolve a species name to a genome reference.
+
+        Resolution strategy:
+        1. Try GTDB index first (bacteria/archaea)
+        2. Fall back to NCBI (eukaryotes, other organisms)
+
+        Args:
+            species_name: Species name to resolve (e.g., "Escherichia coli").
+
+        Returns:
+            GenomeRef if found, None otherwise.
+        """
+        # Try GTDB first
+        ref = self._gtdb.lookup(species_name)
+        if ref is not None:
+            return ref
+
+        # Fall back to NCBI
+        return self._ncbi.resolve_by_name(species_name)
+
+    def resolve_taxid(self, taxid: int) -> Optional[GenomeRef]:
+        """Resolve a genome reference by NCBI taxonomy ID.
+
+        Args:
+            taxid: NCBI taxonomy ID (e.g., 4932 for S. cerevisiae).
+
+        Returns:
+            GenomeRef if found, None otherwise.
+        """
+        return self._ncbi.resolve_by_taxid(taxid)
+
+    def suggest(self, partial_name: str) -> List[str]:
+        """Get species name suggestions from the GTDB index.
+
+        Args:
+            partial_name: Partial species name to match.
+
+        Returns:
+            List of matching species names.
+        """
+        return self._gtdb.suggest(partial_name)
+
+    @property
+    def cache(self) -> GenomeCache:
+        """Access the genome cache.
+
+        Returns:
+            GenomeCache instance for checking and accessing cached genomes.
+        """
+        return self._cache

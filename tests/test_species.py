@@ -4,7 +4,13 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from nanopore_simulator.core.species import GenomeRef, GenomeCache, GTDBIndex, NCBIResolver
+from nanopore_simulator.core.species import (
+    GenomeRef,
+    GenomeCache,
+    GTDBIndex,
+    NCBIResolver,
+    SpeciesResolver,
+)
 
 
 class TestGenomeRef:
@@ -201,3 +207,112 @@ class TestNCBIResolver:
         resolver = NCBIResolver()
         with patch("shutil.which", return_value="/usr/bin/datasets"):
             assert resolver.is_available() is True
+
+
+class TestSpeciesResolver:
+    """Tests for SpeciesResolver unified interface"""
+
+    def test_resolve_gtdb_species(self, tmp_path, monkeypatch):
+        """Test resolving a species found in GTDB index"""
+        # Create minimal GTDB index
+        index_file = tmp_path / "indexes" / "gtdb_species.tsv"
+        index_file.parent.mkdir(parents=True, exist_ok=True)
+        index_file.write_text(
+            "species\taccession\tdomain\n"
+            "Escherichia coli\tGCF_000005845.2\tbacteria\n"
+        )
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        resolver = SpeciesResolver(index_dir=tmp_path / "indexes")
+        ref = resolver.resolve("Escherichia coli")
+        assert ref is not None
+        assert ref.accession == "GCF_000005845.2"
+        assert ref.source == "gtdb"
+
+    def test_resolve_falls_back_to_ncbi(self, tmp_path, monkeypatch):
+        """Test that resolution falls back to NCBI when not found in GTDB"""
+        # Empty GTDB index
+        index_file = tmp_path / "indexes" / "gtdb_species.tsv"
+        index_file.parent.mkdir(parents=True, exist_ok=True)
+        index_file.write_text("species\taccession\tdomain\n")
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        resolver = SpeciesResolver(index_dir=tmp_path / "indexes")
+        with patch.object(resolver._ncbi, "resolve_by_name") as mock_ncbi:
+            mock_ncbi.return_value = GenomeRef(
+                "Saccharomyces cerevisiae", "GCF_000146045.2", "ncbi", "eukaryota"
+            )
+            ref = resolver.resolve("Saccharomyces cerevisiae")
+            assert ref is not None
+            assert ref.source == "ncbi"
+
+    def test_resolve_not_found(self, tmp_path, monkeypatch):
+        """Test resolution returns None when species not found in any source"""
+        index_file = tmp_path / "indexes" / "gtdb_species.tsv"
+        index_file.parent.mkdir(parents=True, exist_ok=True)
+        index_file.write_text("species\taccession\tdomain\n")
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        resolver = SpeciesResolver(index_dir=tmp_path / "indexes")
+        with patch.object(resolver._ncbi, "resolve_by_name", return_value=None):
+            ref = resolver.resolve("Nonexistent organism")
+            assert ref is None
+
+    def test_resolve_taxid(self, tmp_path, monkeypatch):
+        """Test resolving by NCBI taxonomy ID"""
+        index_file = tmp_path / "indexes" / "gtdb_species.tsv"
+        index_file.parent.mkdir(parents=True, exist_ok=True)
+        index_file.write_text("species\taccession\tdomain\n")
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        resolver = SpeciesResolver(index_dir=tmp_path / "indexes")
+        with patch.object(resolver._ncbi, "resolve_by_taxid") as mock_ncbi:
+            mock_ncbi.return_value = GenomeRef(
+                "Saccharomyces cerevisiae", "GCF_000146045.2", "ncbi", "eukaryota"
+            )
+            ref = resolver.resolve_taxid(4932)
+            assert ref is not None
+            assert ref.accession == "GCF_000146045.2"
+
+    def test_suggest(self, tmp_path, monkeypatch):
+        """Test species name suggestions from GTDB index"""
+        index_file = tmp_path / "indexes" / "gtdb_species.tsv"
+        index_file.parent.mkdir(parents=True, exist_ok=True)
+        index_file.write_text(
+            "species\taccession\tdomain\n"
+            "Escherichia coli\tGCF_000005845.2\tbacteria\n"
+            "Escherichia fergusonii\tGCF_000026225.1\tbacteria\n"
+        )
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        resolver = SpeciesResolver(index_dir=tmp_path / "indexes")
+        suggestions = resolver.suggest("Escherichia")
+        assert len(suggestions) >= 1
+        assert any("Escherichia" in s for s in suggestions)
+
+    def test_cache_property(self, tmp_path, monkeypatch):
+        """Test that cache property returns GenomeCache instance"""
+        index_file = tmp_path / "indexes" / "gtdb_species.tsv"
+        index_file.parent.mkdir(parents=True, exist_ok=True)
+        index_file.write_text("species\taccession\tdomain\n")
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        resolver = SpeciesResolver(
+            index_dir=tmp_path / "indexes",
+            cache_dir=tmp_path / "genomes",
+        )
+        assert isinstance(resolver.cache, GenomeCache)
+        assert resolver.cache.cache_dir == tmp_path / "genomes"
+
+    def test_default_index_dir(self, tmp_path, monkeypatch):
+        """Test that default index directory is used when not specified"""
+        # Create default index location
+        default_index = tmp_path / ".nanorunner" / "indexes" / "gtdb_species.tsv"
+        default_index.parent.mkdir(parents=True, exist_ok=True)
+        default_index.write_text("species\taccession\tdomain\n")
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        resolver = SpeciesResolver()
+        # Should not raise, indicating default path was used
+        ref = resolver.resolve("Nonexistent")
+        assert ref is None
