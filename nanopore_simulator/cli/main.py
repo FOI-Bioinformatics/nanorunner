@@ -18,7 +18,8 @@ from ..core.adapters import (
 )
 from ..core.detector import FileStructureDetector
 from ..core.generators import detect_available_backends
-from ..core.mocks import list_mock_communities
+from ..core.mocks import list_mock_communities, get_mock_community
+from ..core.species import SpeciesResolver, download_genome, GenomeRef
 
 
 def list_profiles_command() -> int:
@@ -59,6 +60,77 @@ def list_mocks_command() -> int:
     print("=" * 50)
     for name, description in mocks.items():
         print(f"  {name:20} - {description}")
+    return 0
+
+
+def download_command(args) -> int:
+    """Download genomes for offline use.
+
+    Downloads genomes specified by species names, mock communities, or
+    taxonomy IDs and caches them locally for offline simulation runs.
+
+    Args:
+        args: Parsed command-line arguments containing species, mock, or taxid.
+
+    Returns:
+        0 on success, 1 on error.
+    """
+    if not (args.species or args.mock or args.taxid):
+        print("Error: Must specify --species, --mock, or --taxid")
+        return 1
+
+    resolver = SpeciesResolver()
+    genomes_to_download = []
+
+    if args.mock:
+        mock = get_mock_community(args.mock)
+        if mock is None:
+            print(f"Error: Unknown mock community: {args.mock}")
+            return 1
+        for org in mock.organisms:
+            if org.accession:
+                ref = GenomeRef(
+                    name=org.name,
+                    accession=org.accession,
+                    source=org.resolver,
+                    domain="eukaryota" if org.resolver == "ncbi" else "bacteria",
+                )
+            else:
+                ref = resolver.resolve(org.name)
+            if ref:
+                genomes_to_download.append((org.name, ref))
+            else:
+                print(f"Warning: Could not resolve: {org.name}")
+
+    if args.species:
+        for species in args.species:
+            ref = resolver.resolve(species)
+            if ref:
+                genomes_to_download.append((species, ref))
+            else:
+                print(f"Warning: Could not resolve: {species}")
+
+    if args.taxid:
+        for taxid in args.taxid:
+            ref = resolver.resolve_taxid(taxid)
+            if ref:
+                genomes_to_download.append((f"taxid:{taxid}", ref))
+            else:
+                print(f"Warning: Could not resolve taxid: {taxid}")
+
+    if not genomes_to_download:
+        print("No genomes to download")
+        return 1
+
+    print(f"Downloading {len(genomes_to_download)} genome(s)...")
+    for name, ref in genomes_to_download:
+        try:
+            path = download_genome(ref, resolver.cache)
+            print(f"  Downloaded: {name} -> {path}")
+        except Exception as e:
+            print(f"  Failed: {name} - {e}")
+
+    print("Download complete")
     return 0
 
 
@@ -124,6 +196,34 @@ def validate_pipeline_command(target_dir: Path, pipeline: str) -> int:
 
 def main() -> int:
     """Main CLI entry point"""
+    import sys
+
+    # Handle download subcommand separately to avoid conflicts with positional args
+    if len(sys.argv) > 1 and sys.argv[1] == "download":
+        download_parser = argparse.ArgumentParser(
+            prog="nanorunner download",
+            description="Pre-download genomes for offline use",
+        )
+        download_parser.add_argument(
+            "--species",
+            type=str,
+            nargs="+",
+            help="Species names to download",
+        )
+        download_parser.add_argument(
+            "--mock",
+            type=str,
+            help="Mock community to download genomes for",
+        )
+        download_parser.add_argument(
+            "--taxid",
+            type=int,
+            nargs="+",
+            help="NCBI taxonomy IDs to download",
+        )
+        args = download_parser.parse_args(sys.argv[2:])
+        return download_command(args)
+
     parser = argparse.ArgumentParser(
         description="Advanced nanopore sequencing run simulator with profiles and pipeline support",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -167,6 +267,10 @@ Examples:
 
   # List available generation backends
   nanorunner --list-generators
+
+  # Pre-download genomes for offline use
+  nanorunner download --species "Escherichia coli" "Staphylococcus aureus"
+  nanorunner download --mock quick_3species
 
   # Enhanced features require: pip install nanorunner[enhanced]
         """,
