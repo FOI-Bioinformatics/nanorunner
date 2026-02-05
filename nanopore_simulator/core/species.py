@@ -7,7 +7,7 @@ sequences from taxonomic databases such as GTDB and NCBI.
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 
 # Valid values for source and domain fields
@@ -90,3 +90,82 @@ class GenomeCache:
             True if the genome file exists in the cache, False otherwise.
         """
         return self.get_cached_path(ref).exists()
+
+
+class GTDBIndex:
+    """Local index for GTDB species-to-accession mapping.
+
+    Provides lookup of genome accessions by species name using a local
+    TSV index file. Supports case-insensitive matching and partial name
+    suggestions.
+
+    Attributes:
+        index_path: Path to the TSV index file.
+    """
+
+    def __init__(self, index_path: Path) -> None:
+        """Initialize the GTDB index.
+
+        Args:
+            index_path: Path to the TSV index file containing species,
+                accession, and domain columns.
+        """
+        self.index_path = index_path
+        self._species_map: Dict[str, Tuple[str, str, str]] = {}
+        self._load_index()
+
+    def _load_index(self) -> None:
+        """Load the TSV index file into memory."""
+        if not self.index_path.exists():
+            return
+        with open(self.index_path) as f:
+            # Skip header line
+            next(f, None)
+            for line in f:
+                parts = line.strip().split("\t")
+                if len(parts) >= 3:
+                    name, accession, domain = parts[0], parts[1], parts[2]
+                    self._species_map[name.lower()] = (name, accession, domain)
+
+    def lookup(self, species_name: str) -> Optional[GenomeRef]:
+        """Look up a species by name.
+
+        Performs case-insensitive matching against the index.
+
+        Args:
+            species_name: Species name to look up.
+
+        Returns:
+            GenomeRef if found, None otherwise.
+        """
+        key = species_name.lower()
+        if key in self._species_map:
+            name, accession, domain = self._species_map[key]
+            return GenomeRef(
+                name=name,
+                accession=accession,
+                source="gtdb",
+                domain=domain,
+            )
+        return None
+
+    def suggest(self, partial_name: str, max_results: int = 5) -> List[str]:
+        """Suggest species names matching a partial input.
+
+        Performs case-insensitive substring matching.
+
+        Args:
+            partial_name: Partial species name to match.
+            max_results: Maximum number of suggestions to return.
+
+        Returns:
+            List of matching species names, up to max_results.
+        """
+        partial = partial_name.lower()
+        matches = []
+        for key, (name, _, _) in self._species_map.items():
+            if partial in key:
+                matches.append(name)
+                if len(matches) >= max_results:
+                    break
+        return matches

@@ -2,7 +2,7 @@
 
 import pytest
 
-from nanopore_simulator.core.species import GenomeRef, GenomeCache
+from nanopore_simulator.core.species import GenomeRef, GenomeCache, GTDBIndex
 
 
 class TestGenomeRef:
@@ -106,3 +106,54 @@ class TestGenomeCache:
         cached_path.parent.mkdir(parents=True, exist_ok=True)
         cached_path.write_text("dummy")
         assert cache.is_cached(ref) is True
+
+
+class TestGTDBIndex:
+    """Tests for GTDBIndex class"""
+
+    def test_lookup_ecoli(self, tmp_path):
+        """Test looking up E. coli by exact species name"""
+        index_file = tmp_path / "gtdb_species.tsv"
+        index_file.write_text(
+            "species\taccession\tdomain\n"
+            "Escherichia coli\tGCF_000005845.2\tbacteria\n"
+            "Staphylococcus aureus\tGCF_000013425.1\tbacteria\n"
+        )
+        index = GTDBIndex(index_file)
+        ref = index.lookup("Escherichia coli")
+        assert ref is not None
+        assert ref.accession == "GCF_000005845.2"
+        assert ref.source == "gtdb"
+        assert ref.domain == "bacteria"
+
+    def test_lookup_not_found(self, tmp_path):
+        """Test lookup returns None for nonexistent species"""
+        index_file = tmp_path / "gtdb_species.tsv"
+        index_file.write_text("species\taccession\tdomain\n")
+        index = GTDBIndex(index_file)
+        ref = index.lookup("Nonexistent species")
+        assert ref is None
+
+    def test_lookup_case_insensitive(self, tmp_path):
+        """Test lookup is case-insensitive but preserves original name"""
+        index_file = tmp_path / "gtdb_species.tsv"
+        index_file.write_text(
+            "species\taccession\tdomain\n"
+            "Escherichia coli\tGCF_000005845.2\tbacteria\n"
+        )
+        index = GTDBIndex(index_file)
+        ref = index.lookup("escherichia coli")
+        assert ref is not None
+        assert ref.name == "Escherichia coli"
+
+    def test_fuzzy_suggestions(self, tmp_path):
+        """Test suggest returns matching species names for partial input"""
+        index_file = tmp_path / "gtdb_species.tsv"
+        index_file.write_text(
+            "species\taccession\tdomain\n"
+            "Escherichia coli\tGCF_000005845.2\tbacteria\n"
+            "Escherichia fergusonii\tGCF_000026225.1\tbacteria\n"
+        )
+        index = GTDBIndex(index_file)
+        suggestions = index.suggest("Escherichia col")
+        assert "Escherichia coli" in suggestions
