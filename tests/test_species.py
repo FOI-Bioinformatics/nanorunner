@@ -1,8 +1,10 @@
 """Tests for species resolution and genome caching"""
 
+from unittest.mock import patch, MagicMock
+
 import pytest
 
-from nanopore_simulator.core.species import GenomeRef, GenomeCache, GTDBIndex
+from nanopore_simulator.core.species import GenomeRef, GenomeCache, GTDBIndex, NCBIResolver
 
 
 class TestGenomeRef:
@@ -157,3 +159,45 @@ class TestGTDBIndex:
         index = GTDBIndex(index_file)
         suggestions = index.suggest("Escherichia col")
         assert "Escherichia coli" in suggestions
+
+
+class TestNCBIResolver:
+    """Tests for NCBIResolver class"""
+
+    def test_resolve_by_taxid(self, tmp_path):
+        """Test resolving genome by NCBI taxonomy ID"""
+        resolver = NCBIResolver()
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout='{"accession": "GCF_000146045.2", "organism_name": "Saccharomyces cerevisiae"}'
+            )
+            ref = resolver.resolve_by_taxid(4932)
+            assert ref is not None
+            assert ref.accession == "GCF_000146045.2"
+            assert ref.source == "ncbi"
+            assert ref.domain == "eukaryota"
+
+    def test_resolve_by_name(self, tmp_path):
+        """Test resolving genome by organism name"""
+        resolver = NCBIResolver()
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout='{"accession": "GCF_000146045.2", "organism_name": "Saccharomyces cerevisiae", "tax_id": 4932}'
+            )
+            ref = resolver.resolve_by_name("Saccharomyces cerevisiae")
+            assert ref is not None
+            assert ref.name == "Saccharomyces cerevisiae"
+
+    def test_datasets_not_available(self):
+        """Test is_available returns False when datasets CLI is not installed"""
+        resolver = NCBIResolver()
+        with patch("shutil.which", return_value=None):
+            assert resolver.is_available() is False
+
+    def test_datasets_available(self):
+        """Test is_available returns True when datasets CLI is installed"""
+        resolver = NCBIResolver()
+        with patch("shutil.which", return_value="/usr/bin/datasets"):
+            assert resolver.is_available() is True

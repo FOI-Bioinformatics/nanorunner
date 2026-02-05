@@ -4,7 +4,10 @@ This module provides data structures for referencing and caching genome
 sequences from taxonomic databases such as GTDB and NCBI.
 """
 
+import json
 import os
+import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -169,3 +172,96 @@ class GTDBIndex:
                 if len(matches) >= max_results:
                     break
         return matches
+
+
+class NCBIResolver:
+    """Resolve species via NCBI taxonomy and datasets CLI.
+
+    Provides methods for resolving genome references by NCBI taxonomy ID
+    or organism name using the ncbi-datasets-cli tool. Requires the
+    'datasets' command to be available in the system PATH.
+    """
+
+    def is_available(self) -> bool:
+        """Check if ncbi-datasets-cli is installed.
+
+        Returns:
+            True if the 'datasets' command is available, False otherwise.
+        """
+        return shutil.which("datasets") is not None
+
+    def resolve_by_taxid(self, taxid: int) -> Optional[GenomeRef]:
+        """Resolve a genome reference by NCBI taxonomy ID.
+
+        Queries NCBI for a reference genome associated with the given
+        taxonomy ID.
+
+        Args:
+            taxid: NCBI taxonomy ID (e.g., 4932 for S. cerevisiae).
+
+        Returns:
+            GenomeRef if found, None otherwise.
+        """
+        if not self.is_available():
+            return None
+
+        try:
+            result = subprocess.run(
+                [
+                    "datasets", "summary", "genome", "taxon", str(taxid),
+                    "--reference", "--as-json-lines",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode != 0:
+                return None
+
+            data = json.loads(result.stdout)
+            return GenomeRef(
+                name=data.get("organism_name", f"taxid:{taxid}"),
+                accession=data["accession"],
+                source="ncbi",
+                domain="eukaryota",
+            )
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, KeyError):
+            return None
+
+    def resolve_by_name(self, name: str) -> Optional[GenomeRef]:
+        """Resolve a genome reference by organism name.
+
+        Queries NCBI for a reference genome associated with the given
+        organism name.
+
+        Args:
+            name: Organism name (e.g., "Saccharomyces cerevisiae").
+
+        Returns:
+            GenomeRef if found, None otherwise.
+        """
+        if not self.is_available():
+            return None
+
+        try:
+            result = subprocess.run(
+                [
+                    "datasets", "summary", "genome", "taxon", name,
+                    "--reference", "--as-json-lines",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode != 0:
+                return None
+
+            data = json.loads(result.stdout)
+            return GenomeRef(
+                name=data.get("organism_name", name),
+                accession=data["accession"],
+                source="ncbi",
+                domain="eukaryota",
+            )
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, KeyError):
+            return None
