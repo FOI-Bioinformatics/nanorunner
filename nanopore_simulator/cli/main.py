@@ -18,6 +18,7 @@ from ..core.adapters import (
 )
 from ..core.detector import FileStructureDetector
 from ..core.generators import detect_available_backends
+from ..core.mocks import list_mock_communities
 
 
 def list_profiles_command() -> int:
@@ -48,6 +49,16 @@ def list_generators_command() -> int:
     for name, available in backends.items():
         status = "available" if available else "not found"
         print(f"  {name:15} - {status}")
+    return 0
+
+
+def list_mocks_command() -> int:
+    """List available mock communities"""
+    mocks = list_mock_communities()
+    print("Available Mock Communities:")
+    print("=" * 50)
+    for name, description in mocks.items():
+        print(f"  {name:20} - {description}")
     return 0
 
 
@@ -189,6 +200,11 @@ Examples:
         action="store_true",
         help="List available read generation backends",
     )
+    parser.add_argument(
+        "--list-mocks",
+        action="store_true",
+        help="List available mock communities",
+    )
 
     # Read generation arguments
     gen_group = parser.add_argument_group("Read Generation")
@@ -233,6 +249,46 @@ Examples:
         "--mix-reads",
         action="store_true",
         help="Mix reads from all genomes into shared files (singleplex mode)",
+    )
+
+    # Species/Mock generation arguments
+    species_group = parser.add_argument_group("Species/Mock Generation")
+    species_group.add_argument(
+        "--species",
+        type=str,
+        nargs="+",
+        metavar="NAME",
+        help="Species names to resolve via GTDB/NCBI",
+    )
+    species_group.add_argument(
+        "--mock",
+        type=str,
+        metavar="MOCK_NAME",
+        help="Preset mock community name (e.g., zymo_d6300)",
+    )
+    species_group.add_argument(
+        "--taxid",
+        type=int,
+        nargs="+",
+        metavar="TAXID",
+        help="Direct NCBI taxonomy IDs",
+    )
+    species_group.add_argument(
+        "--sample-type",
+        choices=["pure", "mixed"],
+        help="Sample type: pure (per-species barcodes) or mixed (interleaved)",
+    )
+    species_group.add_argument(
+        "--abundances",
+        type=float,
+        nargs="+",
+        metavar="ABUNDANCE",
+        help="Custom abundances for mixed samples (must sum to 1.0)",
+    )
+    species_group.add_argument(
+        "--offline",
+        action="store_true",
+        help="Use only cached genomes, no network requests",
     )
 
     # Main simulation arguments (optional for some commands)
@@ -363,8 +419,26 @@ Examples:
     if args.list_generators:
         return list_generators_command()
 
+    if args.list_mocks:
+        return list_mocks_command()
+
+    # Check mutual exclusivity of species/mock/taxid/genomes
+    species_mock_count = sum([
+        args.species is not None,
+        args.mock is not None,
+        args.taxid is not None,
+        args.genomes is not None,
+    ])
+    if species_mock_count > 1:
+        parser.error("--species, --mock, --taxid, and --genomes are mutually exclusive")
+
     # Determine operation mode
-    is_generate = args.genomes is not None
+    is_generate = (
+        args.genomes is not None
+        or args.species is not None
+        or args.mock is not None
+        or args.taxid is not None
+    )
 
     if is_generate:
         # Generate mode: only target_dir required
@@ -375,9 +449,11 @@ Examples:
                 args.source_dir = None
             else:
                 parser.error("target_dir is required for generate mode")
-        for gpath in args.genomes:
-            if not gpath.exists():
-                parser.error(f"Genome file does not exist: {gpath}")
+        # Validate genome files if provided
+        if args.genomes:
+            for gpath in args.genomes:
+                if not gpath.exists():
+                    parser.error(f"Genome file does not exist: {gpath}")
     else:
         # Copy/link mode: both dirs required
         if not args.source_dir or not args.target_dir:
@@ -456,13 +532,28 @@ Examples:
 
             if is_generate:
                 overrides["operation"] = "generate"
-                overrides["genome_inputs"] = args.genomes
+                if args.genomes:
+                    overrides["genome_inputs"] = args.genomes
                 overrides["generator_backend"] = args.generator_backend
                 overrides["read_count"] = args.read_count
                 overrides["mean_read_length"] = args.mean_read_length
                 overrides["reads_per_file"] = args.reads_per_file
                 overrides["output_format"] = args.output_format
                 overrides["mix_reads"] = args.mix_reads
+
+            # Add species/mock generation parameters
+            if args.species:
+                overrides["species_inputs"] = args.species
+            if args.mock:
+                overrides["mock_name"] = args.mock
+            if args.taxid:
+                overrides["taxid_inputs"] = args.taxid
+            if args.sample_type:
+                overrides["sample_type"] = args.sample_type
+            if args.abundances:
+                overrides["abundances"] = args.abundances
+            if args.offline:
+                overrides["offline_mode"] = args.offline
 
             config = create_config_from_profile(
                 args.profile,
@@ -506,7 +597,8 @@ Examples:
 
             if is_generate:
                 config_kwargs["operation"] = "generate"
-                config_kwargs["genome_inputs"] = args.genomes
+                if args.genomes:
+                    config_kwargs["genome_inputs"] = args.genomes
                 config_kwargs["generator_backend"] = args.generator_backend
                 config_kwargs["read_count"] = args.read_count
                 config_kwargs["mean_read_length"] = args.mean_read_length
@@ -516,6 +608,20 @@ Examples:
             else:
                 config_kwargs["source_dir"] = args.source_dir
                 config_kwargs["operation"] = args.operation
+
+            # Add species/mock generation parameters
+            if args.species:
+                config_kwargs["species_inputs"] = args.species
+            if args.mock:
+                config_kwargs["mock_name"] = args.mock
+            if args.taxid:
+                config_kwargs["taxid_inputs"] = args.taxid
+            if args.sample_type:
+                config_kwargs["sample_type"] = args.sample_type
+            if args.abundances:
+                config_kwargs["abundances"] = args.abundances
+            if args.offline:
+                config_kwargs["offline_mode"] = args.offline
 
             config = SimulationConfig(**config_kwargs)
 
