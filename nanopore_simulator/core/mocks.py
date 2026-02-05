@@ -104,6 +104,30 @@ _QUICK_PATHOGENS_ORGANISMS = [
     MockOrganism("Enterococcus faecium", "gtdb", 0.2),
 ]
 
+# ATCC MSA-1002 - 20 Strain Even Mix (5% each)
+_ATCC_MSA1002_ORGANISMS = [
+    MockOrganism("Acinetobacter baumannii", "gtdb", 0.05),
+    MockOrganism("Bacillus pacificus", "gtdb", 0.05),
+    MockOrganism("Phocaeicola vulgatus", "gtdb", 0.05),
+    MockOrganism("Bifidobacterium adolescentis", "gtdb", 0.05),
+    MockOrganism("Clostridium beijerinckii", "gtdb", 0.05),
+    MockOrganism("Cutibacterium acnes", "gtdb", 0.05),
+    MockOrganism("Deinococcus radiodurans", "gtdb", 0.05),
+    MockOrganism("Enterococcus faecalis", "gtdb", 0.05),
+    MockOrganism("Escherichia coli", "gtdb", 0.05),
+    MockOrganism("Helicobacter pylori", "gtdb", 0.05),
+    MockOrganism("Lactobacillus gasseri", "gtdb", 0.05),
+    MockOrganism("Neisseria meningitidis", "gtdb", 0.05),
+    MockOrganism("Porphyromonas gingivalis", "gtdb", 0.05),
+    MockOrganism("Pseudomonas paraeruginosa", "gtdb", 0.05),
+    MockOrganism("Cereibacter sphaeroides", "gtdb", 0.05),
+    MockOrganism("Schaalia odontolytica", "gtdb", 0.05),
+    MockOrganism("Staphylococcus aureus", "gtdb", 0.05),
+    MockOrganism("Staphylococcus epidermidis", "gtdb", 0.05),
+    MockOrganism("Streptococcus agalactiae", "gtdb", 0.05),
+    MockOrganism("Streptococcus mutans", "gtdb", 0.05),
+]
+
 BUILTIN_MOCKS: Dict[str, MockCommunity] = {
     "zymo_d6300": MockCommunity(
         name="zymo_d6300",
@@ -129,6 +153,11 @@ BUILTIN_MOCKS: Dict[str, MockCommunity] = {
         name="quick_pathogens",
         description="5 clinically relevant pathogens (ESKAPE subset)",
         organisms=_QUICK_PATHOGENS_ORGANISMS,
+    ),
+    "atcc_msa1002": MockCommunity(
+        name="atcc_msa1002",
+        description="ATCC MSA-1002 20-strain even mix (5% each)",
+        organisms=_ATCC_MSA1002_ORGANISMS,
     ),
 }
 

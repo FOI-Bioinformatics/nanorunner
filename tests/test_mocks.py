@@ -206,3 +206,30 @@ class TestZymoD6310:
         mock = get_mock_community("D6311")
         assert mock is not None
         assert mock.name == "zymo_d6310"
+
+
+class TestATCCMSA1002:
+    """Tests for ATCC MSA-1002 20-strain even mix mock community."""
+
+    def test_atcc_msa1002_exists(self):
+        """ATCC MSA-1002 mock should exist."""
+        mock = get_mock_community("atcc_msa1002")
+        assert mock is not None
+        assert mock.name == "atcc_msa1002"
+
+    def test_atcc_msa1002_has_20_organisms(self):
+        """MSA-1002 should have 20 bacterial strains."""
+        mock = get_mock_community("atcc_msa1002")
+        assert len(mock.organisms) == 20
+
+    def test_atcc_msa1002_even_distribution(self):
+        """MSA-1002 should have even 5% distribution."""
+        mock = get_mock_community("atcc_msa1002")
+        for org in mock.organisms:
+            assert org.abundance == 0.05
+
+    def test_atcc_msa1002_all_gtdb_resolver(self):
+        """MSA-1002 organisms should use GTDB resolver."""
+        mock = get_mock_community("atcc_msa1002")
+        for org in mock.organisms:
+            assert org.resolver == "gtdb"
