@@ -12,13 +12,7 @@ from nanopore_simulator.core.simulator import NanoporeSimulator
 def genome_files(tmp_path):
     """Create two small genome FASTA files."""
     g1 = tmp_path / "genome1.fa"
-    g1.write_text(
-        ">chr1\n"
-        + "ATCGATCG" * 50
-        + "\n>chr2\n"
-        + "GCTAGCTA" * 50
-        + "\n"
-    )
+    g1.write_text(">chr1\n" + "ATCGATCG" * 50 + "\n>chr2\n" + "GCTAGCTA" * 50 + "\n")
     g2 = tmp_path / "genome2.fa"
     g2.write_text(">chrA\n" + "TTAACCGG" * 50 + "\n")
     return [g1, g2]

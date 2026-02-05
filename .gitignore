@@ -215,3 +215,6 @@ simulation_checkpoint.json
 
 # Benchmark artifacts
 .benchmarks/
+
+# Git worktrees
+.worktrees/

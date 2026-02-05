@@ -35,13 +35,10 @@ Comprehensive guides and references for the NanoRunner nanopore sequencing simul
 ## Testing Documentation
 
 ### Test Suite Overview
-- **[Testing Guide](testing.md)**: Comprehensive test suite overview
-- **[Coverage Report](test-coverage-report.md)**: Detailed coverage analysis (95%+ on core components)
-- **[Testing Strategy](testing-strategy.md)**: Framework methodology and best practices
+- **[Testing Guide](testing.md)**: Comprehensive guide covering test categories, running tests, organization, and contributing
 
 ### Current Status
-- **Test Count**: 480 comprehensive tests
-- **Pass Rate**: 99.8% (479/480)
+- **Test Count**: 524 tests across 31 test files
 - **Coverage**: 97% on core components
 
 ## Quick Links
@@ -53,7 +50,7 @@ Comprehensive guides and references for the NanoRunner nanopore sequencing simul
 
 ### For Developers
 1. [CLAUDE.md](../CLAUDE.md) - Development guidelines
-2. [Testing Strategy](testing-strategy.md) - How to write tests
+2. [Testing Guide](testing.md) - How to run and write tests
 3. [CONTRIBUTING.md](../CONTRIBUTING.md) - Contribution workflow
 
 ### For Troubleshooting
@@ -74,16 +71,15 @@ nanorunner/
 │   ├── README.md                   # This file - documentation index
 │   ├── quickstart.md               # Quick start guide
 │   ├── troubleshooting.md          # Common issues and solutions
-│   ├── testing.md                  # Test suite guide
-│   ├── test-coverage-report.md     # Coverage analysis
-│   └── testing-strategy.md         # Testing methodology
+│   └── testing.md                  # Comprehensive testing guide
 └── examples/
     ├── README.md                   # Examples overview
-    ├── basic_usage.py
-    ├── timing_models.py
-    ├── parallel_processing.py
-    ├── profiles_demo.py
-    ├── pipeline_integration.py
+    ├── 01_basic_simulation.py
+    ├── 02_timing_models.py
+    ├── 03_parallel_processing.py
+    ├── 04_configuration_profiles.py
+    ├── 05_pipeline_integration.py
+    ├── 06_practical_genome_test.py
     └── sample_data/                # Test FASTQ files
 ```
 
@@ -92,4 +88,4 @@ nanorunner/
 - **Current Version**: 2.0.2
 - **Python Requirement**: 3.9+
 - **Status**: Production/Stable
-- **Last Updated**: 2025-10-17
+- **Last Updated**: 2026-02-03

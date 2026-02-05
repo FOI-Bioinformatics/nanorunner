@@ -154,9 +154,7 @@ class BuiltinGenerator(ReadGenerator):
 
         return output_path
 
-    def _sample_reads(
-        self, genome_seq: str, genome: GenomeInput
-    ) -> List[tuple]:
+    def _sample_reads(self, genome_seq: str, genome: GenomeInput) -> List[tuple]:
         """Sample reads from the genome sequence.
 
         Returns list of (read_id, sequence, quality_string) tuples.
@@ -219,9 +217,7 @@ class BuiltinGenerator(ReadGenerator):
 
     def _write_fastq(self, reads: List[tuple], output_path: Path) -> None:
         """Write reads to a FASTQ file (plain or gzipped)."""
-        open_fn = (
-            gzip.open if output_path.suffix == ".gz" else open
-        )
+        open_fn = gzip.open if output_path.suffix == ".gz" else open
         with open_fn(output_path, "wt") as f:
             for read_id, seq, quals in reads:
                 f.write(f"@{read_id}\n{seq}\n+\n{quals}\n")
@@ -330,7 +326,21 @@ class NanoSimGenerator(ReadGenerator):
         with open_fn(output_path, "wt") as f:
             for header, seq in all_seqs:
                 qual = "".join(
-                    chr(int(max(0, min(40, random.gauss(self.config.mean_quality, self.config.std_quality)))) + 33)
+                    chr(
+                        int(
+                            max(
+                                0,
+                                min(
+                                    40,
+                                    random.gauss(
+                                        self.config.mean_quality,
+                                        self.config.std_quality,
+                                    ),
+                                ),
+                            )
+                        )
+                        + 33
+                    )
                     for _ in range(len(seq))
                 )
                 f.write(f"@{header}\n{seq}\n+\n{qual}\n")
@@ -351,9 +361,7 @@ def detect_available_backends() -> Dict[str, bool]:
     return {name: cls.is_available() for name, cls in _BACKENDS.items()}
 
 
-def create_read_generator(
-    backend: str, config: ReadGeneratorConfig
-) -> ReadGenerator:
+def create_read_generator(backend: str, config: ReadGeneratorConfig) -> ReadGenerator:
     """Factory function to create a read generator.
 
     Args:

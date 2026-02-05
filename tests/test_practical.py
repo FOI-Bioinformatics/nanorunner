@@ -60,10 +60,19 @@ def _download_genome(accession: str, dest: Path) -> Path:
 
     subprocess.run(
         [
-            "datasets", "download", "genome", "accession", accession,
-            "--include", "genome", "--filename", str(zip_path),
+            "datasets",
+            "download",
+            "genome",
+            "accession",
+            accession,
+            "--include",
+            "genome",
+            "--filename",
+            str(zip_path),
         ],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     )
 
     with zipfile.ZipFile(zip_path, "r") as zf:
@@ -97,9 +106,9 @@ def validate_fastq(path: Path) -> int:
     for i in range(0, len(lines), 4):
         assert lines[i].startswith("@"), f"Line {i+1}: missing @ header"
         assert lines[i + 2].startswith("+"), f"Line {i+3}: missing + separator"
-        assert len(lines[i + 1]) == len(lines[i + 3]), (
-            f"Read {read_count+1}: seq/qual length mismatch"
-        )
+        assert len(lines[i + 1]) == len(
+            lines[i + 3]
+        ), f"Read {read_count+1}: seq/qual length mismatch"
         read_count += 1
 
     return read_count
@@ -278,7 +287,9 @@ class TestPracticalSingleplex:
         fq_files = list(target.glob("*.fastq"))
         # 2 genomes * ceil(30/15) = 4
         assert len(fq_files) == 4
-        barcode_dirs = [d for d in target.iterdir() if d.is_dir() and d.name.startswith("barcode")]
+        barcode_dirs = [
+            d for d in target.iterdir() if d.is_dir() and d.name.startswith("barcode")
+        ]
         assert len(barcode_dirs) == 0
 
     def test_singleplex_mixed(self, genome_cache, tmp_path):

@@ -4,7 +4,7 @@ This directory contains practical examples demonstrating NanoRunner's capabiliti
 
 ## Prerequisites
 
-- NanoRunner installed: `pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.0`
+- NanoRunner installed: `pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2`
 - Python 3.9 or higher
 - Sample data provided in `sample_data/` directory
 

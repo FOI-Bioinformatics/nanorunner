@@ -381,9 +381,7 @@ class TestParallelProcessingErrorHandling:
 
             # Create test files
             for i in range(3):
-                (source_dir / f"test_{i}.fastq").write_text(
-                    f"@read{i}\nACGT\n+\n!!!!"
-                )
+                (source_dir / f"test_{i}.fastq").write_text(f"@read{i}\nACGT\n+\n!!!!")
 
             config = SimulationConfig(
                 source_dir=source_dir,
@@ -403,7 +401,9 @@ class TestParallelProcessingErrorHandling:
                 error_count[0] += 1
                 raise ValueError(f"Error {error_count[0]}")
 
-            with patch.object(simulator, "_process_file", side_effect=raising_process_file):
+            with patch.object(
+                simulator, "_process_file", side_effect=raising_process_file
+            ):
                 batch = [
                     {
                         "source": source_dir / f"test_{i}.fastq",

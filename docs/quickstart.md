@@ -160,7 +160,79 @@ The `builtin` backend requires no external dependencies and is always available.
 
 ---
 
-## 4. Using Configuration Profiles
+## 4. Species and Mock Community Generation
+
+Generate reads without providing genome files by specifying species names or using preset mock communities. NanoRunner resolves species names via GTDB/NCBI and downloads reference genomes automatically.
+
+### Generate from Species Names
+
+```bash
+# Generate reads for two species (downloads genomes automatically)
+nanorunner --species "Escherichia coli" "Staphylococcus aureus" /watch/output
+
+# Abbreviated names also work
+nanorunner --species "E. coli" "S. aureus" /watch/output
+```
+
+### Use a Mock Community
+
+Mock communities are predefined sets of species with established abundances, commonly used as reference standards in microbiome research.
+
+```bash
+# Generate reads from a standard mock community
+nanorunner --mock zymo_d6300 /watch/output
+
+# List available mock communities
+nanorunner --list-mocks
+```
+
+### Sample Types
+
+Control how species are organized in the output:
+
+```bash
+# Pure samples: each species in its own barcode directory (default)
+nanorunner --species "E. coli" "S. aureus" --sample-type pure /watch/output
+
+# Mixed samples: all species combined according to abundances
+nanorunner --species "E. coli" "S. aureus" --sample-type mixed /watch/output
+```
+
+### Custom Abundances
+
+For mixed samples, specify relative abundances (must sum to 1.0):
+
+```bash
+# 70% E. coli, 30% S. aureus
+nanorunner --species "E. coli" "S. aureus" --sample-type mixed --abundances 0.7 0.3 /watch/output
+```
+
+### Pre-download Genomes
+
+For offline use or to speed up repeated runs, download genomes in advance:
+
+```bash
+# Download genomes for a mock community
+nanorunner download --mock zymo_d6300
+
+# Download genomes for specific species
+nanorunner download --species "E. coli" "S. aureus"
+```
+
+### Available Mock Communities
+
+| Mock ID | Description |
+|---------|-------------|
+| `zymo_d6300` | ZymoBIOMICS Microbial Community Standard (10 strains) |
+| `zymo_d6310` | ZymoBIOMICS Gut Microbiome Standard (21 strains) |
+| `atcc_msa1000` | ATCC 10-strain Even Mix |
+| `quick_3species` | Quick test community (3 common species) |
+
+Use `nanorunner --list-mocks` for complete details on each community.
+
+---
+
+## 5. Using Configuration Profiles
 
 Profiles provide optimized parameter sets for common scenarios.
 
@@ -197,7 +269,7 @@ nanorunner --genomes genome.fa /watch/output --profile generate_realistic
 
 ---
 
-## 5. Monitoring & Progress
+## 6. Monitoring & Progress
 
 ### Default Monitoring
 
@@ -229,7 +301,7 @@ nanorunner /data/source /watch/output --monitor enhanced
 
 ---
 
-## 6. Pipeline Integration
+## 7. Pipeline Integration
 
 ### Validate for Specific Pipeline
 
@@ -256,7 +328,7 @@ Both replay and generate modes produce output that is compatible with these pipe
 
 ---
 
-## 7. Examples
+## 8. Examples
 
 Runnable example scripts are provided in the `examples/` directory:
 
@@ -275,7 +347,7 @@ python examples/05_pipeline_integration.py
 
 ---
 
-## 8. Common Options Reference
+## 9. Common Options Reference
 
 ### Essential Options
 
@@ -308,6 +380,16 @@ python examples/05_pipeline_integration.py
 | `--output-format` | fastq or fastq.gz | fastq.gz |
 | `--mix-reads` | Mix genomes into shared files (singleplex) | false |
 
+### Species and Mock Community Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--species NAME [...]` | Species names for genome lookup | - |
+| `--mock MOCK_ID` | Preset mock community ID | - |
+| `--sample-type {pure,mixed}` | Pure (separate barcodes) or mixed samples | pure |
+| `--abundances FLOAT [...]` | Relative abundances for mixed samples | equal |
+| `--list-mocks` | List available mock communities | - |
+
 ### Processing Options
 
 | Option | Description | Default |
@@ -318,7 +400,7 @@ python examples/05_pipeline_integration.py
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 ### Installation Issues
 
@@ -357,7 +439,7 @@ nanorunner /data /output --parallel --worker-count 8
 
 ---
 
-## 10. Next Steps
+## 11. Next Steps
 
 Now that you are familiar with the basics:
 
@@ -393,6 +475,12 @@ nanorunner --genomes g1.fa g2.fa /target
 
 # Generate: singleplex with mixed reads
 nanorunner --genomes g1.fa g2.fa /target --force-structure singleplex --mix-reads
+
+# Species: generate from species names
+nanorunner --species "E. coli" "S. aureus" /target
+
+# Mock community: use a preset community
+nanorunner --mock zymo_d6300 /target
 
 # Replay with pipeline validation
 nanorunner /source /target --pipeline nanometanf

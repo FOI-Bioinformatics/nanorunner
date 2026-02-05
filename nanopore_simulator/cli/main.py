@@ -1,7 +1,9 @@
 """Command line interface for nanopore simulator"""
 
 import argparse
+import sys
 from pathlib import Path
+from typing import Optional
 
 from .. import __version__
 from ..core.config import SimulationConfig
@@ -18,6 +20,8 @@ from ..core.adapters import (
 )
 from ..core.detector import FileStructureDetector
 from ..core.generators import detect_available_backends
+from ..core.mocks import list_mock_communities, get_mock_community
+from ..core.species import SpeciesResolver, download_genome, GenomeRef
 
 
 def list_profiles_command() -> int:
@@ -48,6 +52,88 @@ def list_generators_command() -> int:
     for name, available in backends.items():
         status = "available" if available else "not found"
         print(f"  {name:15} - {status}")
+    return 0
+
+
+def list_mocks_command() -> int:
+    """List available mock communities"""
+    mocks = list_mock_communities()
+    print("Available Mock Communities:")
+    print("=" * 50)
+    for name, description in mocks.items():
+        print(f"  {name:20} - {description}")
+    return 0
+
+
+def download_command(args: argparse.Namespace) -> int:
+    """Download genomes for offline use.
+
+    Downloads genomes specified by species names, mock communities, or
+    taxonomy IDs and caches them locally for offline simulation runs.
+
+    Args:
+        args: Parsed command-line arguments containing species, mock, or taxid.
+
+    Returns:
+        0 on success, 1 on error.
+    """
+    if not (args.species or args.mock or args.taxid):
+        print("Error: Must specify --species, --mock, or --taxid")
+        return 1
+
+    resolver = SpeciesResolver()
+    genomes_to_download = []
+
+    if args.mock:
+        mock = get_mock_community(args.mock)
+        if mock is None:
+            print(f"Error: Unknown mock community: {args.mock}")
+            return 1
+        for org in mock.organisms:
+            ref: Optional[GenomeRef] = None
+            if org.accession:
+                ref = GenomeRef(
+                    name=org.name,
+                    accession=org.accession,
+                    source=org.resolver,
+                    domain="eukaryota" if org.resolver == "ncbi" else "bacteria",
+                )
+            else:
+                ref = resolver.resolve(org.name)
+            if ref:
+                genomes_to_download.append((org.name, ref))
+            else:
+                print(f"Warning: Could not resolve: {org.name}")
+
+    if args.species:
+        for species in args.species:
+            ref = resolver.resolve(species)
+            if ref:
+                genomes_to_download.append((species, ref))
+            else:
+                print(f"Warning: Could not resolve: {species}")
+
+    if args.taxid:
+        for taxid in args.taxid:
+            ref = resolver.resolve_taxid(taxid)
+            if ref:
+                genomes_to_download.append((f"taxid:{taxid}", ref))
+            else:
+                print(f"Warning: Could not resolve taxid: {taxid}")
+
+    if not genomes_to_download:
+        print("No genomes to download")
+        return 1
+
+    print(f"Downloading {len(genomes_to_download)} genome(s)...")
+    for name, ref in genomes_to_download:
+        try:
+            path = download_genome(ref, resolver.cache)
+            print(f"  Downloaded: {name} -> {path}")
+        except Exception as e:
+            print(f"  Failed: {name} - {e}")
+
+    print("Download complete")
     return 0
 
 
@@ -113,6 +199,32 @@ def validate_pipeline_command(target_dir: Path, pipeline: str) -> int:
 
 def main() -> int:
     """Main CLI entry point"""
+    # Handle download subcommand separately to avoid conflicts with positional args
+    if len(sys.argv) > 1 and sys.argv[1] == "download":
+        download_parser = argparse.ArgumentParser(
+            prog="nanorunner download",
+            description="Pre-download genomes for offline use",
+        )
+        download_parser.add_argument(
+            "--species",
+            type=str,
+            nargs="+",
+            help="Species names to download",
+        )
+        download_parser.add_argument(
+            "--mock",
+            type=str,
+            help="Mock community to download genomes for",
+        )
+        download_parser.add_argument(
+            "--taxid",
+            type=int,
+            nargs="+",
+            help="NCBI taxonomy IDs to download",
+        )
+        args = download_parser.parse_args(sys.argv[2:])
+        return download_command(args)
+
     parser = argparse.ArgumentParser(
         description="Advanced nanopore sequencing run simulator with profiles and pipeline support",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -157,6 +269,10 @@ Examples:
   # List available generation backends
   nanorunner --list-generators
 
+  # Pre-download genomes for offline use
+  nanorunner download --species "Escherichia coli" "Staphylococcus aureus"
+  nanorunner download --mock quick_3species
+
   # Enhanced features require: pip install nanorunner[enhanced]
         """,
     )
@@ -188,6 +304,11 @@ Examples:
         "--list-generators",
         action="store_true",
         help="List available read generation backends",
+    )
+    parser.add_argument(
+        "--list-mocks",
+        action="store_true",
+        help="List available mock communities",
     )
 
     # Read generation arguments
@@ -233,6 +354,46 @@ Examples:
         "--mix-reads",
         action="store_true",
         help="Mix reads from all genomes into shared files (singleplex mode)",
+    )
+
+    # Species/Mock generation arguments
+    species_group = parser.add_argument_group("Species/Mock Generation")
+    species_group.add_argument(
+        "--species",
+        type=str,
+        nargs="+",
+        metavar="NAME",
+        help="Species names to resolve via GTDB/NCBI",
+    )
+    species_group.add_argument(
+        "--mock",
+        type=str,
+        metavar="MOCK_NAME",
+        help="Preset mock community name (e.g., zymo_d6300)",
+    )
+    species_group.add_argument(
+        "--taxid",
+        type=int,
+        nargs="+",
+        metavar="TAXID",
+        help="Direct NCBI taxonomy IDs",
+    )
+    species_group.add_argument(
+        "--sample-type",
+        choices=["pure", "mixed"],
+        help="Sample type: pure (per-species barcodes) or mixed (interleaved)",
+    )
+    species_group.add_argument(
+        "--abundances",
+        type=float,
+        nargs="+",
+        metavar="ABUNDANCE",
+        help="Custom abundances for mixed samples (must sum to 1.0)",
+    )
+    species_group.add_argument(
+        "--offline",
+        action="store_true",
+        help="Use only cached genomes, no network requests",
     )
 
     # Main simulation arguments (optional for some commands)
@@ -363,8 +524,28 @@ Examples:
     if args.list_generators:
         return list_generators_command()
 
+    if args.list_mocks:
+        return list_mocks_command()
+
+    # Check mutual exclusivity of species/mock/taxid/genomes
+    species_mock_count = sum(
+        [
+            args.species is not None,
+            args.mock is not None,
+            args.taxid is not None,
+            args.genomes is not None,
+        ]
+    )
+    if species_mock_count > 1:
+        parser.error("--species, --mock, --taxid, and --genomes are mutually exclusive")
+
     # Determine operation mode
-    is_generate = args.genomes is not None
+    is_generate = (
+        args.genomes is not None
+        or args.species is not None
+        or args.mock is not None
+        or args.taxid is not None
+    )
 
     if is_generate:
         # Generate mode: only target_dir required
@@ -375,9 +556,11 @@ Examples:
                 args.source_dir = None
             else:
                 parser.error("target_dir is required for generate mode")
-        for gpath in args.genomes:
-            if not gpath.exists():
-                parser.error(f"Genome file does not exist: {gpath}")
+        # Validate genome files if provided
+        if args.genomes:
+            for gpath in args.genomes:
+                if not gpath.exists():
+                    parser.error(f"Genome file does not exist: {gpath}")
     else:
         # Copy/link mode: both dirs required
         if not args.source_dir or not args.target_dir:
@@ -456,13 +639,28 @@ Examples:
 
             if is_generate:
                 overrides["operation"] = "generate"
-                overrides["genome_inputs"] = args.genomes
+                if args.genomes:
+                    overrides["genome_inputs"] = args.genomes
                 overrides["generator_backend"] = args.generator_backend
                 overrides["read_count"] = args.read_count
                 overrides["mean_read_length"] = args.mean_read_length
                 overrides["reads_per_file"] = args.reads_per_file
                 overrides["output_format"] = args.output_format
                 overrides["mix_reads"] = args.mix_reads
+
+            # Add species/mock generation parameters
+            if args.species:
+                overrides["species_inputs"] = args.species
+            if args.mock:
+                overrides["mock_name"] = args.mock
+            if args.taxid:
+                overrides["taxid_inputs"] = args.taxid
+            if args.sample_type:
+                overrides["sample_type"] = args.sample_type
+            if args.abundances:
+                overrides["abundances"] = args.abundances
+            if args.offline:
+                overrides["offline_mode"] = args.offline
 
             config = create_config_from_profile(
                 args.profile,
@@ -506,7 +704,8 @@ Examples:
 
             if is_generate:
                 config_kwargs["operation"] = "generate"
-                config_kwargs["genome_inputs"] = args.genomes
+                if args.genomes:
+                    config_kwargs["genome_inputs"] = args.genomes
                 config_kwargs["generator_backend"] = args.generator_backend
                 config_kwargs["read_count"] = args.read_count
                 config_kwargs["mean_read_length"] = args.mean_read_length
@@ -516,6 +715,20 @@ Examples:
             else:
                 config_kwargs["source_dir"] = args.source_dir
                 config_kwargs["operation"] = args.operation
+
+            # Add species/mock generation parameters
+            if args.species:
+                config_kwargs["species_inputs"] = args.species
+            if args.mock:
+                config_kwargs["mock_name"] = args.mock
+            if args.taxid:
+                config_kwargs["taxid_inputs"] = args.taxid
+            if args.sample_type:
+                config_kwargs["sample_type"] = args.sample_type
+            if args.abundances:
+                config_kwargs["abundances"] = args.abundances
+            if args.offline:
+                config_kwargs["offline_mode"] = args.offline
 
             config = SimulationConfig(**config_kwargs)
 

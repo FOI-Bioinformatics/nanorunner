@@ -18,6 +18,8 @@ from .generators import (
 )
 from .timing import create_timing_model, TimingModel
 from .monitoring import ProgressMonitor, create_progress_monitor
+from .species import SpeciesResolver, download_genome, GenomeRef
+from .mocks import get_mock_community
 
 
 class NanoporeSimulator:
@@ -49,6 +51,9 @@ class NanoporeSimulator:
         self.monitor_type = monitor_type
         self.progress_monitor: Optional[ProgressMonitor] = None
 
+        # Resolve species inputs to genome paths (must happen before read generator)
+        self._resolve_species_inputs()
+
         # Initialize read generator for generate mode
         self.read_generator: Optional[ReadGenerator] = None
         if config.operation == "generate":
@@ -77,6 +82,88 @@ class NanoporeSimulator:
             datefmt="%Y-%m-%d %H:%M:%S",
         )
         return logging.getLogger(__name__)
+
+    def _resolve_species_inputs(self) -> None:
+        """Resolve species/mock inputs to genome paths.
+
+        This method handles species name resolution, mock community expansion,
+        and taxid lookups. It updates the config with resolved genome paths
+        and abundance information.
+
+        Raises:
+            ValueError: If a species, mock community, or taxid cannot be resolved.
+        """
+        if not (
+            self.config.species_inputs
+            or self.config.mock_name
+            or self.config.taxid_inputs
+        ):
+            return
+
+        resolver = SpeciesResolver()
+        resolved_genomes: List[Path] = []
+        abundances: List[float] = []
+
+        if self.config.mock_name:
+            # Load mock community
+            mock = get_mock_community(self.config.mock_name)
+            if mock is None:
+                raise ValueError(f"Unknown mock community: {self.config.mock_name}")
+
+            for org in mock.organisms:
+                if org.accession:
+                    # Use pre-defined accession
+                    ref = GenomeRef(
+                        name=org.name,
+                        accession=org.accession,
+                        source=org.resolver,
+                        domain="eukaryota" if org.resolver == "ncbi" else "bacteria",
+                    )
+                else:
+                    ref = resolver.resolve(org.name)
+
+                if ref is None:
+                    raise ValueError(f"Could not resolve organism: {org.name}")
+
+                genome_path = download_genome(ref, resolver.cache)
+                resolved_genomes.append(genome_path)
+                abundances.append(org.abundance)
+
+        else:
+            # Resolve species names
+            species_list = self.config.species_inputs or []
+            for species in species_list:
+                ref = resolver.resolve(species)
+                if ref is None:
+                    suggestions = resolver.suggest(species)
+                    msg = f"Could not resolve species: {species}"
+                    if suggestions:
+                        msg += f". Did you mean: {', '.join(suggestions)}?"
+                    raise ValueError(msg)
+
+                genome_path = download_genome(ref, resolver.cache)
+                resolved_genomes.append(genome_path)
+
+            # Resolve taxids
+            for taxid in self.config.taxid_inputs or []:
+                ref = resolver.resolve_taxid(taxid)
+                if ref is None:
+                    raise ValueError(f"Could not resolve taxid: {taxid}")
+
+                genome_path = download_genome(ref, resolver.cache)
+                resolved_genomes.append(genome_path)
+
+            # Set abundances
+            if self.config.abundances:
+                abundances = list(self.config.abundances)
+            else:
+                # Equal abundances
+                n = len(resolved_genomes)
+                abundances = [1.0 / n] * n
+
+        # Update config with resolved genomes
+        object.__setattr__(self.config, "genome_inputs", resolved_genomes)
+        object.__setattr__(self.config, "_resolved_abundances", abundances)
 
     def run_simulation(self) -> None:
         """Run the complete simulation"""
@@ -233,9 +320,7 @@ class NanoporeSimulator:
         elif self.config.mix_reads:
             # Singleplex mixed: pool reads from all genomes into shared files
             total_files = files_per_genome * len(genome_inputs)
-            genomes = [
-                GenomeInput(fasta_path=gp) for gp in genome_inputs
-            ]
+            genomes = [GenomeInput(fasta_path=gp) for gp in genome_inputs]
             for fi in range(total_files):
                 genome = genomes[fi % len(genomes)]
                 manifest.append(
@@ -474,9 +559,7 @@ class NanoporeSimulator:
             self.progress_monitor.record_timing("directory_creation", dir_duration)
 
         file_op_start = time.time()
-        output_path = self.read_generator.generate_reads(
-            genome, output_dir, file_index
-        )
+        output_path = self.read_generator.generate_reads(genome, output_dir, file_index)
         file_op_duration = time.time() - file_op_start
         total_duration = time.time() - operation_start
 

@@ -500,3 +500,90 @@ class TestPipelineAdapters:
 
             report = adapter.get_validation_report(temp_path)
             assert report["valid"] == False
+
+
+class TestSimulationConfigSpecies:
+    """Unit tests for species-based generation configuration"""
+
+    def test_species_inputs_field(self, tmp_path):
+        """Test species_inputs field accepts list of species names"""
+        config = SimulationConfig(
+            target_dir=tmp_path,
+            operation="generate",
+            species_inputs=["Escherichia coli", "Staphylococcus aureus"],
+            sample_type="pure",
+        )
+        assert config.species_inputs == ["Escherichia coli", "Staphylococcus aureus"]
+        assert config.sample_type == "pure"
+
+    def test_mock_name_field(self, tmp_path):
+        """Test mock_name field for preset mock communities"""
+        config = SimulationConfig(
+            target_dir=tmp_path,
+            operation="generate",
+            mock_name="zymo_d6300",
+            sample_type="mixed",
+        )
+        assert config.mock_name == "zymo_d6300"
+        assert config.sample_type == "mixed"
+
+    def test_abundances_field(self, tmp_path):
+        """Test abundances field for custom abundance ratios"""
+        config = SimulationConfig(
+            target_dir=tmp_path,
+            operation="generate",
+            species_inputs=["E. coli", "S. aureus"],
+            abundances=[0.7, 0.3],
+            sample_type="mixed",
+        )
+        assert config.abundances == [0.7, 0.3]
+
+    def test_abundances_must_match_species_count(self, tmp_path):
+        """Test that abundances count must match species/taxid count"""
+        with pytest.raises(ValueError, match="abundances"):
+            SimulationConfig(
+                target_dir=tmp_path,
+                operation="generate",
+                species_inputs=["E. coli", "S. aureus"],
+                abundances=[0.5],  # Wrong count
+                sample_type="mixed",
+            )
+
+    def test_abundances_must_sum_to_one(self, tmp_path):
+        """Test that abundances must sum to 1.0"""
+        with pytest.raises(ValueError, match="sum to 1.0"):
+            SimulationConfig(
+                target_dir=tmp_path,
+                operation="generate",
+                species_inputs=["E. coli", "S. aureus"],
+                abundances=[0.5, 0.3],  # Sums to 0.8
+                sample_type="mixed",
+            )
+
+    def test_sample_type_default_for_mock(self, tmp_path):
+        """Test sample_type defaults to mixed for mock communities"""
+        config = SimulationConfig(
+            target_dir=tmp_path,
+            operation="generate",
+            mock_name="zymo_d6300",
+        )
+        assert config.sample_type == "mixed"  # Default for mock
+
+    def test_sample_type_default_for_species(self, tmp_path):
+        """Test sample_type defaults to pure for species inputs"""
+        config = SimulationConfig(
+            target_dir=tmp_path,
+            operation="generate",
+            species_inputs=["E. coli", "S. aureus"],
+        )
+        assert config.sample_type == "pure"  # Default for species
+
+    def test_invalid_sample_type(self, tmp_path):
+        """Test that invalid sample_type raises ValueError"""
+        with pytest.raises(ValueError, match="sample_type"):
+            SimulationConfig(
+                target_dir=tmp_path,
+                operation="generate",
+                species_inputs=["E. coli"],
+                sample_type="invalid",
+            )

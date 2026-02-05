@@ -253,7 +253,9 @@ class TestDetailedProgressMonitor:
 
     def test_create_progress_monitor_detailed_type(self):
         """Test factory creates detailed monitor"""
-        monitor = create_progress_monitor(100, monitor_type="detailed", update_interval=0.5)
+        monitor = create_progress_monitor(
+            100, monitor_type="detailed", update_interval=0.5
+        )
 
         assert isinstance(monitor, DetailedProgressMonitor)
         assert monitor.update_interval == 0.5
