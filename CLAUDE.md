@@ -125,8 +125,10 @@ nanorunner --help
 nanorunner --list-profiles
 nanorunner --list-adapters
 nanorunner --list-generators
+nanorunner --list-mocks
 nanorunner /source /target --profile rapid_sequencing --monitor enhanced
 nanorunner --genomes genome.fa /target --interval 2
+nanorunner --mock zymo_d6300 /target --read-count 1000 --interval 1
 ```
 
 ## Architecture
@@ -182,6 +184,18 @@ nanorunner --genomes genome.fa /target --interval 2
 - Auto mode tries badread, nanosim, then builtin in order of preference
 - `detect_available_backends()` reports which backends are installed
 
+**Mock Community System:**
+- Built-in mock communities for standardized microbiome testing
+- Species resolved via GTDB (bacteria/archaea) or NCBI (fungi/eukaryotes) with automatic genome downloads
+- Case-insensitive lookup with product code aliases (e.g., D6305 → zymo_d6300)
+- Available mocks (`--list-mocks` to see all):
+  - `zymo_d6300`: Zymo D6300 Standard - 10 species, even distribution
+  - `zymo_d6310`: Zymo D6310 Log Distribution - 10 species, 7 orders of magnitude
+  - `zymo_d6331`: Zymo D6331 Gut Microbiome - 17 species (bacteria, archaea, fungi)
+  - `atcc_msa1002`: ATCC MSA-1002 - 20 strains, 5% each
+  - `atcc_msa1003`: ATCC MSA-1003 - 20 strains, staggered (0.02%-18%)
+  - `quick_3species`, `quick_gut5`, `quick_pathogens`: Fast testing mocks
+
 **Enhanced Monitoring System:**
 - Thread-safe `ProgressMonitor` with real-time resource tracking
 - Predictive ETA calculation with trend analysis (improving/degrading/stable)
@@ -225,6 +239,7 @@ nanorunner --genomes genome.fa /target --interval 2
 - `test_adapters.py`: Pipeline adapter functionality and validation
 - `test_generators.py`: Read generation backends, FASTA parsing, factory, config validation
 - `test_generate_integration.py`: End-to-end generate mode with multiplex, singleplex, mixed, and timing
+- `test_mocks.py`: Mock community definitions, aliases, and species resolution
 - `test_practical.py`: Practical tests using real NCBI genomes (Lambda, S. aureus, E. coli); requires datasets CLI
 - `test_integration.py`: End-to-end workflow testing with various configurations
 - `test_timing_integration.py`: Timing model integration with simulation workflow
@@ -287,11 +302,12 @@ The timing models provide biologically-motivated temporal patterns:
 When extending functionality:
 1. **Timing models**: Inherit from `TimingModel` abstract base class with `next_interval()` implementation
 2. **Read generators**: Inherit from `ReadGenerator` ABC with `generate_reads()` and `is_available()` implementations; register in `_BACKENDS` dict in `generators.py`
-3. **Pipeline adapters**: Implement `PipelineAdapter` interface with validation logic
-4. **Monitoring**: Use thread-safe `ProgressMonitor` methods for metrics collection
-5. **Testing**: Include both unit tests and integration tests with performance considerations
-6. **Configuration**: Add new parameters to `SimulationConfig` with appropriate validation
-7. **Documentation**: Update both technical documentation and user-facing examples
+3. **Mock communities**: Add `MockOrganism` list and `MockCommunity` entry in `mocks.py`; use GTDB resolver for bacteria/archaea, NCBI with explicit accession for fungi
+4. **Pipeline adapters**: Implement `PipelineAdapter` interface with validation logic
+5. **Monitoring**: Use thread-safe `ProgressMonitor` methods for metrics collection
+6. **Testing**: Include both unit tests and integration tests with performance considerations
+7. **Configuration**: Add new parameters to `SimulationConfig` with appropriate validation
+8. **Documentation**: Update both technical documentation and user-facing examples
 
 ## User Documentation
 
