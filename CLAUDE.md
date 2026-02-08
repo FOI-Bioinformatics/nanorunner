@@ -53,7 +53,7 @@ This project adheres to strict quality principles in all code, documentation, an
 
 ### 6. Scientific Language
 - **Modest tone**: Avoid superlatives, marketing language, and exaggeration
-  - Use "provides realistic timing simulation" not "revolutionary ultra-advanced next-generation timing"
+  - Use "provides configurable timing patterns" not "revolutionary ultra-advanced next-generation timing"
 - **Precise terminology**: Use established scientific and technical terms
   - Use "temporal patterns" not "timing stuff"
   - Use "throughput optimization" not "making it faster"
@@ -129,6 +129,7 @@ nanorunner --list-mocks
 nanorunner /source /target --profile rapid_sequencing --monitor enhanced
 nanorunner --genomes genome.fa /target --interval 2
 nanorunner --mock zymo_d6300 /target --read-count 1000 --interval 1
+nanorunner --genomes genome.fa /target --mean-quality 25 --std-quality 3
 ```
 
 ## Architecture
@@ -165,7 +166,7 @@ nanorunner --mock zymo_d6300 /target --read-count 1000 --interval 1
 1. CLI receives `--genomes` argument, sets `operation="generate"`
 2. Configuration created with genome paths and generation parameters
 3. NanoporeSimulator initializes ReadGenerator via factory (auto/builtin/badread/nanosim)
-4. `_create_generate_manifest()` builds file plan: multiplex assigns each genome to a barcode directory, singleplex places files in target root (optionally mixed)
+4. `_create_generate_manifest()` distributes total `read_count` across genomes using `_distribute_reads()` (abundance-weighted or equal split), then builds file plan per genome
 5. Each manifest entry processed through `_process_generate()` which calls `generator.generate_reads()`
 6. Output files appear incrementally with timing, compatible with downstream pipelines
 
@@ -173,12 +174,12 @@ nanorunner --mock zymo_d6300 /target --read-count 1000 --interval 1
 - Abstract `TimingModel` base class with factory pattern implementation
 - Uniform: Constant intervals for deterministic testing
 - Random: Symmetric variation around base interval with configurable randomness factor
-- Poisson: Biologically-motivated intervals with burst behavior modeling
-- Adaptive: Dynamic interval adjustment based on historical performance
+- Poisson: Exponential intervals with burst clusters (not empirically validated)
+- Adaptive: Smoothly varying intervals via exponential moving average
 
 **Read Generator Architecture:**
 - Abstract `ReadGenerator` base class with factory pattern (`create_read_generator()`)
-- BuiltinGenerator: Random subsequences from FASTA with log-normal length distribution, simulated quality scores. No external dependencies.
+- BuiltinGenerator: Error-free random subsequences from FASTA with log-normal length distribution. No error model. No external dependencies.
 - BadreadGenerator: Wraps `badread simulate` via subprocess
 - NanoSimGenerator: Wraps NanoSim via subprocess
 - Auto mode tries badread, nanosim, then builtin in order of preference
@@ -186,8 +187,10 @@ nanorunner --mock zymo_d6300 /target --read-count 1000 --interval 1
 
 **Mock Community System:**
 - Built-in mock communities for standardized microbiome testing
+- `MockOrganism` includes optional `domain` field ("bacteria", "archaea", "eukaryota") for correct genome resolution
 - Species resolved via GTDB (bacteria/archaea) or NCBI (fungi/eukaryotes) with automatic genome downloads
-- Case-insensitive lookup with product code aliases (e.g., D6305 → zymo_d6300)
+- Abundance-weighted read distribution: `--read-count` specifies total reads, distributed proportionally across organisms
+- Case-insensitive lookup with product code aliases (e.g., D6305 -> zymo_d6300)
 - Available mocks (`--list-mocks` to see all):
   - `zymo_d6300`: Zymo D6300 Standard - 10 species, even distribution
   - `zymo_d6310`: Zymo D6310 Log Distribution - 10 species, 7 orders of magnitude
@@ -204,7 +207,7 @@ nanorunner --mock zymo_d6300 /target --read-count 1000 --interval 1
 - Performance warning detection (high CPU/memory usage, low throughput)
 
 **Configuration Profile System:**
-- Built-in profiles: `rapid_sequencing`, `accurate_mode`, `development_testing`, `high_throughput`, `generate_quick_test`, `generate_realistic`, etc.
+- Built-in profiles: `rapid_sequencing`, `accurate_mode`, `development_testing`, `high_throughput`, `smoothed_timing`, `generate_quick_test`, `generate_realistic`, etc.
 - Profile recommendations based on file count and use case
 - Override capability for profile-based configurations
 
@@ -281,10 +284,10 @@ Pipeline adapters enable validation and testing across multiple bioinformatics w
 - **Miniknife**: Lightweight classification tool
 - **Generic**: Customizable adapter for arbitrary pipelines
 
-### Realistic Simulation Scenarios
-The timing models provide biologically-motivated temporal patterns:
-- **Poisson model**: Simulates natural sequencing irregularities with burst behavior
-- **Adaptive model**: Responds to processing bottlenecks with dynamic adjustment
+### Timing Models
+The timing models provide configurable temporal patterns:
+- **Poisson model**: Exponential inter-event intervals with burst clusters (not validated against empirical data)
+- **Adaptive model**: Smoothly varying intervals via exponential moving average of own output
 - **Random model**: Introduces controlled stochastic variation for robustness testing
 
 ## Configuration Notes

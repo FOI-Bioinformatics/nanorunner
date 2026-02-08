@@ -23,7 +23,7 @@ Both modes support singleplex and multiplex (barcoded) output structures, multip
 - **Configuration profiles**: Pre-defined parameter sets for common sequencing and generation scenarios
 
 ### Read Generation
-- **Built-in generator**: Random subsequences with log-normal length distribution and simulated quality scores. No external dependencies.
+- **Built-in generator**: Error-free random subsequences with log-normal length distribution. No external dependencies. For reads with error profiles, use badread or NanoSim.
 - **Badread integration**: Optional wrapper for the badread simulator (requires separate installation)
 - **NanoSim integration**: Optional wrapper for NanoSim (requires separate installation)
 - **Auto-detection**: Automatically selects the best available backend
@@ -92,10 +92,10 @@ nanorunner /data/source /watch/output --timing-model uniform --interval 5
 # Random intervals with controlled variation
 nanorunner /data/source /watch/output --timing-model random --random-factor 0.3
 
-# Poisson process for biologically realistic simulation
+# Poisson process for irregular timing with burst clusters
 nanorunner /data/source /watch/output --timing-model poisson --burst-probability 0.15
 
-# Adaptive timing responding to processing bottlenecks
+# Adaptive timing with smoothly varying intervals
 nanorunner /data/source /watch/output --timing-model adaptive
 
 # Use a configuration profile
@@ -170,8 +170,8 @@ target_dir/
 
 | Backend | Dependencies | Description |
 |---------|-------------|-------------|
-| `builtin` | None | Random subsequences with log-normal length distribution and simulated quality scores |
-| `badread` | [badread](https://github.com/rrwick/Badread) | Realistic nanopore read simulation with error models |
+| `builtin` | None | Error-free random subsequences with log-normal length distribution. No error model; suitable for testing pipeline structure and connectivity. |
+| `badread` | [badread](https://github.com/rrwick/Badread) | Nanopore read simulation with error models |
 | `nanosim` | [NanoSim](https://github.com/bcgsc/NanoSim) | Statistical read simulation from training data |
 | `auto` | Varies | Selects the best available backend (badread > nanosim > builtin) |
 
@@ -248,7 +248,7 @@ nanorunner --list-profiles
 nanorunner --recommend /path/to/data
 ```
 
-Built-in profiles include: `rapid_sequencing`, `accurate_mode`, `development_testing`, `high_throughput`, `long_read_nanopore`, `adaptive_learning`, `minion_simulation`, `promethion_simulation`, `legacy_random`, `generate_quick_test`, `generate_realistic`.
+Built-in profiles include: `rapid_sequencing`, `accurate_mode`, `development_testing`, `high_throughput`, `long_read_nanopore`, `smoothed_timing`, `minion_simulation`, `promethion_simulation`, `legacy_random`, `generate_quick_test`, `generate_realistic`.
 
 ## Configuration Parameters
 
@@ -270,7 +270,7 @@ Built-in profiles include: `rapid_sequencing`, `accurate_mode`, `development_tes
 ### Read Generation Options
 - `--genomes FASTA [FASTA ...]`: Input genome FASTA files (activates generate mode)
 - `--generator-backend {auto,builtin,badread,nanosim}`: Read generation backend (default: auto)
-- `--read-count INT`: Reads to generate per genome (default: 1000)
+- `--read-count INT`: Total reads to generate across all genomes (default: 1000)
 - `--mean-read-length INT`: Mean read length in bases (default: 5000)
 - `--reads-per-file INT`: Reads per output file (default: 100)
 - `--output-format {fastq,fastq.gz}`: Output file format (default: fastq.gz)
@@ -302,7 +302,7 @@ nanorunner /data /output --timing-model random --interval 5 --random-factor 0.3
 ```
 
 ### Poisson Model
-Implements biologically-motivated timing with burst behavior, modeling the irregular nature of actual sequencing data generation.
+Generates intervals from a mixture of two exponential distributions (base rate and burst rate), producing irregular timing with occasional short-interval clusters.
 
 ```bash
 # 15% probability of burst events with 3x rate increase
@@ -310,7 +310,7 @@ nanorunner /data /output --timing-model poisson --burst-probability 0.15 --burst
 ```
 
 ### Adaptive Model
-Dynamically adjusts intervals based on historical performance, simulating feedback mechanisms in real sequencing systems.
+Generates exponentially distributed intervals with a rate parameter that drifts over time via exponential moving average of recent intervals.
 
 ```bash
 # Default adaptive behavior

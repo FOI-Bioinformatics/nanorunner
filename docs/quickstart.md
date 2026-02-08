@@ -56,7 +56,7 @@ nanorunner /data/source /test/output \
   --operation link \
   --timing-model uniform
 
-# Realistic sequencing with Poisson timing
+# Irregular timing with Poisson model
 nanorunner /data/source /watch/output \
   --timing-model poisson \
   --burst-probability 0.15 \
@@ -151,12 +151,12 @@ nanorunner --list-generators
 
 | Backend | Dependencies | Description |
 |---------|-------------|-------------|
-| `builtin` | None | Random subsequences with log-normal length distribution and simulated quality scores |
-| `badread` | [badread](https://github.com/rrwick/Badread) | Realistic nanopore read simulation with error models |
+| `builtin` | None | Error-free random subsequences with log-normal length distribution. No error model; suitable for testing pipeline structure and connectivity. |
+| `badread` | [badread](https://github.com/rrwick/Badread) | Nanopore read simulation with error models |
 | `nanosim` | [NanoSim](https://github.com/bcgsc/NanoSim) | Statistical read simulation from training data |
 | `auto` | Varies | Selects the best available backend (badread > nanosim > builtin) |
 
-The `builtin` backend requires no external dependencies and is always available. For higher-fidelity reads, install badread or NanoSim separately.
+The `builtin` backend requires no external dependencies and is always available. Note that builtin reads are error-free subsequences and will yield inflated accuracy in classification benchmarks. For reads with realistic error profiles, install badread or NanoSim separately.
 
 ---
 
@@ -365,8 +365,8 @@ python examples/05_pipeline_integration.py
 |-------|----------|-------------|
 | `uniform` | Testing, deterministic | None |
 | `random` | Robustness testing | `--random-factor 0.3` |
-| `poisson` | Realistic sequencing | `--burst-probability 0.15` |
-| `adaptive` | Bottleneck detection | `--adaptation-rate 0.1` |
+| `poisson` | Irregular timing | `--burst-probability 0.15` |
+| `adaptive` | Varying patterns | `--adaptation-rate 0.1` |
 
 ### Read Generation Options
 
@@ -374,7 +374,7 @@ python examples/05_pipeline_integration.py
 |--------|-------------|---------|
 | `--genomes FASTA [...]` | Input genome files (activates generate mode) | - |
 | `--generator-backend` | Backend: auto, builtin, badread, nanosim | auto |
-| `--read-count N` | Reads per genome | 1000 |
+| `--read-count N` | Total reads across all genomes | 1000 |
 | `--mean-read-length N` | Mean read length in bases | 5000 |
 | `--reads-per-file N` | Reads per output file | 100 |
 | `--output-format` | fastq or fastq.gz | fastq.gz |

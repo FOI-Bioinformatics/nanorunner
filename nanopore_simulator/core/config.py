@@ -32,11 +32,12 @@ class SimulationConfig:
     # Read generation parameters (for operation="generate")
     genome_inputs: Optional[List[Path]] = None
     generator_backend: str = "auto"
-    read_count: int = 1000
+    read_count: int = 1000  # Total reads across all organisms
     mean_read_length: int = 5000
     std_read_length: int = 2000
     min_read_length: int = 200
-    mean_quality: float = 10.0
+    mean_quality: float = 20.0  # Q20 typical for R10.4.1 with SUP basecalling
+    std_quality: float = 4.0
     reads_per_file: int = 100
     output_format: str = "fastq.gz"
     mix_reads: bool = False  # singleplex: mix genomes into shared files

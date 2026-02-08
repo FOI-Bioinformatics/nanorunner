@@ -22,8 +22,8 @@ class ReadGeneratorConfig:
     mean_read_length: int = 5000
     std_read_length: int = 2000
     min_read_length: int = 200
-    mean_quality: float = 10.0
-    std_quality: float = 2.0
+    mean_quality: float = 20.0  # Q20 typical for R10.4.1 with SUP basecalling
+    std_quality: float = 4.0
     reads_per_file: int = 100
     output_format: str = "fastq.gz"
 
@@ -125,8 +125,19 @@ class BuiltinGenerator(ReadGenerator):
     """Built-in read generator using random subsequences from input genomes.
 
     Produces reads by sampling random positions from the genome sequence
-    with log-normal length distribution and simple quality score simulation.
+    with log-normal length distribution and simulated quality scores.
     No external dependencies required.
+
+    Limitations:
+        - Reads are error-free subsequences of the reference genome.
+        - No substitution, insertion, or deletion errors are introduced.
+        - Quality scores are sampled independently and do not correlate
+          with actual sequencing errors.
+        - Classification accuracy benchmarks using these reads will
+          overestimate real-world performance.
+
+    For reads with realistic error profiles, use the badread or nanosim
+    backends (install separately).
     """
 
     @classmethod

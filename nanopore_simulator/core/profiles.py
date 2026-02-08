@@ -84,9 +84,9 @@ BUILTIN_PROFILES = {
         worker_count=12,
         operation="link",
     ),
-    "adaptive_learning": ProfileDefinition(
-        name="adaptive_learning",
-        description="Adaptive timing that learns from file processing patterns",
+    "smoothed_timing": ProfileDefinition(
+        name="smoothed_timing",
+        description="Smoothly varying timing patterns using exponential moving average",
         timing_model="adaptive",
         timing_model_params={"adaptation_rate": 0.15, "history_size": 15},
         batch_size=2,
@@ -106,7 +106,7 @@ BUILTIN_PROFILES = {
     ),
     "minion_simulation": ProfileDefinition(
         name="minion_simulation",
-        description="Oxford Nanopore MinION device simulation",
+        description="Timing pattern configured for MinION-scale throughput",
         timing_model="poisson",
         timing_model_params={"burst_probability": 0.12, "burst_rate_multiplier": 6.0},
         batch_size=2,
@@ -126,7 +126,7 @@ BUILTIN_PROFILES = {
     ),
     "generate_realistic": ProfileDefinition(
         name="generate_realistic",
-        description="Realistic read generation with Poisson timing (10000 reads, auto backend)",
+        description="Read generation with Poisson-based timing (10000 reads, auto backend)",
         timing_model="poisson",
         timing_model_params={"burst_probability": 0.1, "burst_rate_multiplier": 4.0},
         batch_size=3,
@@ -136,7 +136,7 @@ BUILTIN_PROFILES = {
     ),
     "promethion_simulation": ProfileDefinition(
         name="promethion_simulation",
-        description="Oxford Nanopore PromethION device simulation",
+        description="Timing pattern configured for PromethION-scale throughput",
         timing_model="poisson",
         timing_model_params={"burst_probability": 0.18, "burst_rate_multiplier": 12.0},
         batch_size=15,
@@ -272,9 +272,9 @@ class ProfileManager:
         else:
             recommendations.extend(["high_throughput", "promethion_simulation"])
 
-        # Always include adaptive learning as an option
-        if "adaptive_learning" not in recommendations:
-            recommendations.append("adaptive_learning")
+        # Always include smoothed timing as an option
+        if "smoothed_timing" not in recommendations:
+            recommendations.append("smoothed_timing")
 
         # Remove duplicates while preserving order
         seen = set()

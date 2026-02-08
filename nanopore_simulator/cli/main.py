@@ -105,11 +105,16 @@ def download_command(args: argparse.Namespace) -> int:
         for org in mock.organisms:
             ref: Optional[GenomeRef] = None
             if org.accession:
+                domain = (
+                    org.domain
+                    if org.domain
+                    else ("eukaryota" if org.resolver == "ncbi" else "bacteria")
+                )
                 ref = GenomeRef(
                     name=org.name,
                     accession=org.accession,
                     source=org.resolver,
-                    domain="eukaryota" if org.resolver == "ncbi" else "bacteria",
+                    domain=domain,
                 )
             else:
                 ref = resolver.resolve(org.name)
@@ -343,7 +348,7 @@ Examples:
         "--read-count",
         type=int,
         default=1000,
-        help="Number of reads to generate per genome (default: 1000)",
+        help="Total number of reads to generate across all genomes (default: 1000)",
     )
     gen_group.add_argument(
         "--mean-read-length",
@@ -362,6 +367,18 @@ Examples:
         choices=["fastq", "fastq.gz"],
         default="fastq.gz",
         help="Output file format (default: fastq.gz)",
+    )
+    gen_group.add_argument(
+        "--mean-quality",
+        type=float,
+        default=20.0,
+        help="Mean Phred quality score for generated reads (default: 20.0, typical for R10.4.1 + SUP)",
+    )
+    gen_group.add_argument(
+        "--std-quality",
+        type=float,
+        default=4.0,
+        help="Standard deviation of quality scores (default: 4.0)",
     )
     gen_group.add_argument(
         "--mix-reads",
@@ -657,6 +674,8 @@ Examples:
                 overrides["generator_backend"] = args.generator_backend
                 overrides["read_count"] = args.read_count
                 overrides["mean_read_length"] = args.mean_read_length
+                overrides["mean_quality"] = args.mean_quality
+                overrides["std_quality"] = args.std_quality
                 overrides["reads_per_file"] = args.reads_per_file
                 overrides["output_format"] = args.output_format
                 overrides["mix_reads"] = args.mix_reads
@@ -722,6 +741,8 @@ Examples:
                 config_kwargs["generator_backend"] = args.generator_backend
                 config_kwargs["read_count"] = args.read_count
                 config_kwargs["mean_read_length"] = args.mean_read_length
+                config_kwargs["mean_quality"] = args.mean_quality
+                config_kwargs["std_quality"] = args.std_quality
                 config_kwargs["reads_per_file"] = args.reads_per_file
                 config_kwargs["output_format"] = args.output_format
                 config_kwargs["mix_reads"] = args.mix_reads
@@ -763,6 +784,16 @@ Examples:
 
         # Run simulation
         simulator = NanoporeSimulator(config, enable_monitoring, monitor_type)
+
+        # Notify user if builtin generator was selected
+        if is_generate and hasattr(simulator, "read_generator"):
+            from ..core.generators import BuiltinGenerator
+
+            if isinstance(simulator.read_generator, BuiltinGenerator):
+                print(
+                    "Note: Using builtin generator (error-free reads). "
+                    "For realistic error profiles, install badread: pip install badread"
+                )
 
         # Print helpful instructions for enhanced monitoring
         if monitor_type == "enhanced":

@@ -67,7 +67,7 @@ class TestBuiltinProfiles:
             "development_testing",
             "long_read_nanopore",
             "high_throughput",
-            "adaptive_learning",
+            "smoothed_timing",
             "legacy_random",
             "minion_simulation",
             "promethion_simulation",

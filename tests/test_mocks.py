@@ -346,3 +346,39 @@ class TestZymoD6331:
         mock = get_mock_community("D6331")
         assert mock is not None
         assert mock.name == "zymo_d6331"
+
+
+class TestMockOrganismDomain:
+    """Tests for MockOrganism domain field."""
+
+    def test_domain_defaults_none(self):
+        """Domain field should default to None."""
+        org = MockOrganism("Test species", "gtdb", 0.5)
+        assert org.domain is None
+
+    def test_domain_validation_valid(self):
+        """Valid domain values should be accepted."""
+        for domain in ["bacteria", "archaea", "eukaryota"]:
+            org = MockOrganism("Test", "gtdb", 0.5, domain=domain)
+            assert org.domain == domain
+
+    def test_domain_validation_invalid(self):
+        """Invalid domain values should raise ValueError."""
+        with pytest.raises(ValueError, match="domain"):
+            MockOrganism("Test", "gtdb", 0.5, domain="fungi")
+
+    def test_d6331_methanobrevibacter_has_archaea_domain_and_accession(self):
+        """M. smithii in D6331 should have archaea domain and accession."""
+        mock = get_mock_community("zymo_d6331")
+        m_smithii = [o for o in mock.organisms if "Methanobrevibacter" in o.name]
+        assert len(m_smithii) == 1
+        assert m_smithii[0].domain == "archaea"
+        assert m_smithii[0].accession == "GCF_000016525.1"
+
+    def test_d6331_fungi_have_eukaryota_domain(self):
+        """Fungi in D6331 should have eukaryota domain."""
+        mock = get_mock_community("zymo_d6331")
+        candida = [o for o in mock.organisms if "Candida" in o.name]
+        saccharomyces = [o for o in mock.organisms if "Saccharomyces" in o.name]
+        assert candida[0].domain == "eukaryota"
+        assert saccharomyces[0].domain == "eukaryota"

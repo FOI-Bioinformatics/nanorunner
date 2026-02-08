@@ -1,4 +1,4 @@
-"""Timing models for realistic sequencing simulation"""
+"""Timing models for sequencing simulation"""
 
 import random
 import time
@@ -52,7 +52,13 @@ class RandomTimingModel(TimingModel):
 
 
 class PoissonTimingModel(TimingModel):
-    """Poisson-based timing model simulating realistic sequencing patterns"""
+    """Poisson-based timing model with exponential inter-event intervals.
+
+    Generates intervals from a mixture of two exponential distributions:
+    a base rate and an elevated burst rate. This produces irregular timing
+    with occasional short-interval clusters. The model has not been
+    validated against empirical nanopore sequencing data.
+    """
 
     def __init__(
         self,
@@ -96,7 +102,13 @@ class PoissonTimingModel(TimingModel):
 
 
 class AdaptiveTimingModel(TimingModel):
-    """Adaptive timing model that learns from recent intervals"""
+    """Timing model with smoothly varying intervals via exponential moving average.
+
+    Generates exponentially distributed intervals and adjusts the rate
+    parameter based on a moving average of its own recent output. This
+    produces gradually drifting timing patterns. The model does not
+    respond to external system metrics or processing load.
+    """
 
     def __init__(
         self, base_interval: float, adaptation_rate: float = 0.1, history_size: int = 10

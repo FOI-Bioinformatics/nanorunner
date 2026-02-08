@@ -14,12 +14,67 @@ from .generators import (
     ReadGeneratorConfig,
     GenomeInput,
     ReadGenerator,
+    BuiltinGenerator,
     create_read_generator,
 )
 from .timing import create_timing_model, TimingModel
 from .monitoring import ProgressMonitor, create_progress_monitor
 from .species import SpeciesResolver, download_genome, GenomeRef
 from .mocks import get_mock_community
+
+
+def _distribute_reads(total_reads: int, abundances: List[float]) -> List[int]:
+    """Distribute total reads across organisms proportional to abundances.
+
+    Uses the largest-remainder method to ensure the sum of allocated reads
+    equals total_reads exactly. Each organism with abundance > 0 receives
+    at least 1 read.
+
+    Args:
+        total_reads: Total number of reads to distribute.
+        abundances: List of abundance proportions (should sum to ~1.0).
+
+    Returns:
+        List of per-organism read counts summing to total_reads.
+    """
+    n = len(abundances)
+    if n == 0:
+        return []
+    if n == 1:
+        return [total_reads]
+
+    # Floor allocation
+    raw = [a * total_reads for a in abundances]
+    floors = [int(r) for r in raw]
+    remainders = [r - f for r, f in zip(raw, floors)]
+
+    # Guarantee at least 1 read for any organism with abundance > 0
+    for i in range(n):
+        if abundances[i] > 0 and floors[i] < 1:
+            floors[i] = 1
+
+    # Distribute remaining reads by largest fractional part
+    allocated = sum(floors)
+    deficit = total_reads - allocated
+    if deficit > 0:
+        # Sort indices by remainder descending, break ties by index
+        ranked = sorted(range(n), key=lambda i: (-remainders[i], i))
+        for i in range(min(deficit, n)):
+            floors[ranked[i]] += 1
+    elif deficit < 0:
+        # Over-allocated due to minimum-1 guarantees; reduce from
+        # the largest allocations that still exceed 1
+        surplus = -deficit
+        ranked = sorted(range(n), key=lambda i: (-floors[i], i))
+        for i in ranked:
+            if surplus <= 0:
+                break
+            if floors[i] > 1:
+                reduction = min(floors[i] - 1, surplus)
+                floors[i] -= reduction
+                surplus -= reduction
+
+    return floors
 
 
 class NanoporeSimulator:
@@ -63,12 +118,19 @@ class NanoporeSimulator:
                 std_read_length=config.std_read_length,
                 min_read_length=config.min_read_length,
                 mean_quality=config.mean_quality,
+                std_quality=config.std_quality,
                 reads_per_file=config.reads_per_file,
                 output_format=config.output_format,
             )
             self.read_generator = create_read_generator(
                 config.generator_backend, gen_config
             )
+            if isinstance(self.read_generator, BuiltinGenerator):
+                self.logger.warning(
+                    "Using builtin generator: reads are error-free subsequences "
+                    "without realistic error profiles. For reads with sequencing "
+                    "errors, install badread (pip install badread)."
+                )
 
         # Interactive control flags
         self._simulation_paused = False
@@ -113,11 +175,16 @@ class NanoporeSimulator:
             for org in mock.organisms:
                 if org.accession:
                     # Use pre-defined accession
+                    domain = (
+                        org.domain
+                        if org.domain
+                        else ("eukaryota" if org.resolver == "ncbi" else "bacteria")
+                    )
                     ref = GenomeRef(
                         name=org.name,
                         accession=org.accession,
                         source=org.resolver,
-                        domain="eukaryota" if org.resolver == "ncbi" else "bacteria",
+                        domain=domain,
                     )
                 else:
                     ref = resolver.resolve(org.name)
@@ -291,6 +358,11 @@ class NanoporeSimulator:
     def _create_generate_manifest(self, structure: str) -> List[Dict[str, Any]]:
         """Create file manifest for read generation mode.
 
+        The --read-count parameter specifies the total number of reads across
+        all genomes. When abundances are available (e.g. from mock communities),
+        reads are distributed proportionally. Otherwise, reads are split
+        equally among genomes.
+
         Args:
             structure: "multiplex" assigns each genome to a barcode directory,
                        "singleplex" places files in the target root.
@@ -299,16 +371,35 @@ class NanoporeSimulator:
 
         manifest = []
         genome_inputs = self.config.genome_inputs
-        files_per_genome = math.ceil(
-            self.config.read_count / self.config.reads_per_file
-        )
+        total_reads = self.config.read_count
+        n_genomes = len(genome_inputs)
+
+        # Determine per-genome read counts from abundances
+        abundances = getattr(self.config, "_resolved_abundances", None)
+        if abundances and len(abundances) == n_genomes:
+            per_genome_reads = _distribute_reads(total_reads, abundances)
+        else:
+            # Equal split of total reads
+            base = total_reads // n_genomes
+            remainder = total_reads % n_genomes
+            per_genome_reads = [base] * n_genomes
+            for i in range(remainder):
+                per_genome_reads[i] += 1
+
+        # Log the distribution
+        for idx, (gp, rc) in enumerate(zip(genome_inputs, per_genome_reads)):
+            self.logger.info(f"Genome {idx + 1} ({Path(gp).name}): {rc} reads")
 
         if structure == "multiplex":
             for idx, genome_path in enumerate(genome_inputs):
                 barcode = f"barcode{idx + 1:02d}"
                 barcode_dir = self.config.target_dir / barcode
                 genome = GenomeInput(fasta_path=genome_path, barcode=barcode)
-                for fi in range(files_per_genome):
+                n_files = max(
+                    1,
+                    math.ceil(per_genome_reads[idx] / self.config.reads_per_file),
+                )
+                for fi in range(n_files):
                     manifest.append(
                         {
                             "genome": genome,
@@ -319,10 +410,11 @@ class NanoporeSimulator:
                     )
         elif self.config.mix_reads:
             # Singleplex mixed: pool reads from all genomes into shared files
-            total_files = files_per_genome * len(genome_inputs)
+            total_files = max(1, math.ceil(total_reads / self.config.reads_per_file))
             genomes = [GenomeInput(fasta_path=gp) for gp in genome_inputs]
+            weights = abundances if abundances else [1.0 / n_genomes] * n_genomes
             for fi in range(total_files):
-                genome = genomes[fi % len(genomes)]
+                genome = random.choices(genomes, weights=weights, k=1)[0]
                 manifest.append(
                     {
                         "genome": genome,
@@ -332,10 +424,14 @@ class NanoporeSimulator:
                     }
                 )
         else:
-            # Singleplex separate: each genome gets named files
-            for genome_path in genome_inputs:
+            # Singleplex separate: each genome gets abundance-weighted file counts
+            for idx, genome_path in enumerate(genome_inputs):
                 genome = GenomeInput(fasta_path=genome_path)
-                for fi in range(files_per_genome):
+                n_files = max(
+                    1,
+                    math.ceil(per_genome_reads[idx] / self.config.reads_per_file),
+                )
+                for fi in range(n_files):
                     manifest.append(
                         {
                             "genome": genome,

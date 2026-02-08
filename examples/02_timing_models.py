@@ -6,8 +6,8 @@ Description:
     Demonstrates all four timing models available in NanoRunner:
     1. Uniform - constant intervals (deterministic)
     2. Random - symmetric variation around base interval
-    3. Poisson - biologically realistic with burst behavior
-    4. Adaptive - dynamic adjustment based on history
+    3. Poisson - exponential intervals with burst clusters
+    4. Adaptive - smoothly varying intervals via moving average
 
 Usage:
     python examples/02_timing_models.py
@@ -83,7 +83,7 @@ def main():
         description="Random intervals between 1.4-2.6 seconds (±30%)",
     )
 
-    # 3. Poisson Model - Realistic sequencing pattern
+    # 3. Poisson Model - Exponential intervals with burst clusters
     run_simulation_with_model(
         model_name="poisson",
         model_params={
@@ -93,14 +93,14 @@ def main():
         description="Exponential intervals with 20% burst probability",
     )
 
-    # 4. Adaptive Model - Dynamic adjustment
+    # 4. Adaptive Model - Smoothly varying intervals
     run_simulation_with_model(
         model_name="adaptive",
         model_params={
             "adaptation_rate": 0.2,  # 20% adaptation
             "history_size": 5,  # Remember last 5 intervals
         },
-        description="Adapts intervals based on recent history",
+        description="Smoothly varying intervals via exponential moving average",
     )
 
     print("=" * 60)
@@ -110,14 +110,14 @@ def main():
     print("All four timing models demonstrated:")
     print("  1. Uniform:  Predictable, constant intervals")
     print("  2. Random:   Controlled variation for robustness testing")
-    print("  3. Poisson:  Biologically realistic sequencing pattern")
-    print("  4. Adaptive: Dynamic response to processing speed")
+    print("  3. Poisson:  Irregular timing with burst clusters")
+    print("  4. Adaptive: Smoothly varying intervals")
     print()
     print("Use case recommendations:")
-    print("  - Testing:      uniform")
-    print("  - Robustness:   random")
-    print("  - Realism:      poisson")
-    print("  - Bottlenecks:  adaptive")
+    print("  - Testing:           uniform")
+    print("  - Robustness:        random")
+    print("  - Irregular timing:  poisson")
+    print("  - Varying patterns:  adaptive")
     print()
 
     # Cleanup instructions

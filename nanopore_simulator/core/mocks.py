@@ -13,12 +13,16 @@ class MockOrganism:
         resolver: Database resolver to use ("gtdb" or "ncbi").
         abundance: Proportion in community, must be between 0.0 and 1.0.
         accession: Optional specific genome accession to override default.
+        domain: Taxonomic domain ("bacteria", "archaea", or "eukaryota").
+            Used for correct genome resolution. Defaults to None, in which
+            case domain is inferred from the resolver during resolution.
     """
 
     name: str
     resolver: str  # "gtdb" or "ncbi"
     abundance: float  # Proportion in community (0.0-1.0)
     accession: Optional[str] = None  # Override specific strain
+    domain: Optional[str] = None  # "bacteria", "archaea", or "eukaryota"
 
     def __post_init__(self) -> None:
         """Validate organism parameters after initialization."""
@@ -27,6 +31,11 @@ class MockOrganism:
             raise ValueError(f"resolver must be one of {valid_resolvers}")
         if not 0.0 <= self.abundance <= 1.0:
             raise ValueError("abundance must be between 0.0 and 1.0")
+        valid_domains = {"bacteria", "archaea", "eukaryota", None}
+        if self.domain not in valid_domains:
+            raise ValueError(
+                f"domain must be one of {{'bacteria', 'archaea', 'eukaryota'}} or None"
+            )
 
 
 @dataclass
@@ -173,10 +182,16 @@ _ZYMO_D6331_ORGANISMS = [
     # Low abundance (1.4-1.5%)
     MockOrganism("Clostridioides difficile", "gtdb", 0.015),
     MockOrganism("Akkermansia muciniphila", "gtdb", 0.015),
-    MockOrganism("Candida albicans", "ncbi", 0.015, "GCF_000182965.3"),
-    MockOrganism("Saccharomyces cerevisiae", "ncbi", 0.014, "GCF_000146045.2"),
+    MockOrganism(
+        "Candida albicans", "ncbi", 0.015, "GCF_000182965.3", domain="eukaryota"
+    ),
+    MockOrganism(
+        "Saccharomyces cerevisiae", "ncbi", 0.014, "GCF_000146045.2", domain="eukaryota"
+    ),
     # Very low abundance (0.1% and below)
-    MockOrganism("Methanobrevibacter smithii", "ncbi", 0.001),  # Archaea
+    MockOrganism(
+        "Methanobrevibacter smithii", "ncbi", 0.001, "GCF_000016525.1", domain="archaea"
+    ),
     MockOrganism("Salmonella enterica", "gtdb", 0.0001),
     MockOrganism("Enterococcus faecalis", "gtdb", 0.00001),
     MockOrganism("Clostridium perfringens", "gtdb", 0.000001),

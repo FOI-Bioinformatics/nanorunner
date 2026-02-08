@@ -5,6 +5,8 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch
 
+from nanopore_simulator.core.config import SimulationConfig
+from nanopore_simulator.core.simulator import NanoporeSimulator
 from nanopore_simulator.core.generators import (
     ReadGeneratorConfig,
     GenomeInput,
@@ -41,7 +43,7 @@ def default_config():
         mean_read_length=10,
         std_read_length=3,
         min_read_length=5,
-        mean_quality=10.0,
+        mean_quality=20.0,
         reads_per_file=10,
         output_format="fastq",
     )
@@ -246,3 +248,59 @@ class TestGenomeInput:
     def test_with_barcode(self, simple_fasta):
         gi = GenomeInput(fasta_path=simple_fasta, barcode="barcode01")
         assert gi.barcode == "barcode01"
+
+
+class TestBuiltinGeneratorWarning:
+
+    def test_builtin_generator_warning_logged(self, simple_fasta, tmp_path, caplog):
+        """Verify warning is emitted when builtin generator is used."""
+        import logging
+
+        config = SimulationConfig(
+            target_dir=tmp_path / "output",
+            operation="generate",
+            genome_inputs=[simple_fasta],
+            read_count=10,
+            reads_per_file=10,
+            mean_read_length=10,
+            std_read_length=3,
+            min_read_length=5,
+            output_format="fastq",
+            interval=0.0,
+            timing_model="uniform",
+            generator_backend="builtin",
+        )
+        with caplog.at_level(logging.WARNING):
+            NanoporeSimulator(config, enable_monitoring=False)
+        assert any("error-free" in msg.lower() for msg in caplog.messages)
+
+
+class TestQualityDefaults:
+
+    def test_config_default_mean_quality(self):
+        """Default mean_quality should be 20.0 (R10.4.1 + SUP)."""
+        config = ReadGeneratorConfig()
+        assert config.mean_quality == 20.0
+
+    def test_config_default_std_quality(self):
+        """Default std_quality should be 4.0."""
+        config = ReadGeneratorConfig()
+        assert config.std_quality == 4.0
+
+    def test_simulation_config_default_mean_quality(self, simple_fasta, tmp_path):
+        """SimulationConfig default mean_quality should be 20.0."""
+        config = SimulationConfig(
+            target_dir=tmp_path,
+            operation="generate",
+            genome_inputs=[simple_fasta],
+        )
+        assert config.mean_quality == 20.0
+
+    def test_simulation_config_default_std_quality(self, simple_fasta, tmp_path):
+        """SimulationConfig default std_quality should be 4.0."""
+        config = SimulationConfig(
+            target_dir=tmp_path,
+            operation="generate",
+            genome_inputs=[simple_fasta],
+        )
+        assert config.std_quality == 4.0
