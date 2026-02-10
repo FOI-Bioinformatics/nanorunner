@@ -91,7 +91,7 @@ class TestCLI:
 
                 # Check help content
                 help_output = mock_stdout.getvalue()
-                assert "Advanced nanopore sequencing run simulator" in help_output
+                assert "Nanopore sequencing run simulator" in help_output
                 assert "--interval" in help_output
                 assert "--operation" in help_output
 

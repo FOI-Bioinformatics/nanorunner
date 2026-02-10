@@ -303,89 +303,199 @@ def main() -> int:
         return download_command(args)
 
     parser = argparse.ArgumentParser(
-        description="Advanced nanopore sequencing run simulator with profiles and pipeline support",
+        prog="nanorunner",
+        usage="%(prog)s [options] SOURCE_DIR TARGET_DIR\n"
+        "       %(prog)s --genomes FASTA [...] TARGET_DIR [options]\n"
+        "       %(prog)s --species/--mock/--taxid ... TARGET_DIR [options]\n"
+        "       %(prog)s --list-profiles | --list-mocks | ...\n"
+        "       %(prog)s download --species/--mock/--taxid ...",
+        description=(
+            "Nanopore sequencing run simulator for testing bioinformatics"
+            " pipelines.\n"
+            "\n"
+            "Simulates the incremental file delivery of a nanopore sequencer,\n"
+            "providing configurable timing for pipeline testing and"
+            " development.\n"
+            "\n"
+            "Operation Modes:\n"
+            "  Replay    nanorunner SOURCE TARGET [options]\n"
+            "            Transfer existing FASTQ/POD5 files with configurable"
+            " timing.\n"
+            "\n"
+            "  Generate  nanorunner --genomes FASTA [...] TARGET [options]\n"
+            "            Produce simulated reads from genome FASTA files.\n"
+            "\n"
+            "  Species   nanorunner --species/--mock/--taxid ... TARGET"
+            " [options]\n"
+            "            Resolve species via GTDB/NCBI and generate reads.\n"
+            "\n"
+            "  Download  nanorunner download --species/--mock/--taxid ...\n"
+            "            Pre-download genomes for offline use."
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+        epilog="""\
 Examples:
-  # Basic simulation
-  nanorunner /data/source /watch/output --interval 5
+  Replay mode:
+    nanorunner /data/source /watch/output --interval 5
+    nanorunner /data/source /watch/output --profile rapid_sequencing
+    nanorunner /data/source /watch/output --timing-model poisson
 
-  # Use a configuration profile
-  nanorunner /data/source /watch/output --profile rapid_sequencing
+  Generate mode:
+    nanorunner --genomes genome1.fa genome2.fa /watch/output --interval 5
+    nanorunner --mock zymo_d6300 /watch/output --read-count 5000
 
-  # High-throughput simulation with parallel processing
-  nanorunner /data/source /watch/output --profile high_throughput --parallel
+  Information:
+    nanorunner --list-profiles
+    nanorunner --list-mocks
+    nanorunner --recommend /path/to/data
 
-  # Enhanced monitoring with resource tracking and interactive controls
-  nanorunner /data/source /watch/output --monitor enhanced
+  Download:
+    nanorunner download --species "Escherichia coli"
+    nanorunner download --mock quick_3species
 
-  # Poisson timing model with custom parameters
-  nanorunner /data/source /watch/output --timing-model poisson --burst-probability 0.2
-
-  # Random timing with custom factor
-  nanorunner /data/source /watch/output --timing-model random --random-factor 0.4
-
-  # Detailed monitoring with verbose logging
-  nanorunner /data/source /watch/output --monitor detailed
-
-  # List available profiles
-  nanorunner --list-profiles
-
-  # Get profile recommendations
-  nanorunner --recommend /path/to/data
-
-  # Validate for specific pipeline
-  nanorunner --validate-pipeline kraken /target/dir
-
-  # Generate reads from genome FASTA files
-  nanorunner --genomes genome1.fa genome2.fa /watch/output --interval 5
-
-  # Generate with builtin backend and singleplex mixed output
-  nanorunner --genomes genome.fa /watch/output --generator-backend builtin --force-structure singleplex --mix-reads
-
-  # List available generation backends
-  nanorunner --list-generators
-
-  # Pre-download genomes for offline use
-  nanorunner download --species "Escherichia coli" "Staphylococcus aureus"
-  nanorunner download --mock quick_3species
-
-  # Enhanced features require: pip install nanorunner[enhanced]
-        """,
+  Enhanced features require: pip install nanorunner[enhanced]""",
     )
 
-    # Command-specific arguments
+    # Positional arguments
     parser.add_argument(
+        "source_dir",
+        type=Path,
+        nargs="?",
+        help="Source directory containing FASTQ/POD5 files",
+    )
+    parser.add_argument(
+        "target_dir",
+        type=Path,
+        nargs="?",
+        help="Target directory for pipeline to watch",
+    )
+
+    # Information commands
+    info_group = parser.add_argument_group("Information Commands")
+    info_group.add_argument(
         "--list-profiles",
         action="store_true",
         help="List all available configuration profiles",
     )
-    parser.add_argument(
+    info_group.add_argument(
         "--list-adapters",
         action="store_true",
         help="List all available pipeline adapters",
     )
-    parser.add_argument(
+    info_group.add_argument(
+        "--list-generators",
+        action="store_true",
+        help="List available read generation backends",
+    )
+    info_group.add_argument(
+        "--list-mocks",
+        action="store_true",
+        help="List available mock communities",
+    )
+    info_group.add_argument(
         "--recommend",
         type=Path,
         metavar="SOURCE_DIR",
         help="Get profile recommendations for a source directory",
     )
-    parser.add_argument(
+    info_group.add_argument(
         "--validate-pipeline",
         nargs=2,
         metavar=("PIPELINE", "TARGET_DIR"),
         help="Validate target directory for a specific pipeline",
     )
-    parser.add_argument(
-        "--list-generators",
-        action="store_true",
-        help="List available read generation backends",
+
+    # Simulation configuration
+    sim_group = parser.add_argument_group("Simulation Configuration")
+    sim_group.add_argument(
+        "--profile", type=str, help="Use a predefined configuration profile"
     )
-    parser.add_argument(
-        "--list-mocks",
+    sim_group.add_argument(
+        "--interval",
+        type=float,
+        default=5.0,
+        help="Seconds between file operations (default: 5.0)",
+    )
+    sim_group.add_argument(
+        "--operation",
+        choices=["copy", "link"],
+        default="copy",
+        help="File operation: copy files or create symlinks (default: copy)",
+    )
+    sim_group.add_argument(
+        "--force-structure",
+        choices=["singleplex", "multiplex"],
+        help="Force specific structure instead of auto-detection",
+    )
+    sim_group.add_argument(
+        "--batch-size",
+        type=int,
+        default=1,
+        help="Number of files to process per interval (default: 1)",
+    )
+
+    # Timing model options
+    timing_group = parser.add_argument_group("Timing Models")
+    timing_group.add_argument(
+        "--timing-model",
+        choices=["uniform", "random", "poisson", "adaptive"],
+        help="Timing model to use (overrides profile setting)",
+    )
+    timing_group.add_argument(
+        "--burst-probability",
+        type=float,
+        help="Burst probability for Poisson model (0.0-1.0)",
+    )
+    timing_group.add_argument(
+        "--burst-rate-multiplier",
+        type=float,
+        help="Burst rate multiplier for Poisson model",
+    )
+    timing_group.add_argument(
+        "--random-factor",
+        type=float,
+        help="Randomness factor for random timing model (0.0-1.0)",
+    )
+    timing_group.add_argument(
+        "--adaptation-rate",
+        type=float,
+        help="Adaptation rate for adaptive timing model (0.0-1.0, default: 0.1)",
+    )
+    timing_group.add_argument(
+        "--history-size",
+        type=int,
+        help="History size for adaptive timing model (default: 10)",
+    )
+
+    # Parallel processing options
+    parallel_group = parser.add_argument_group("Parallel Processing")
+    parallel_group.add_argument(
+        "--parallel",
         action="store_true",
-        help="List available mock communities",
+        help="Enable parallel processing within batches",
+    )
+    parallel_group.add_argument(
+        "--worker-count",
+        type=int,
+        default=4,
+        help="Number of worker threads for parallel processing (default: 4)",
+    )
+
+    # Monitoring options
+    monitor_group = parser.add_argument_group("Monitoring")
+    monitor_group.add_argument(
+        "--monitor",
+        choices=["default", "detailed", "enhanced", "none"],
+        default="default",
+        help="Progress monitoring level: default (basic), detailed (verbose logging), enhanced (resource monitoring + interactive controls), none (silent)",
+    )
+    monitor_group.add_argument(
+        "--quiet", action="store_true", help="Suppress progress output"
+    )
+    monitor_group.add_argument(
+        "--pipeline",
+        type=str,
+        help="Validate output for specific pipeline compatibility",
     )
 
     # Read generation arguments
@@ -483,111 +593,6 @@ Examples:
         "--offline",
         action="store_true",
         help="Use only cached genomes, no network requests",
-    )
-
-    # Main simulation arguments (optional for some commands)
-    parser.add_argument(
-        "source_dir",
-        type=Path,
-        nargs="?",
-        help="Source directory containing FASTQ/POD5 files",
-    )
-    parser.add_argument(
-        "target_dir",
-        type=Path,
-        nargs="?",
-        help="Target directory for pipeline to watch",
-    )
-
-    # Configuration options
-    parser.add_argument(
-        "--profile", type=str, help="Use a predefined configuration profile"
-    )
-    parser.add_argument(
-        "--interval",
-        type=float,
-        default=5.0,
-        help="Seconds between file operations (default: 5.0)",
-    )
-    parser.add_argument(
-        "--operation",
-        choices=["copy", "link"],
-        default="copy",
-        help="File operation: copy files or create symlinks (default: copy)",
-    )
-    parser.add_argument(
-        "--force-structure",
-        choices=["singleplex", "multiplex"],
-        help="Force specific structure instead of auto-detection",
-    )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=1,
-        help="Number of files to process per interval (default: 1)",
-    )
-
-    # Timing model options
-    parser.add_argument(
-        "--timing-model",
-        choices=["uniform", "random", "poisson", "adaptive"],
-        help="Timing model to use (overrides profile setting)",
-    )
-    parser.add_argument(
-        "--burst-probability",
-        type=float,
-        help="Burst probability for Poisson model (0.0-1.0)",
-    )
-    parser.add_argument(
-        "--burst-rate-multiplier",
-        type=float,
-        help="Burst rate multiplier for Poisson model",
-    )
-
-    # Advanced timing options
-    parser.add_argument(
-        "--random-factor",
-        type=float,
-        help="Randomness factor for random timing model (0.0-1.0)",
-    )
-    parser.add_argument(
-        "--adaptation-rate",
-        type=float,
-        help="Adaptation rate for adaptive timing model (0.0-1.0, default: 0.1)",
-    )
-    parser.add_argument(
-        "--history-size",
-        type=int,
-        help="History size for adaptive timing model (default: 10)",
-    )
-
-    # Parallel processing options
-    parser.add_argument(
-        "--parallel",
-        action="store_true",
-        help="Enable parallel processing within batches",
-    )
-    parser.add_argument(
-        "--worker-count",
-        type=int,
-        default=4,
-        help="Number of worker threads for parallel processing (default: 4)",
-    )
-
-    # Monitoring options
-    parser.add_argument(
-        "--monitor",
-        choices=["default", "detailed", "enhanced", "none"],
-        default="default",
-        help="Progress monitoring level: default (basic), detailed (verbose logging), enhanced (resource monitoring + interactive controls), none (silent)",
-    )
-    parser.add_argument("--quiet", action="store_true", help="Suppress progress output")
-
-    # Pipeline validation
-    parser.add_argument(
-        "--pipeline",
-        type=str,
-        help="Validate output for specific pipeline compatibility",
     )
 
     parser.add_argument(
