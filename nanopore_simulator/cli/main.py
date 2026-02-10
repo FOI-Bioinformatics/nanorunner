@@ -161,15 +161,74 @@ def recommend_profiles_command(source_dir: Path) -> int:
         print(f"Error: Source directory does not exist: {source_dir}")
         return 1
 
-    # Count files for recommendations
+    if not source_dir.is_dir():
+        print(f"Error: Not a directory: {source_dir}")
+        return 1
+
+    # Count sequencing files for recommendations
     files = FileStructureDetector._find_sequencing_files(source_dir)
     file_count = len(files)
 
     print(f"Analysis of {source_dir}:")
     print(f"  Found {file_count} sequencing files")
 
+    if file_count == 0:
+        # Check if the directory contains genome FASTA files instead
+        genome_extensions = {".fa", ".fasta", ".fa.gz", ".fasta.gz"}
+        genome_files = [
+            f
+            for f in source_dir.iterdir()
+            if f.is_file()
+            and any(f.name.lower().endswith(ext) for ext in genome_extensions)
+        ]
+        # Also check barcode subdirectories for sequencing files
+        barcode_seq_count = 0
+        for subdir in source_dir.iterdir():
+            if subdir.is_dir():
+                barcode_seq_count += len(
+                    FileStructureDetector._find_sequencing_files(subdir)
+                )
+
+        if genome_files:
+            print(f"\n  Found {len(genome_files)} genome FASTA file(s) instead:")
+            for gf in genome_files[:5]:
+                print(f"    {gf.name}")
+            if len(genome_files) > 5:
+                print(f"    ... and {len(genome_files) - 5} more")
+            print("\n  --recommend is for replay mode (existing sequencing reads).")
+            print("  To generate reads from genome FASTA files, use:")
+            print(f"    nanorunner --genomes {genome_files[0].name} <target_dir>")
+            return 1
+
+        if barcode_seq_count > 0:
+            # Files exist in subdirectories but not in root -- proceed
+            # with structure detection which will find them
+            pass
+        else:
+            all_files = [f for f in source_dir.iterdir() if f.is_file()]
+            print("\n  No sequencing files found. --recommend expects a directory")
+            print("  containing FASTQ or POD5 files for replay mode.")
+            print(
+                f"  Supported extensions: {', '.join(sorted(FileStructureDetector.SUPPORTED_EXTENSIONS))}"
+            )
+            if all_files:
+                extensions = set()
+                for f in all_files:
+                    name = f.name.lower()
+                    if ".gz" in name:
+                        ext = "." + ".".join(name.rsplit(".", 2)[-2:])
+                    else:
+                        ext = f.suffix.lower()
+                    extensions.add(ext)
+                print(f"  Files found with extensions: {', '.join(sorted(extensions))}")
+            return 1
+
     # Detect structure
-    structure = FileStructureDetector.detect_structure(source_dir)
+    try:
+        structure = FileStructureDetector.detect_structure(source_dir)
+    except ValueError as e:
+        print(f"\n  Error: {e}")
+        return 1
     print(f"  Detected structure: {structure}")
 
     # Get recommendations
