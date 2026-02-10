@@ -162,7 +162,7 @@ class NanoporeSimulator:
         ):
             return
 
-        resolver = SpeciesResolver()
+        resolver = SpeciesResolver(offline=self.config.offline_mode)
         resolved_genomes: List[Path] = []
         abundances: List[float] = []
 
@@ -192,7 +192,9 @@ class NanoporeSimulator:
                 if ref is None:
                     raise ValueError(f"Could not resolve organism: {org.name}")
 
-                genome_path = download_genome(ref, resolver.cache)
+                genome_path = download_genome(
+                    ref, resolver.cache, offline=self.config.offline_mode
+                )
                 resolved_genomes.append(genome_path)
                 abundances.append(org.abundance)
 
@@ -208,7 +210,9 @@ class NanoporeSimulator:
                         msg += f". Did you mean: {', '.join(suggestions)}?"
                     raise ValueError(msg)
 
-                genome_path = download_genome(ref, resolver.cache)
+                genome_path = download_genome(
+                    ref, resolver.cache, offline=self.config.offline_mode
+                )
                 resolved_genomes.append(genome_path)
 
             # Resolve taxids
@@ -217,7 +221,9 @@ class NanoporeSimulator:
                 if ref is None:
                     raise ValueError(f"Could not resolve taxid: {taxid}")
 
-                genome_path = download_genome(ref, resolver.cache)
+                genome_path = download_genome(
+                    ref, resolver.cache, offline=self.config.offline_mode
+                )
                 resolved_genomes.append(genome_path)
 
             # Set abundances

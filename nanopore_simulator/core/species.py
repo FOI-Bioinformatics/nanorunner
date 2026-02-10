@@ -126,6 +126,10 @@ class GTDBIndex:
     def _load_index(self) -> None:
         """Load the TSV index file into memory."""
         if not self.index_path.exists():
+            logger.debug(
+                "GTDB index not found at %s; species resolution will use NCBI.",
+                self.index_path,
+            )
             return
         with open(self.index_path) as f:
             # Skip header line
@@ -314,6 +318,7 @@ class SpeciesResolver:
         self,
         index_dir: Optional[Path] = None,
         cache_dir: Optional[Path] = None,
+        offline: bool = False,
     ) -> None:
         """Initialize the species resolver.
 
@@ -322,6 +327,8 @@ class SpeciesResolver:
                 ~/.nanorunner/indexes/ using the HOME environment variable.
             cache_dir: Directory for genome cache. If None, defaults to
                 ~/.nanorunner/genomes/ using the HOME environment variable.
+            offline: If True, skip NCBI network lookups and rely only on the
+                local GTDB index and cached genomes.
         """
         if index_dir is None:
             home = Path(os.environ.get("HOME", Path.home()))
@@ -330,6 +337,7 @@ class SpeciesResolver:
         self._gtdb = GTDBIndex(index_dir / "gtdb_species.tsv")
         self._ncbi = NCBIResolver()
         self._cache = GenomeCache(cache_dir)
+        self._offline = offline
 
     def resolve(self, species_name: str) -> Optional[GenomeRef]:
         """Resolve a species name to a genome reference.
@@ -349,7 +357,9 @@ class SpeciesResolver:
         if ref is not None:
             return ref
 
-        # Fall back to NCBI
+        # Fall back to NCBI (skip in offline mode)
+        if self._offline:
+            return None
         return self._ncbi.resolve_by_name(species_name)
 
     def resolve_taxid(self, taxid: int) -> Optional[GenomeRef]:
@@ -361,6 +371,8 @@ class SpeciesResolver:
         Returns:
             GenomeRef if found, None otherwise.
         """
+        if self._offline:
+            return None
         return self._ncbi.resolve_by_taxid(taxid)
 
     def suggest(self, partial_name: str) -> List[str]:
@@ -384,7 +396,9 @@ class SpeciesResolver:
         return self._cache
 
 
-def download_genome(ref: GenomeRef, cache: GenomeCache) -> Path:
+def download_genome(
+    ref: GenomeRef, cache: GenomeCache, offline: bool = False
+) -> Path:
     """Download a genome and cache it.
 
     Uses the NCBI datasets CLI to download the genome sequence for the
@@ -394,18 +408,38 @@ def download_genome(ref: GenomeRef, cache: GenomeCache) -> Path:
     Args:
         ref: Genome reference specifying the accession to download.
         cache: Genome cache instance for storing the downloaded genome.
+        offline: If True, raise an error instead of downloading when the
+            genome is not already cached.
 
     Returns:
         Path to the cached genome file (gzip compressed).
 
     Raises:
-        RuntimeError: If the download fails or no .fna file is found.
+        RuntimeError: If the download fails, no .fna file is found,
+            offline mode is enabled and the genome is not cached, or
+            the datasets CLI is not installed.
     """
     # Check cache first
     cached_path = cache.get_cached_path(ref)
     if cached_path.exists():
         logger.info(f"Using cached genome: {cached_path}")
         return cached_path
+
+    # Offline mode: genome must already be cached
+    if offline:
+        raise RuntimeError(
+            f"Genome {ref.accession} ({ref.name}) is not cached and "
+            "offline mode is enabled. Run 'nanorunner download' first "
+            "to cache the required genomes."
+        )
+
+    # Check that datasets CLI is available before attempting download
+    if shutil.which("datasets") is None:
+        raise RuntimeError(
+            f"Cannot download genome {ref.accession}: "
+            "the 'datasets' CLI (ncbi-datasets-cli) is not installed. "
+            "Install with: conda install -c conda-forge ncbi-datasets-cli"
+        )
 
     # Download via datasets CLI
     logger.info(f"Downloading genome: {ref.accession}")

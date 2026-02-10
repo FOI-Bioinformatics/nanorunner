@@ -155,6 +155,12 @@ class TestGTDBIndex:
         assert ref is not None
         assert ref.name == "Escherichia coli"
 
+    def test_missing_index_file(self, tmp_path):
+        """Test GTDBIndex with nonexistent file returns None without error."""
+        index = GTDBIndex(tmp_path / "nonexistent.tsv")
+        ref = index.lookup("Escherichia coli")
+        assert ref is None
+
     def test_fuzzy_suggestions(self, tmp_path):
         """Test suggest returns matching species names for partial input"""
         index_file = tmp_path / "gtdb_species.tsv"
@@ -306,6 +312,20 @@ class TestSpeciesResolver:
         assert isinstance(resolver.cache, GenomeCache)
         assert resolver.cache.cache_dir == tmp_path / "genomes"
 
+    def test_resolve_offline_skips_ncbi(self, tmp_path, monkeypatch):
+        """Test that offline mode skips NCBI resolution."""
+        # Empty GTDB index so lookup will miss
+        index_file = tmp_path / "indexes" / "gtdb_species.tsv"
+        index_file.parent.mkdir(parents=True, exist_ok=True)
+        index_file.write_text("species\taccession\tdomain\n")
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        resolver = SpeciesResolver(index_dir=tmp_path / "indexes", offline=True)
+        with patch.object(resolver._ncbi, "resolve_by_name") as mock_ncbi:
+            ref = resolver.resolve("Saccharomyces cerevisiae")
+            assert ref is None
+            mock_ncbi.assert_not_called()
+
     def test_default_index_dir(self, tmp_path, monkeypatch):
         """Test that default index directory is used when not specified"""
         # Create default index location
@@ -433,3 +453,33 @@ class TestGenomeDownload:
 
             with pytest.raises(RuntimeError, match="No .fna file found"):
                 download_genome(ref, cache)
+
+    def test_download_genome_no_datasets_cli(self, tmp_path):
+        """Test error when datasets CLI is not installed."""
+        cache = GenomeCache(cache_dir=tmp_path)
+        ref = GenomeRef("E. coli", "GCF_000005845.2", "gtdb", "bacteria")
+
+        with patch("nanopore_simulator.core.species.shutil.which", return_value=None):
+            with pytest.raises(RuntimeError, match="ncbi-datasets-cli"):
+                download_genome(ref, cache)
+
+    def test_download_genome_offline_not_cached(self, tmp_path):
+        """Test error when offline mode is enabled and genome is not cached."""
+        cache = GenomeCache(cache_dir=tmp_path)
+        ref = GenomeRef("E. coli", "GCF_000005845.2", "gtdb", "bacteria")
+
+        with pytest.raises(RuntimeError, match="offline mode"):
+            download_genome(ref, cache, offline=True)
+
+    def test_download_genome_offline_cached(self, tmp_path):
+        """Test that offline mode returns cached genome without error."""
+        cache = GenomeCache(cache_dir=tmp_path)
+        ref = GenomeRef("E. coli", "GCF_000005845.2", "gtdb", "bacteria")
+
+        # Pre-create cached file
+        cached_path = cache.get_cached_path(ref)
+        cached_path.parent.mkdir(parents=True, exist_ok=True)
+        cached_path.write_text("cached")
+
+        path = download_genome(ref, cache, offline=True)
+        assert path == cached_path

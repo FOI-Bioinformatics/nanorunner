@@ -325,3 +325,39 @@ class TestSimulatorSpeciesResolution:
             sim = NanoporeSimulator(config, enable_monitoring=False)
             # Should not have instantiated resolver
             mock_resolver_cls.assert_not_called()
+
+    def test_offline_mode_passes_flag(self, tmp_path):
+        """Test that offline_mode is forwarded to resolver and download."""
+        config = SimulationConfig(
+            target_dir=tmp_path / "output",
+            operation="generate",
+            species_inputs=["Escherichia coli"],
+            sample_type="pure",
+            read_count=10,
+            reads_per_file=10,
+            offline_mode=True,
+        )
+
+        with patch(
+            "nanopore_simulator.core.simulator.SpeciesResolver"
+        ) as mock_resolver_cls:
+            mock_resolver = MagicMock()
+            mock_resolver_cls.return_value = mock_resolver
+
+            mock_ref = GenomeRef(
+                "Escherichia coli", "GCF_000005845.2", "gtdb", "bacteria"
+            )
+            mock_resolver.resolve.return_value = mock_ref
+
+            genome_path = tmp_path / "genome.fa"
+            genome_path.write_text(">chr1\nATCGATCGATCG\n")
+
+            with patch(
+                "nanopore_simulator.core.simulator.download_genome",
+                return_value=genome_path,
+            ) as mock_download:
+                sim = NanoporeSimulator(config, enable_monitoring=False)
+                mock_resolver_cls.assert_called_once_with(offline=True)
+                mock_download.assert_called_once_with(
+                    mock_ref, mock_resolver.cache, offline=True
+                )
