@@ -7,6 +7,9 @@ name = "nanorunner"
 version = "2.0.2"
 description = "Comprehensive nanopore sequencing simulator with timing models, parallel processing, and real-time monitoring for bioinformatics pipeline testing"
 readme = "README.md"
+dependencies = [
+    "typer>=0.9.0",
+]
 requires-python = ">=3.9"
 license = {file = "LICENSE"}
 authors = [

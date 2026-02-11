@@ -1,9 +1,11 @@
 """Command line interface for nanopore simulator"""
 
-import argparse
 import sys
+from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional
+
+import typer
 
 from .. import __version__
 from ..core.config import SimulationConfig
@@ -24,8 +26,363 @@ from ..core.mocks import BUILTIN_MOCKS, MOCK_ALIASES, get_mock_community
 from ..core.species import SpeciesResolver, download_genome, GenomeRef
 
 
+# ---------------------------------------------------------------------------
+# Enums
+# ---------------------------------------------------------------------------
+
+
+class TimingModelChoice(str, Enum):
+    uniform = "uniform"
+    random = "random"
+    poisson = "poisson"
+    adaptive = "adaptive"
+
+
+class OperationChoice(str, Enum):
+    copy = "copy"
+    link = "link"
+
+
+class MonitorLevel(str, Enum):
+    default = "default"
+    detailed = "detailed"
+    enhanced = "enhanced"
+    none = "none"
+
+
+class OutputFormat(str, Enum):
+    fastq = "fastq"
+    fastq_gz = "fastq.gz"
+
+
+class GeneratorBackend(str, Enum):
+    auto = "auto"
+    builtin = "builtin"
+    badread = "badread"
+    nanosim = "nanosim"
+
+
+class SampleType(str, Enum):
+    pure = "pure"
+    mixed = "mixed"
+
+
+class ForceStructure(str, Enum):
+    singleplex = "singleplex"
+    multiplex = "multiplex"
+
+
+# ---------------------------------------------------------------------------
+# Typer app
+# ---------------------------------------------------------------------------
+
+app = typer.Typer(
+    name="nanorunner",
+    help="Nanopore sequencing run simulator for testing bioinformatics pipelines.",
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+    add_completion=False,
+    pretty_exceptions_show_locals=False,
+)
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"nanorunner {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def _app_callback(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        help="Show version and exit.",
+        callback=_version_callback,
+        is_eager=True,
+    ),
+) -> None:
+    """Nanopore sequencing run simulator for testing bioinformatics pipelines."""
+
+
+# ---------------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------------
+
+
+def _build_timing_params(
+    burst_probability: Optional[float],
+    burst_rate_multiplier: Optional[float],
+    random_factor: Optional[float],
+    adaptation_rate: Optional[float],
+    history_size: Optional[int],
+) -> dict:
+    """Collect timing model sub-parameters into a dict."""
+    params: dict = {}
+    if burst_probability is not None:
+        params["burst_probability"] = burst_probability
+    if burst_rate_multiplier is not None:
+        params["burst_rate_multiplier"] = burst_rate_multiplier
+    if random_factor is not None:
+        params["random_factor"] = random_factor
+    if adaptation_rate is not None:
+        params["adaptation_rate"] = adaptation_rate
+    if history_size is not None:
+        params["history_size"] = history_size
+    return params
+
+
+def _validate_timing_params(
+    burst_probability: Optional[float],
+    burst_rate_multiplier: Optional[float],
+    random_factor: Optional[float],
+    adaptation_rate: Optional[float],
+    history_size: Optional[int],
+) -> None:
+    """Validate timing parameter ranges. Raises typer.BadParameter on error."""
+    if random_factor is not None and (random_factor < 0.0 or random_factor > 1.0):
+        typer.echo("Error: Random factor must be between 0.0 and 1.0", err=True)
+        raise typer.Exit(code=2)
+    if burst_probability is not None and (
+        burst_probability < 0.0 or burst_probability > 1.0
+    ):
+        typer.echo("Error: Burst probability must be between 0.0 and 1.0", err=True)
+        raise typer.Exit(code=2)
+    if burst_rate_multiplier is not None and burst_rate_multiplier <= 0:
+        typer.echo("Error: Burst rate multiplier must be positive", err=True)
+        raise typer.Exit(code=2)
+    if adaptation_rate is not None and (
+        adaptation_rate < 0.0 or adaptation_rate > 1.0
+    ):
+        typer.echo("Error: Adaptation rate must be between 0.0 and 1.0", err=True)
+        raise typer.Exit(code=2)
+    if history_size is not None and history_size < 1:
+        typer.echo("Error: History size must be at least 1", err=True)
+        raise typer.Exit(code=2)
+
+
+def _build_config(
+    *,
+    target_dir: Path,
+    source_dir: Optional[Path] = None,
+    is_generate: bool = False,
+    profile: Optional[str] = None,
+    interval: float = 5.0,
+    operation: OperationChoice = OperationChoice.copy,
+    force_structure: Optional[ForceStructure] = None,
+    batch_size: int = 1,
+    timing_model: Optional[TimingModelChoice] = None,
+    burst_probability: Optional[float] = None,
+    burst_rate_multiplier: Optional[float] = None,
+    random_factor: Optional[float] = None,
+    adaptation_rate: Optional[float] = None,
+    history_size: Optional[int] = None,
+    parallel: bool = False,
+    worker_count: int = 4,
+    # Generate-mode parameters
+    genomes: Optional[List[Path]] = None,
+    generator_backend: GeneratorBackend = GeneratorBackend.auto,
+    read_count: int = 1000,
+    mean_read_length: int = 5000,
+    mean_quality: float = 20.0,
+    std_quality: float = 4.0,
+    reads_per_file: int = 100,
+    output_format: OutputFormat = OutputFormat.fastq_gz,
+    mix_reads: bool = False,
+    # Species/mock parameters
+    species: Optional[List[str]] = None,
+    mock: Optional[str] = None,
+    taxid: Optional[List[int]] = None,
+    sample_type: Optional[SampleType] = None,
+    abundances: Optional[List[float]] = None,
+    offline: bool = False,
+) -> SimulationConfig:
+    """Build a SimulationConfig from CLI parameters."""
+    timing_params = _build_timing_params(
+        burst_probability, burst_rate_multiplier, random_factor,
+        adaptation_rate, history_size,
+    )
+    fs_str = force_structure.value if force_structure else None
+
+    if profile:
+        if not validate_profile_name(profile):
+            typer.echo(f"Error: Unknown profile: {profile}", err=True)
+            raise typer.Exit(code=2)
+
+        overrides: dict = {}
+        if timing_model:
+            overrides["timing_model"] = timing_model.value
+            overrides["timing_model_params"] = timing_params
+        elif timing_params:
+            overrides["timing_model_params"] = timing_params
+
+        if operation != OperationChoice.copy:
+            overrides["operation"] = operation.value
+        if batch_size != 1:
+            overrides["batch_size"] = batch_size
+        if parallel:
+            overrides["parallel_processing"] = True
+        if worker_count != 4:
+            overrides["worker_count"] = worker_count
+        if fs_str:
+            overrides["force_structure"] = fs_str
+
+        if is_generate:
+            overrides["operation"] = "generate"
+            if genomes:
+                overrides["genome_inputs"] = genomes
+            overrides["generator_backend"] = generator_backend.value
+            overrides["read_count"] = read_count
+            overrides["mean_read_length"] = mean_read_length
+            overrides["mean_quality"] = mean_quality
+            overrides["std_quality"] = std_quality
+            overrides["reads_per_file"] = reads_per_file
+            overrides["output_format"] = output_format.value
+            overrides["mix_reads"] = mix_reads
+
+        if species:
+            overrides["species_inputs"] = species
+        if mock:
+            overrides["mock_name"] = mock
+        if taxid:
+            overrides["taxid_inputs"] = taxid
+        if sample_type:
+            overrides["sample_type"] = sample_type.value
+        if abundances:
+            overrides["abundances"] = abundances
+        if offline:
+            overrides["offline_mode"] = offline
+
+        return create_config_from_profile(
+            profile, source_dir, target_dir, interval, **overrides,
+        )
+
+    # No profile -- build directly
+    tm = timing_model.value if timing_model else "uniform"
+    config_kwargs: dict = {
+        "target_dir": target_dir,
+        "interval": interval,
+        "force_structure": fs_str,
+        "batch_size": batch_size,
+        "timing_model": tm,
+        "timing_model_params": timing_params,
+        "parallel_processing": parallel,
+        "worker_count": worker_count,
+    }
+
+    if is_generate:
+        config_kwargs["operation"] = "generate"
+        if genomes:
+            config_kwargs["genome_inputs"] = genomes
+        config_kwargs["generator_backend"] = generator_backend.value
+        config_kwargs["read_count"] = read_count
+        config_kwargs["mean_read_length"] = mean_read_length
+        config_kwargs["mean_quality"] = mean_quality
+        config_kwargs["std_quality"] = std_quality
+        config_kwargs["reads_per_file"] = reads_per_file
+        config_kwargs["output_format"] = output_format.value
+        config_kwargs["mix_reads"] = mix_reads
+    else:
+        config_kwargs["source_dir"] = source_dir
+        config_kwargs["operation"] = operation.value
+
+    if species:
+        config_kwargs["species_inputs"] = species
+    if mock:
+        config_kwargs["mock_name"] = mock
+    if taxid:
+        config_kwargs["taxid_inputs"] = taxid
+    if sample_type:
+        config_kwargs["sample_type"] = sample_type.value
+    if abundances:
+        config_kwargs["abundances"] = abundances
+    if offline:
+        config_kwargs["offline_mode"] = offline
+
+    return SimulationConfig(**config_kwargs)
+
+
+def _setup_monitoring(
+    monitor: MonitorLevel, quiet: bool
+) -> tuple:
+    """Determine monitoring settings. Returns (enable_monitoring, monitor_type)."""
+    enable_monitoring = not quiet and monitor != MonitorLevel.none
+    monitor_type = monitor.value if enable_monitoring else "default"
+
+    if monitor_type == "enhanced":
+        try:
+            import psutil  # noqa: F401
+        except ImportError:
+            print(
+                "Warning: Enhanced monitoring requires psutil. "
+                "Install with: pip install nanorunner[enhanced]"
+            )
+            print("Falling back to detailed monitoring mode.")
+            monitor_type = "detailed"
+
+    return enable_monitoring, monitor_type
+
+
+def _run_simulation(
+    config: SimulationConfig,
+    enable_monitoring: bool,
+    monitor_type: str,
+    is_generate: bool = False,
+    pipeline: Optional[str] = None,
+) -> None:
+    """Create simulator, run, and handle post-run validation."""
+    try:
+        simulator = NanoporeSimulator(config, enable_monitoring, monitor_type)
+
+        if is_generate and hasattr(simulator, "read_generator"):
+            from ..core.generators import BuiltinGenerator
+
+            if isinstance(simulator.read_generator, BuiltinGenerator):
+                print(
+                    "Note: Using builtin generator (error-free reads). "
+                    "For realistic error profiles, install badread: "
+                    "pip install badread"
+                )
+
+        if monitor_type == "enhanced":
+            print("Enhanced monitoring active. Interactive controls:")
+            print("  - Ctrl+C: Graceful shutdown with summary")
+            print("  - SIGTERM: Graceful shutdown (on Unix systems)")
+            print("  - Progress is automatically checkpointed every 10 files")
+            print("  - Resource usage (CPU, memory) is monitored\n")
+
+        simulator.run_simulation()
+
+        if pipeline:
+            print(f"\nValidating output for {pipeline} pipeline...")
+            report = validate_for_pipeline(pipeline, config.target_dir)
+            if report.get("valid", False):
+                print(
+                    f"Output is compatible with {pipeline} pipeline"
+                )
+            else:
+                print(
+                    f"Output may not be compatible with {pipeline} pipeline"
+                )
+                if report.get("warnings"):
+                    for warning in report["warnings"]:
+                        print(f"  Warning: {warning}")
+
+    except KeyboardInterrupt:
+        print("\nSimulation interrupted by user")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        print(f"Error: {e}")
+        raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
+# Info commands
+# ---------------------------------------------------------------------------
+
+
 def list_profiles_command() -> int:
-    """List available configuration profiles"""
+    """List available configuration profiles."""
     profiles = get_available_profiles()
     print("Available Configuration Profiles:")
     print("=" * 50)
@@ -35,7 +392,7 @@ def list_profiles_command() -> int:
 
 
 def list_adapters_command() -> int:
-    """List available pipeline adapters"""
+    """List available pipeline adapters."""
     adapters = get_available_adapters()
     print("Available Pipeline Adapters:")
     print("=" * 50)
@@ -45,7 +402,7 @@ def list_adapters_command() -> int:
 
 
 def list_generators_command() -> int:
-    """List available read generation backends"""
+    """List available read generation backends."""
     backends = detect_available_backends()
     print("Available Read Generation Backends:")
     print("=" * 50)
@@ -65,7 +422,6 @@ def list_mocks_command() -> int:
     if MOCK_ALIASES:
         print("\nAliases:")
         print("-" * 60)
-        # Group aliases by target
         targets: Dict[str, List[str]] = {}
         for alias, target in MOCK_ALIASES.items():
             if target not in targets:
@@ -78,34 +434,537 @@ def list_mocks_command() -> int:
     return 0
 
 
-def download_command(args: argparse.Namespace) -> int:
-    """Download genomes for offline use, optionally generating reads.
+@app.command("list-profiles")
+def list_profiles_cmd() -> None:
+    """List all available configuration profiles."""
+    list_profiles_command()
 
-    Downloads genomes specified by species names, mock communities, or
-    taxonomy IDs and caches them locally. If a target directory is provided,
-    also generates simulated reads into that directory.
 
-    Args:
-        args: Parsed command-line arguments containing species, mock, or taxid,
-            and optional target_dir with generation parameters.
+@app.command("list-adapters")
+def list_adapters_cmd() -> None:
+    """List all available pipeline adapters."""
+    list_adapters_command()
 
-    Returns:
-        0 on success, 1 on error.
-    """
-    if not (args.species or args.mock or args.taxid):
-        print("Error: Must specify --species, --mock, or --taxid")
+
+@app.command("list-generators")
+def list_generators_cmd() -> None:
+    """List available read generation backends."""
+    list_generators_command()
+
+
+@app.command("list-mocks")
+def list_mocks_cmd() -> None:
+    """List available mock communities."""
+    list_mocks_command()
+
+
+# ---------------------------------------------------------------------------
+# Utility commands
+# ---------------------------------------------------------------------------
+
+
+def recommend_profiles_command(source_dir: Path) -> int:
+    """Recommend profiles based on source directory."""
+    if not source_dir.exists():
+        print(f"Error: Source directory does not exist: {source_dir}")
         return 1
 
-    resolver = SpeciesResolver()
-    genomes_to_download = []
-    mock = None
+    if not source_dir.is_dir():
+        print(f"Error: Not a directory: {source_dir}")
+        return 1
 
-    if args.mock:
-        mock = get_mock_community(args.mock)
-        if mock is None:
-            print(f"Error: Unknown mock community: {args.mock}")
+    files = FileStructureDetector._find_sequencing_files(source_dir)
+    file_count = len(files)
+
+    print(f"Analysis of {source_dir}:")
+    print(f"  Found {file_count} sequencing files")
+
+    if file_count == 0:
+        genome_extensions = {".fa", ".fasta", ".fa.gz", ".fasta.gz"}
+        genome_files = [
+            f
+            for f in source_dir.iterdir()
+            if f.is_file()
+            and any(f.name.lower().endswith(ext) for ext in genome_extensions)
+        ]
+        barcode_seq_count = 0
+        for subdir in source_dir.iterdir():
+            if subdir.is_dir():
+                barcode_seq_count += len(
+                    FileStructureDetector._find_sequencing_files(subdir)
+                )
+
+        if genome_files:
+            print(f"\n  Found {len(genome_files)} genome FASTA file(s) instead:")
+            for gf in genome_files[:5]:
+                print(f"    {gf.name}")
+            if len(genome_files) > 5:
+                print(f"    ... and {len(genome_files) - 5} more")
+            print("\n  recommend is for replay mode (existing sequencing reads).")
+            print("  To generate reads from genome FASTA files, use:")
+            print(f"    nanorunner generate --genomes {genome_files[0].name} --target <target_dir>")
             return 1
-        for org in mock.organisms:
+
+        if barcode_seq_count > 0:
+            pass
+        else:
+            all_files = [f for f in source_dir.iterdir() if f.is_file()]
+            print("\n  No sequencing files found. recommend expects a directory")
+            print("  containing FASTQ or POD5 files for replay mode.")
+            print(
+                f"  Supported extensions: {', '.join(sorted(FileStructureDetector.SUPPORTED_EXTENSIONS))}"
+            )
+            if all_files:
+                extensions = set()
+                for f in all_files:
+                    name = f.name.lower()
+                    if ".gz" in name:
+                        ext = "." + ".".join(name.rsplit(".", 2)[-2:])
+                    else:
+                        ext = f.suffix.lower()
+                    extensions.add(ext)
+                print(
+                    f"  Files found with extensions: {', '.join(sorted(extensions))}"
+                )
+            return 1
+
+    try:
+        structure = FileStructureDetector.detect_structure(source_dir)
+    except ValueError as e:
+        print(f"\n  Error: {e}")
+        return 1
+    print(f"  Detected structure: {structure}")
+
+    recommendations = get_profile_recommendations(file_count, "general")
+    print(f"\nRecommended profiles for {file_count} files:")
+    for i, profile_name in enumerate(recommendations, 1):
+        profiles = get_available_profiles()
+        description = profiles.get(profile_name, "Unknown profile")
+        print(f"  {i}. {profile_name} - {description}")
+
+    return 0
+
+
+def validate_pipeline_command(target_dir: Path, pipeline: str) -> int:
+    """Validate directory structure for a pipeline."""
+    if not target_dir.exists():
+        print(f"Error: Target directory does not exist: {target_dir}")
+        return 1
+
+    report = validate_for_pipeline(pipeline, target_dir)
+
+    print(f"Pipeline validation report for '{pipeline}':")
+    print("=" * 50)
+    print(f"Valid: {'yes' if report.get('valid', False) else 'no'}")
+
+    if "files_found" in report and report["files_found"]:
+        print(f"Files found: {len(report['files_found'])}")
+        for file_path in report["files_found"][:5]:
+            print(f"  - {file_path}")
+        if len(report["files_found"]) > 5:
+            print(f"  ... and {len(report['files_found']) - 5} more")
+
+    if report.get("warnings"):
+        print("Warnings:")
+        for warning in report["warnings"]:
+            print(f"  Warning: {warning}")
+
+    if report.get("errors"):
+        print("Errors:")
+        for error in report["errors"]:
+            print(f"  Error: {error}")
+
+    return 0 if report.get("valid", False) else 1
+
+
+@app.command("recommend")
+def recommend_cmd(
+    source: Path = typer.Option(
+        ..., "--source", "-s",
+        help="Source directory to analyse.",
+        exists=True, file_okay=False, resolve_path=True,
+    ),
+) -> None:
+    """Recommend configuration profiles for a source directory."""
+    code = recommend_profiles_command(source)
+    if code != 0:
+        raise typer.Exit(code=code)
+
+
+@app.command("validate")
+def validate_cmd(
+    pipeline: str = typer.Option(
+        ..., "--pipeline", "-p",
+        help="Pipeline name to validate against.",
+    ),
+    target: Path = typer.Option(
+        ..., "--target", "-t",
+        help="Target directory to validate.",
+        exists=True, file_okay=False, resolve_path=True,
+    ),
+) -> None:
+    """Validate directory structure for a pipeline."""
+    code = validate_pipeline_command(target, pipeline)
+    if code != 0:
+        raise typer.Exit(code=code)
+
+
+# ---------------------------------------------------------------------------
+# Core commands
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def replay(
+    # Required
+    source: Path = typer.Option(
+        ..., "--source", "-s",
+        help="Source directory containing FASTQ/POD5 files.",
+        exists=True, file_okay=False, resolve_path=True,
+        rich_help_panel="Required",
+    ),
+    target: Path = typer.Option(
+        ..., "--target", "-t",
+        help="Target directory for pipeline to watch.",
+        rich_help_panel="Required",
+    ),
+    # Simulation Configuration
+    profile: Optional[str] = typer.Option(
+        None, help="Use a predefined configuration profile.",
+        rich_help_panel="Simulation Configuration",
+    ),
+    interval: float = typer.Option(
+        5.0, help="Seconds between file operations.",
+        rich_help_panel="Simulation Configuration",
+    ),
+    operation: OperationChoice = typer.Option(
+        OperationChoice.copy,
+        help="File operation: copy files or create symlinks.",
+        rich_help_panel="Simulation Configuration",
+    ),
+    force_structure: Optional[ForceStructure] = typer.Option(
+        None, help="Force specific structure instead of auto-detection.",
+        rich_help_panel="Simulation Configuration",
+    ),
+    batch_size: int = typer.Option(
+        1, help="Number of files to process per interval.",
+        rich_help_panel="Simulation Configuration",
+    ),
+    # Timing Models
+    timing_model: Optional[TimingModelChoice] = typer.Option(
+        None, help="Timing model (overrides profile setting).",
+        rich_help_panel="Timing Models",
+    ),
+    burst_probability: Optional[float] = typer.Option(
+        None, help="Burst probability for Poisson model (0.0-1.0).",
+        rich_help_panel="Timing Models",
+    ),
+    burst_rate_multiplier: Optional[float] = typer.Option(
+        None, help="Burst rate multiplier for Poisson model.",
+        rich_help_panel="Timing Models",
+    ),
+    random_factor: Optional[float] = typer.Option(
+        None, help="Randomness factor for random timing model (0.0-1.0).",
+        rich_help_panel="Timing Models",
+    ),
+    adaptation_rate: Optional[float] = typer.Option(
+        None, help="Adaptation rate for adaptive timing model (0.0-1.0).",
+        rich_help_panel="Timing Models",
+    ),
+    history_size: Optional[int] = typer.Option(
+        None, help="History size for adaptive timing model.",
+        rich_help_panel="Timing Models",
+    ),
+    # Parallel Processing
+    parallel: bool = typer.Option(
+        False, help="Enable parallel processing within batches.",
+        rich_help_panel="Parallel Processing",
+    ),
+    worker_count: int = typer.Option(
+        4, help="Number of worker threads for parallel processing.",
+        rich_help_panel="Parallel Processing",
+    ),
+    # Monitoring
+    monitor: MonitorLevel = typer.Option(
+        MonitorLevel.default,
+        help=(
+            "Progress monitoring level: default (basic), detailed (verbose "
+            "logging), enhanced (resource monitoring + interactive controls), "
+            "none (silent). Enhanced features require: pip install nanorunner[enhanced]"
+        ),
+        rich_help_panel="Monitoring",
+    ),
+    quiet: bool = typer.Option(
+        False, help="Suppress progress output.",
+        rich_help_panel="Monitoring",
+    ),
+    pipeline: Optional[str] = typer.Option(
+        None, help="Validate output for specific pipeline compatibility.",
+        rich_help_panel="Monitoring",
+    ),
+) -> None:
+    """Replay existing FASTQ/POD5 files with configurable timing."""
+    _validate_timing_params(
+        burst_probability, burst_rate_multiplier, random_factor,
+        adaptation_rate, history_size,
+    )
+
+    config = _build_config(
+        target_dir=target,
+        source_dir=source,
+        is_generate=False,
+        profile=profile,
+        interval=interval,
+        operation=operation,
+        force_structure=force_structure,
+        batch_size=batch_size,
+        timing_model=timing_model,
+        burst_probability=burst_probability,
+        burst_rate_multiplier=burst_rate_multiplier,
+        random_factor=random_factor,
+        adaptation_rate=adaptation_rate,
+        history_size=history_size,
+        parallel=parallel,
+        worker_count=worker_count,
+    )
+
+    enable_monitoring, monitor_type = _setup_monitoring(monitor, quiet)
+    _run_simulation(config, enable_monitoring, monitor_type,
+                    is_generate=False, pipeline=pipeline)
+
+
+@app.command()
+def generate(
+    # Required
+    target: Path = typer.Option(
+        ..., "--target", "-t",
+        help="Target directory for generated reads.",
+        rich_help_panel="Required",
+    ),
+    # Genome Source (one required -- validated in body)
+    genomes: Optional[List[Path]] = typer.Option(
+        None, help="Input genome FASTA files.",
+        rich_help_panel="Genome Source",
+    ),
+    species: Optional[List[str]] = typer.Option(
+        None, help="Species names to resolve via GTDB/NCBI.",
+        rich_help_panel="Genome Source",
+    ),
+    mock: Optional[str] = typer.Option(
+        None, help="Preset mock community name (e.g. zymo_d6300).",
+        rich_help_panel="Genome Source",
+    ),
+    taxid: Optional[List[int]] = typer.Option(
+        None, help="Direct NCBI taxonomy IDs.",
+        rich_help_panel="Genome Source",
+    ),
+    # Read Generation
+    generator_backend: GeneratorBackend = typer.Option(
+        GeneratorBackend.auto, help="Read generation backend.",
+        rich_help_panel="Read Generation",
+    ),
+    read_count: int = typer.Option(
+        1000, help="Total number of reads to generate across all genomes.",
+        rich_help_panel="Read Generation",
+    ),
+    mean_read_length: int = typer.Option(
+        5000, help="Mean read length in bases.",
+        rich_help_panel="Read Generation",
+    ),
+    mean_quality: float = typer.Option(
+        20.0, help="Mean Phred quality score (typical for R10.4.1 + SUP: 20.0).",
+        rich_help_panel="Read Generation",
+    ),
+    std_quality: float = typer.Option(
+        4.0, help="Standard deviation of quality scores.",
+        rich_help_panel="Read Generation",
+    ),
+    reads_per_file: int = typer.Option(
+        100, help="Number of reads per output file.",
+        rich_help_panel="Read Generation",
+    ),
+    output_format: OutputFormat = typer.Option(
+        OutputFormat.fastq_gz, help="Output file format.",
+        rich_help_panel="Read Generation",
+    ),
+    mix_reads: bool = typer.Option(
+        False, help="Mix reads from all genomes into shared files.",
+        rich_help_panel="Read Generation",
+    ),
+    # Species/Mock Options
+    sample_type: Optional[SampleType] = typer.Option(
+        None, help="Sample type: pure (per-species barcodes) or mixed.",
+        rich_help_panel="Species/Mock Options",
+    ),
+    abundances: Optional[List[float]] = typer.Option(
+        None, help="Custom abundances for mixed samples (must sum to 1.0).",
+        rich_help_panel="Species/Mock Options",
+    ),
+    offline: bool = typer.Option(
+        False, help="Use only cached genomes, no network requests.",
+        rich_help_panel="Species/Mock Options",
+    ),
+    # Simulation Configuration
+    profile: Optional[str] = typer.Option(
+        None, help="Use a predefined configuration profile.",
+        rich_help_panel="Simulation Configuration",
+    ),
+    interval: float = typer.Option(
+        5.0, help="Seconds between file operations.",
+        rich_help_panel="Simulation Configuration",
+    ),
+    force_structure: Optional[ForceStructure] = typer.Option(
+        None, help="Force specific structure instead of auto-detection.",
+        rich_help_panel="Simulation Configuration",
+    ),
+    batch_size: int = typer.Option(
+        1, help="Number of files to process per interval.",
+        rich_help_panel="Simulation Configuration",
+    ),
+    # Timing Models
+    timing_model: Optional[TimingModelChoice] = typer.Option(
+        None, help="Timing model (overrides profile setting).",
+        rich_help_panel="Timing Models",
+    ),
+    burst_probability: Optional[float] = typer.Option(
+        None, help="Burst probability for Poisson model (0.0-1.0).",
+        rich_help_panel="Timing Models",
+    ),
+    burst_rate_multiplier: Optional[float] = typer.Option(
+        None, help="Burst rate multiplier for Poisson model.",
+        rich_help_panel="Timing Models",
+    ),
+    random_factor: Optional[float] = typer.Option(
+        None, help="Randomness factor for random timing model (0.0-1.0).",
+        rich_help_panel="Timing Models",
+    ),
+    adaptation_rate: Optional[float] = typer.Option(
+        None, help="Adaptation rate for adaptive timing model (0.0-1.0).",
+        rich_help_panel="Timing Models",
+    ),
+    history_size: Optional[int] = typer.Option(
+        None, help="History size for adaptive timing model.",
+        rich_help_panel="Timing Models",
+    ),
+    # Parallel Processing
+    parallel: bool = typer.Option(
+        False, help="Enable parallel processing within batches.",
+        rich_help_panel="Parallel Processing",
+    ),
+    worker_count: int = typer.Option(
+        4, help="Number of worker threads for parallel processing.",
+        rich_help_panel="Parallel Processing",
+    ),
+    # Monitoring
+    monitor: MonitorLevel = typer.Option(
+        MonitorLevel.default,
+        help=(
+            "Progress monitoring level: default (basic), detailed (verbose "
+            "logging), enhanced (resource monitoring + interactive controls), "
+            "none (silent). Enhanced features require: pip install nanorunner[enhanced]"
+        ),
+        rich_help_panel="Monitoring",
+    ),
+    quiet: bool = typer.Option(
+        False, help="Suppress progress output.",
+        rich_help_panel="Monitoring",
+    ),
+    pipeline: Optional[str] = typer.Option(
+        None, help="Validate output for specific pipeline compatibility.",
+        rich_help_panel="Monitoring",
+    ),
+) -> None:
+    """Generate simulated nanopore reads from genome FASTA files."""
+    # Mutual exclusivity validation
+    sources = sum([
+        genomes is not None,
+        species is not None,
+        mock is not None,
+        taxid is not None,
+    ])
+    if sources == 0:
+        typer.echo(
+            "Error: specify one of --genomes, --species, --mock, or --taxid",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    if sources > 1:
+        typer.echo(
+            "Error: --genomes, --species, --mock, and --taxid are mutually exclusive",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    # Validate genome files exist
+    if genomes:
+        for gpath in genomes:
+            if not gpath.exists():
+                typer.echo(f"Error: Genome file does not exist: {gpath}", err=True)
+                raise typer.Exit(code=2)
+
+    _validate_timing_params(
+        burst_probability, burst_rate_multiplier, random_factor,
+        adaptation_rate, history_size,
+    )
+
+    config = _build_config(
+        target_dir=target,
+        is_generate=True,
+        profile=profile,
+        interval=interval,
+        force_structure=force_structure,
+        batch_size=batch_size,
+        timing_model=timing_model,
+        burst_probability=burst_probability,
+        burst_rate_multiplier=burst_rate_multiplier,
+        random_factor=random_factor,
+        adaptation_rate=adaptation_rate,
+        history_size=history_size,
+        parallel=parallel,
+        worker_count=worker_count,
+        genomes=genomes,
+        generator_backend=generator_backend,
+        read_count=read_count,
+        mean_read_length=mean_read_length,
+        mean_quality=mean_quality,
+        std_quality=std_quality,
+        reads_per_file=reads_per_file,
+        output_format=output_format,
+        mix_reads=mix_reads,
+        species=species,
+        mock=mock,
+        taxid=taxid,
+        sample_type=sample_type,
+        abundances=abundances,
+        offline=offline,
+    )
+
+    enable_monitoring, monitor_type = _setup_monitoring(monitor, quiet)
+    _run_simulation(config, enable_monitoring, monitor_type,
+                    is_generate=True, pipeline=pipeline)
+
+
+# ---------------------------------------------------------------------------
+# Download command
+# ---------------------------------------------------------------------------
+
+
+def _download_genomes(
+    species: Optional[List[str]],
+    mock_name: Optional[str],
+    taxid: Optional[List[int]],
+) -> tuple:
+    """Resolve and download genomes. Returns (successful_downloads, mock_community)."""
+    resolver = SpeciesResolver()
+    genomes_to_download: List[tuple] = []
+    mock_community = None
+
+    if mock_name:
+        mock_community = get_mock_community(mock_name)
+        if mock_community is None:
+            print(f"Error: Unknown mock community: {mock_name}")
+            raise typer.Exit(code=1)
+        for org in mock_community.organisms:
             ref: Optional[GenomeRef] = None
             if org.accession:
                 domain = (
@@ -126,910 +985,176 @@ def download_command(args: argparse.Namespace) -> int:
             else:
                 print(f"Warning: Could not resolve: {org.name}")
 
-    if args.species:
-        for species in args.species:
-            ref = resolver.resolve(species)
+    if species:
+        for sp in species:
+            ref = resolver.resolve(sp)
             if ref:
-                genomes_to_download.append((species, ref))
+                genomes_to_download.append((sp, ref))
             else:
-                print(f"Warning: Could not resolve: {species}")
+                print(f"Warning: Could not resolve: {sp}")
 
-    if args.taxid:
-        for taxid in args.taxid:
-            ref = resolver.resolve_taxid(taxid)
+    if taxid:
+        for tid in taxid:
+            ref = resolver.resolve_taxid(tid)
             if ref:
-                genomes_to_download.append((f"taxid:{taxid}", ref))
+                genomes_to_download.append((f"taxid:{tid}", ref))
             else:
-                print(f"Warning: Could not resolve taxid: {taxid}")
+                print(f"Warning: Could not resolve taxid: {tid}")
 
     if not genomes_to_download:
         print("No genomes to download")
-        return 1
+        raise typer.Exit(code=1)
 
     print(f"Downloading {len(genomes_to_download)} genome(s)...")
-    successful_downloads: List[tuple] = []
+    successful: List[tuple] = []
     for name, ref in genomes_to_download:
         try:
             path = download_genome(ref, resolver.cache)
             print(f"  Downloaded: {name} -> {path}")
-            successful_downloads.append((name, ref, path))
+            successful.append((name, ref, path))
         except Exception as e:
             print(f"  Failed: {name} - {e}")
 
     print("Download complete")
+    return successful, mock_community
 
-    # If target_dir provided, generate reads from downloaded genomes
-    if args.target_dir is not None:
+
+@app.command()
+def download(
+    # Genome Source (one required)
+    species: Optional[List[str]] = typer.Option(
+        None, help="Species names to download.",
+        rich_help_panel="Genome Source",
+    ),
+    mock: Optional[str] = typer.Option(
+        None, help="Mock community to download genomes for.",
+        rich_help_panel="Genome Source",
+    ),
+    taxid: Optional[List[int]] = typer.Option(
+        None, help="NCBI taxonomy IDs to download.",
+        rich_help_panel="Genome Source",
+    ),
+    # Optional target for generation
+    target: Optional[Path] = typer.Option(
+        None, "--target", "-t",
+        help="Target directory for read generation (omit for download only).",
+    ),
+    # Generation options (when target provided)
+    read_count: int = typer.Option(
+        1000, help="Total number of reads to generate.",
+        rich_help_panel="Generation Options",
+    ),
+    reads_per_file: int = typer.Option(
+        100, help="Number of reads per output file.",
+        rich_help_panel="Generation Options",
+    ),
+    mean_read_length: int = typer.Option(
+        5000, help="Mean read length in bases.",
+        rich_help_panel="Generation Options",
+    ),
+    mean_quality: float = typer.Option(
+        20.0, help="Mean Phred quality score.",
+        rich_help_panel="Generation Options",
+    ),
+    std_quality: float = typer.Option(
+        4.0, help="Standard deviation of quality scores.",
+        rich_help_panel="Generation Options",
+    ),
+    output_format: OutputFormat = typer.Option(
+        OutputFormat.fastq_gz, help="Output file format.",
+        rich_help_panel="Generation Options",
+    ),
+    generator_backend: GeneratorBackend = typer.Option(
+        GeneratorBackend.auto, help="Read generation backend.",
+        rich_help_panel="Generation Options",
+    ),
+    interval: float = typer.Option(
+        5.0, help="Seconds between file operations.",
+        rich_help_panel="Generation Options",
+    ),
+    batch_size: int = typer.Option(
+        1, help="Number of files to process per interval.",
+        rich_help_panel="Generation Options",
+    ),
+    sample_type: Optional[SampleType] = typer.Option(
+        None, help="Sample type: pure (per-species barcodes) or mixed.",
+        rich_help_panel="Generation Options",
+    ),
+    mix_reads: bool = typer.Option(
+        False, help="Mix reads from all genomes into shared files.",
+        rich_help_panel="Generation Options",
+    ),
+) -> None:
+    """Download genomes for offline use, optionally generating reads."""
+    if not (species or mock or taxid):
+        print("Error: Must specify --species, --mock, or --taxid")
+        raise typer.Exit(code=1)
+
+    successful_downloads, mock_community = _download_genomes(species, mock, taxid)
+
+    if target is not None:
         if not successful_downloads:
             print("Error: No genomes downloaded successfully, cannot generate reads")
-            return 1
+            raise typer.Exit(code=1)
 
         genome_paths = [path for _, _, path in successful_downloads]
 
-        # Determine sample type
-        sample_type = args.sample_type
-        if sample_type is None:
-            sample_type = "mixed" if len(genome_paths) > 1 else "pure"
+        st = sample_type.value if sample_type else None
+        if st is None:
+            st = "mixed" if len(genome_paths) > 1 else "pure"
 
-        # Compute abundances from mock community if applicable
-        abundances = None
-        if mock is not None:
+        abundances_list = None
+        if mock_community is not None:
             downloaded_names = {name for name, _, _ in successful_downloads}
-            abundances = []
-            for org in mock.organisms:
+            abundances_list = []
+            for org in mock_community.organisms:
                 if org.name in downloaded_names:
-                    abundances.append(org.abundance)
-            # Renormalize if some organisms failed to download
-            total = sum(abundances)
+                    abundances_list.append(org.abundance)
+            total = sum(abundances_list)
             if total > 0 and abs(total - 1.0) > 0.001:
-                abundances = [a / total for a in abundances]
+                abundances_list = [a / total for a in abundances_list]
 
         try:
             config = SimulationConfig(
-                target_dir=args.target_dir,
+                target_dir=target,
                 operation="generate",
                 genome_inputs=genome_paths,
-                generator_backend=args.generator_backend,
-                read_count=args.read_count,
-                mean_read_length=args.mean_read_length,
-                mean_quality=args.mean_quality,
-                std_quality=args.std_quality,
-                reads_per_file=args.reads_per_file,
-                output_format=args.output_format,
-                mix_reads=args.mix_reads,
-                interval=args.interval,
-                batch_size=args.batch_size,
-                sample_type=sample_type,
-                abundances=abundances,
+                generator_backend=generator_backend.value,
+                read_count=read_count,
+                mean_read_length=mean_read_length,
+                mean_quality=mean_quality,
+                std_quality=std_quality,
+                reads_per_file=reads_per_file,
+                output_format=output_format.value,
+                mix_reads=mix_reads,
+                interval=interval,
+                batch_size=batch_size,
+                sample_type=st,
+                abundances=abundances_list,
             )
 
-            print(f"\nGenerating reads into {args.target_dir}...")
+            print(f"\nGenerating reads into {target}...")
             simulator = NanoporeSimulator(config, enable_monitoring=True)
             simulator.run_simulation()
             print("Read generation complete")
         except Exception as e:
             print(f"Error during read generation: {e}")
-            return 1
-
-    return 0
+            raise typer.Exit(code=1)
 
 
-def recommend_profiles_command(source_dir: Path) -> int:
-    """Recommend profiles based on source directory"""
-    if not source_dir.exists():
-        print(f"Error: Source directory does not exist: {source_dir}")
-        return 1
-
-    if not source_dir.is_dir():
-        print(f"Error: Not a directory: {source_dir}")
-        return 1
-
-    # Count sequencing files for recommendations
-    files = FileStructureDetector._find_sequencing_files(source_dir)
-    file_count = len(files)
-
-    print(f"Analysis of {source_dir}:")
-    print(f"  Found {file_count} sequencing files")
-
-    if file_count == 0:
-        # Check if the directory contains genome FASTA files instead
-        genome_extensions = {".fa", ".fasta", ".fa.gz", ".fasta.gz"}
-        genome_files = [
-            f
-            for f in source_dir.iterdir()
-            if f.is_file()
-            and any(f.name.lower().endswith(ext) for ext in genome_extensions)
-        ]
-        # Also check barcode subdirectories for sequencing files
-        barcode_seq_count = 0
-        for subdir in source_dir.iterdir():
-            if subdir.is_dir():
-                barcode_seq_count += len(
-                    FileStructureDetector._find_sequencing_files(subdir)
-                )
-
-        if genome_files:
-            print(f"\n  Found {len(genome_files)} genome FASTA file(s) instead:")
-            for gf in genome_files[:5]:
-                print(f"    {gf.name}")
-            if len(genome_files) > 5:
-                print(f"    ... and {len(genome_files) - 5} more")
-            print("\n  --recommend is for replay mode (existing sequencing reads).")
-            print("  To generate reads from genome FASTA files, use:")
-            print(f"    nanorunner --genomes {genome_files[0].name} <target_dir>")
-            return 1
-
-        if barcode_seq_count > 0:
-            # Files exist in subdirectories but not in root -- proceed
-            # with structure detection which will find them
-            pass
-        else:
-            all_files = [f for f in source_dir.iterdir() if f.is_file()]
-            print("\n  No sequencing files found. --recommend expects a directory")
-            print("  containing FASTQ or POD5 files for replay mode.")
-            print(
-                f"  Supported extensions: {', '.join(sorted(FileStructureDetector.SUPPORTED_EXTENSIONS))}"
-            )
-            if all_files:
-                extensions = set()
-                for f in all_files:
-                    name = f.name.lower()
-                    if ".gz" in name:
-                        ext = "." + ".".join(name.rsplit(".", 2)[-2:])
-                    else:
-                        ext = f.suffix.lower()
-                    extensions.add(ext)
-                print(f"  Files found with extensions: {', '.join(sorted(extensions))}")
-            return 1
-
-    # Detect structure
-    try:
-        structure = FileStructureDetector.detect_structure(source_dir)
-    except ValueError as e:
-        print(f"\n  Error: {e}")
-        return 1
-    print(f"  Detected structure: {structure}")
-
-    # Get recommendations
-    recommendations = get_profile_recommendations(file_count, "general")
-    print(f"\nRecommended profiles for {file_count} files:")
-    for i, profile_name in enumerate(recommendations, 1):
-        profiles = get_available_profiles()
-        description = profiles.get(profile_name, "Unknown profile")
-        print(f"  {i}. {profile_name} - {description}")
-
-    return 0
-
-
-def validate_pipeline_command(target_dir: Path, pipeline: str) -> int:
-    """Validate directory structure for a pipeline"""
-    if not target_dir.exists():
-        print(f"Error: Target directory does not exist: {target_dir}")
-        return 1
-
-    report = validate_for_pipeline(pipeline, target_dir)
-
-    print(f"Pipeline validation report for '{pipeline}':")
-    print("=" * 50)
-    print(f"Valid: {'✓' if report.get('valid', False) else '✗'}")
-
-    if "files_found" in report and report["files_found"]:
-        print(f"Files found: {len(report['files_found'])}")
-        for file_path in report["files_found"][:5]:  # Show first 5 files
-            print(f"  - {file_path}")
-        if len(report["files_found"]) > 5:
-            print(f"  ... and {len(report['files_found']) - 5} more")
-
-    if report.get("warnings"):
-        print("Warnings:")
-        for warning in report["warnings"]:
-            print(f"  ⚠ {warning}")
-
-    if report.get("errors"):
-        print("Errors:")
-        for error in report["errors"]:
-            print(f"  ✗ {error}")
-
-    return 0 if report.get("valid", False) else 1
+# ---------------------------------------------------------------------------
+# Backward-compatible entry point
+# ---------------------------------------------------------------------------
 
 
 def main() -> int:
-    """Main CLI entry point"""
-    # Handle download subcommand separately to avoid conflicts with positional args
-    if len(sys.argv) > 1 and sys.argv[1] == "download":
-        download_parser = argparse.ArgumentParser(
-            prog="nanorunner download",
-            description=(
-                "Pre-download genomes for offline use. If TARGET_DIR is provided,\n"
-                "also generate simulated reads into that directory."
-            ),
-            formatter_class=argparse.RawDescriptionHelpFormatter,
-        )
-        download_parser.add_argument(
-            "--species",
-            type=str,
-            nargs="+",
-            help="Species names to download",
-        )
-        download_parser.add_argument(
-            "--mock",
-            type=str,
-            help="Mock community to download genomes for",
-        )
-        download_parser.add_argument(
-            "--taxid",
-            type=int,
-            nargs="+",
-            help="NCBI taxonomy IDs to download",
-        )
-        download_parser.add_argument(
-            "target_dir",
-            type=Path,
-            nargs="?",
-            default=None,
-            help="Target directory for read generation (if omitted, download only)",
-        )
-        download_parser.add_argument(
-            "--read-count",
-            type=int,
-            default=1000,
-            help="Total number of reads to generate across all genomes (default: 1000)",
-        )
-        download_parser.add_argument(
-            "--reads-per-file",
-            type=int,
-            default=100,
-            help="Number of reads per output file (default: 100)",
-        )
-        download_parser.add_argument(
-            "--mean-read-length",
-            type=int,
-            default=5000,
-            help="Mean read length in bases (default: 5000)",
-        )
-        download_parser.add_argument(
-            "--mean-quality",
-            type=float,
-            default=20.0,
-            help="Mean Phred quality score for generated reads (default: 20.0, typical for R10.4.1 + SUP)",
-        )
-        download_parser.add_argument(
-            "--std-quality",
-            type=float,
-            default=4.0,
-            help="Standard deviation of quality scores (default: 4.0)",
-        )
-        download_parser.add_argument(
-            "--output-format",
-            choices=["fastq", "fastq.gz"],
-            default="fastq.gz",
-            help="Output file format (default: fastq.gz)",
-        )
-        download_parser.add_argument(
-            "--generator-backend",
-            choices=["auto", "builtin", "badread", "nanosim"],
-            default="auto",
-            help="Read generation backend (default: auto)",
-        )
-        download_parser.add_argument(
-            "--interval",
-            type=float,
-            default=5.0,
-            help="Seconds between file operations (default: 5.0)",
-        )
-        download_parser.add_argument(
-            "--batch-size",
-            type=int,
-            default=1,
-            help="Number of files to process per interval (default: 1)",
-        )
-        download_parser.add_argument(
-            "--sample-type",
-            choices=["pure", "mixed"],
-            help="Sample type: pure (per-species barcodes) or mixed (interleaved)",
-        )
-        download_parser.add_argument(
-            "--mix-reads",
-            action="store_true",
-            help="Mix reads from all genomes into shared files (singleplex mode)",
-        )
-        args = download_parser.parse_args(sys.argv[2:])
-        return download_command(args)
-
-    parser = argparse.ArgumentParser(
-        prog="nanorunner",
-        usage="%(prog)s [options] SOURCE_DIR TARGET_DIR\n"
-        "       %(prog)s --genomes FASTA [...] TARGET_DIR [options]\n"
-        "       %(prog)s --species/--mock/--taxid ... TARGET_DIR [options]\n"
-        "       %(prog)s --list-profiles | --list-mocks | ...\n"
-        "       %(prog)s download --species/--mock/--taxid ... [TARGET_DIR] [options]",
-        description=(
-            "Nanopore sequencing run simulator for testing bioinformatics"
-            " pipelines.\n"
-            "\n"
-            "Simulates the incremental file delivery of a nanopore sequencer,\n"
-            "providing configurable timing for pipeline testing and"
-            " development.\n"
-            "\n"
-            "Operation Modes:\n"
-            "  Replay    nanorunner SOURCE TARGET [options]\n"
-            "            Transfer existing FASTQ/POD5 files with configurable"
-            " timing.\n"
-            "\n"
-            "  Generate  nanorunner --genomes FASTA [...] TARGET [options]\n"
-            "            Produce simulated reads from genome FASTA files.\n"
-            "\n"
-            "  Species   nanorunner --species/--mock/--taxid ... TARGET"
-            " [options]\n"
-            "            Resolve species via GTDB/NCBI and generate reads.\n"
-            "\n"
-            "  Download  nanorunner download --species/--mock/--taxid ... [TARGET]\n"
-            "            Pre-download genomes. Add TARGET to also generate reads."
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""\
-Examples:
-  Replay mode:
-    nanorunner /data/source /watch/output --interval 5
-    nanorunner /data/source /watch/output --profile rapid_sequencing
-    nanorunner /data/source /watch/output --timing-model poisson
-
-  Generate mode:
-    nanorunner --genomes genome1.fa genome2.fa /watch/output --interval 5
-    nanorunner --mock zymo_d6300 /watch/output --read-count 5000
-
-  Information:
-    nanorunner --list-profiles
-    nanorunner --list-mocks
-    nanorunner --recommend /path/to/data
-
-  Download:
-    nanorunner download --species "Escherichia coli"
-    nanorunner download --mock quick_3species
-    nanorunner download --mock quick_3species /watch/output --read-count 5000
-
-  Enhanced features require: pip install nanorunner[enhanced]""",
-    )
-
-    # Positional arguments
-    parser.add_argument(
-        "source_dir",
-        type=Path,
-        nargs="?",
-        help="Source directory containing FASTQ/POD5 files",
-    )
-    parser.add_argument(
-        "target_dir",
-        type=Path,
-        nargs="?",
-        help="Target directory for pipeline to watch",
-    )
-
-    # Information commands
-    info_group = parser.add_argument_group("Information Commands")
-    info_group.add_argument(
-        "--list-profiles",
-        action="store_true",
-        help="List all available configuration profiles",
-    )
-    info_group.add_argument(
-        "--list-adapters",
-        action="store_true",
-        help="List all available pipeline adapters",
-    )
-    info_group.add_argument(
-        "--list-generators",
-        action="store_true",
-        help="List available read generation backends",
-    )
-    info_group.add_argument(
-        "--list-mocks",
-        action="store_true",
-        help="List available mock communities",
-    )
-    info_group.add_argument(
-        "--recommend",
-        type=Path,
-        metavar="SOURCE_DIR",
-        help="Get profile recommendations for a source directory",
-    )
-    info_group.add_argument(
-        "--validate-pipeline",
-        nargs=2,
-        metavar=("PIPELINE", "TARGET_DIR"),
-        help="Validate target directory for a specific pipeline",
-    )
-
-    # Simulation configuration
-    sim_group = parser.add_argument_group("Simulation Configuration")
-    sim_group.add_argument(
-        "--profile", type=str, help="Use a predefined configuration profile"
-    )
-    sim_group.add_argument(
-        "--interval",
-        type=float,
-        default=5.0,
-        help="Seconds between file operations (default: 5.0)",
-    )
-    sim_group.add_argument(
-        "--operation",
-        choices=["copy", "link"],
-        default="copy",
-        help="File operation: copy files or create symlinks (default: copy)",
-    )
-    sim_group.add_argument(
-        "--force-structure",
-        choices=["singleplex", "multiplex"],
-        help="Force specific structure instead of auto-detection",
-    )
-    sim_group.add_argument(
-        "--batch-size",
-        type=int,
-        default=1,
-        help="Number of files to process per interval (default: 1)",
-    )
-
-    # Timing model options
-    timing_group = parser.add_argument_group("Timing Models")
-    timing_group.add_argument(
-        "--timing-model",
-        choices=["uniform", "random", "poisson", "adaptive"],
-        help="Timing model to use (overrides profile setting)",
-    )
-    timing_group.add_argument(
-        "--burst-probability",
-        type=float,
-        help="Burst probability for Poisson model (0.0-1.0)",
-    )
-    timing_group.add_argument(
-        "--burst-rate-multiplier",
-        type=float,
-        help="Burst rate multiplier for Poisson model",
-    )
-    timing_group.add_argument(
-        "--random-factor",
-        type=float,
-        help="Randomness factor for random timing model (0.0-1.0)",
-    )
-    timing_group.add_argument(
-        "--adaptation-rate",
-        type=float,
-        help="Adaptation rate for adaptive timing model (0.0-1.0, default: 0.1)",
-    )
-    timing_group.add_argument(
-        "--history-size",
-        type=int,
-        help="History size for adaptive timing model (default: 10)",
-    )
-
-    # Parallel processing options
-    parallel_group = parser.add_argument_group("Parallel Processing")
-    parallel_group.add_argument(
-        "--parallel",
-        action="store_true",
-        help="Enable parallel processing within batches",
-    )
-    parallel_group.add_argument(
-        "--worker-count",
-        type=int,
-        default=4,
-        help="Number of worker threads for parallel processing (default: 4)",
-    )
-
-    # Monitoring options
-    monitor_group = parser.add_argument_group("Monitoring")
-    monitor_group.add_argument(
-        "--monitor",
-        choices=["default", "detailed", "enhanced", "none"],
-        default="default",
-        help="Progress monitoring level: default (basic), detailed (verbose logging), enhanced (resource monitoring + interactive controls), none (silent)",
-    )
-    monitor_group.add_argument(
-        "--quiet", action="store_true", help="Suppress progress output"
-    )
-    monitor_group.add_argument(
-        "--pipeline",
-        type=str,
-        help="Validate output for specific pipeline compatibility",
-    )
-
-    # Read generation arguments
-    gen_group = parser.add_argument_group("Read Generation")
-    gen_group.add_argument(
-        "--genomes",
-        type=Path,
-        nargs="+",
-        metavar="FASTA",
-        help="Input genome FASTA files for read generation mode",
-    )
-    gen_group.add_argument(
-        "--generator-backend",
-        choices=["auto", "builtin", "badread", "nanosim"],
-        default="auto",
-        help="Read generation backend (default: auto)",
-    )
-    gen_group.add_argument(
-        "--read-count",
-        type=int,
-        default=1000,
-        help="Total number of reads to generate across all genomes (default: 1000)",
-    )
-    gen_group.add_argument(
-        "--mean-read-length",
-        type=int,
-        default=5000,
-        help="Mean read length in bases (default: 5000)",
-    )
-    gen_group.add_argument(
-        "--reads-per-file",
-        type=int,
-        default=100,
-        help="Number of reads per output file (default: 100)",
-    )
-    gen_group.add_argument(
-        "--output-format",
-        choices=["fastq", "fastq.gz"],
-        default="fastq.gz",
-        help="Output file format (default: fastq.gz)",
-    )
-    gen_group.add_argument(
-        "--mean-quality",
-        type=float,
-        default=20.0,
-        help="Mean Phred quality score for generated reads (default: 20.0, typical for R10.4.1 + SUP)",
-    )
-    gen_group.add_argument(
-        "--std-quality",
-        type=float,
-        default=4.0,
-        help="Standard deviation of quality scores (default: 4.0)",
-    )
-    gen_group.add_argument(
-        "--mix-reads",
-        action="store_true",
-        help="Mix reads from all genomes into shared files (singleplex mode)",
-    )
-
-    # Species/Mock generation arguments
-    species_group = parser.add_argument_group("Species/Mock Generation")
-    species_group.add_argument(
-        "--species",
-        type=str,
-        nargs="+",
-        metavar="NAME",
-        help="Species names to resolve via GTDB/NCBI",
-    )
-    species_group.add_argument(
-        "--mock",
-        type=str,
-        metavar="MOCK_NAME",
-        help="Preset mock community name (e.g., zymo_d6300)",
-    )
-    species_group.add_argument(
-        "--taxid",
-        type=int,
-        nargs="+",
-        metavar="TAXID",
-        help="Direct NCBI taxonomy IDs",
-    )
-    species_group.add_argument(
-        "--sample-type",
-        choices=["pure", "mixed"],
-        help="Sample type: pure (per-species barcodes) or mixed (interleaved)",
-    )
-    species_group.add_argument(
-        "--abundances",
-        type=float,
-        nargs="+",
-        metavar="ABUNDANCE",
-        help="Custom abundances for mixed samples (must sum to 1.0)",
-    )
-    species_group.add_argument(
-        "--offline",
-        action="store_true",
-        help="Use only cached genomes, no network requests",
-    )
-
-    parser.add_argument(
-        "--version", action="version", version=f"%(prog)s {__version__}"
-    )
-
-    args = parser.parse_args()
-
-    # No arguments at all: show help instead of an error
-    if len(sys.argv) == 1:
-        parser.print_help()
-        return 0
-
-    # Handle command-specific operations
-    if args.list_profiles:
-        return list_profiles_command()
-
-    if args.list_adapters:
-        return list_adapters_command()
-
-    if args.recommend:
-        return recommend_profiles_command(args.recommend)
-
-    if args.validate_pipeline:
-        pipeline_name, target_dir = args.validate_pipeline
-        return validate_pipeline_command(Path(target_dir), pipeline_name)
-
-    if args.list_generators:
-        return list_generators_command()
-
-    if args.list_mocks:
-        return list_mocks_command()
-
-    # Check mutual exclusivity of species/mock/taxid/genomes
-    species_mock_count = sum(
-        [
-            args.species is not None,
-            args.mock is not None,
-            args.taxid is not None,
-            args.genomes is not None,
-        ]
-    )
-    if species_mock_count > 1:
-        parser.error("--species, --mock, --taxid, and --genomes are mutually exclusive")
-
-    # Determine operation mode
-    is_generate = (
-        args.genomes is not None
-        or args.species is not None
-        or args.mock is not None
-        or args.taxid is not None
-    )
-
-    if is_generate:
-        # Generate mode: only target_dir required
-        if not args.target_dir:
-            # If source_dir was provided but not target_dir, treat source_dir as target_dir
-            if args.source_dir:
-                args.target_dir = args.source_dir
-                args.source_dir = None
-            else:
-                parser.error("target_dir is required for generate mode")
-        # Validate genome files if provided
-        if args.genomes:
-            for gpath in args.genomes:
-                if not gpath.exists():
-                    parser.error(f"Genome file does not exist: {gpath}")
-    else:
-        # Copy/link mode: both dirs required
-        if not args.source_dir or not args.target_dir:
-            parser.error("source_dir and target_dir are required for simulation")
-        if not args.source_dir.exists():
-            parser.error(f"Source directory does not exist: {args.source_dir}")
-
-    # Validate arguments
-    if args.random_factor is not None and (
-        args.random_factor < 0.0 or args.random_factor > 1.0
-    ):
-        parser.error("Random factor must be between 0.0 and 1.0")
-
-    if args.burst_probability is not None and (
-        args.burst_probability < 0.0 or args.burst_probability > 1.0
-    ):
-        parser.error("Burst probability must be between 0.0 and 1.0")
-
-    if args.burst_rate_multiplier is not None and args.burst_rate_multiplier <= 0:
-        parser.error("Burst rate multiplier must be positive")
-
-    if args.adaptation_rate is not None and (
-        args.adaptation_rate < 0.0 or args.adaptation_rate > 1.0
-    ):
-        parser.error("Adaptation rate must be between 0.0 and 1.0")
-
-    if args.history_size is not None and args.history_size < 1:
-        parser.error("History size must be at least 1")
-
-    # Create configuration
+    """Entry point for console_scripts and bin/nanopore-simulator."""
     try:
-        if args.profile:
-            # Validate profile exists
-            if not validate_profile_name(args.profile):
-                parser.error(f"Unknown profile: {args.profile}")
-
-            # Build timing model params from CLI arguments
-            timing_model_params = {}
-
-            # Handle Poisson model parameters
-            if args.burst_probability is not None:
-                timing_model_params["burst_probability"] = args.burst_probability
-            if args.burst_rate_multiplier is not None:
-                timing_model_params["burst_rate_multiplier"] = (
-                    args.burst_rate_multiplier
-                )
-
-            # Handle random model parameters
-            if args.random_factor is not None:
-                timing_model_params["random_factor"] = args.random_factor
-
-            # Handle adaptive model parameters
-            if args.adaptation_rate is not None:
-                timing_model_params["adaptation_rate"] = args.adaptation_rate
-            if args.history_size is not None:
-                timing_model_params["history_size"] = args.history_size
-
-            # Create config from profile with overrides
-            overrides = {}
-            if args.timing_model:
-                overrides["timing_model"] = args.timing_model
-                overrides["timing_model_params"] = timing_model_params
-            elif timing_model_params:
-                overrides["timing_model_params"] = timing_model_params
-
-            if args.operation != "copy":
-                overrides["operation"] = args.operation
-            if args.batch_size != 1:
-                overrides["batch_size"] = args.batch_size
-            if args.parallel:
-                overrides["parallel_processing"] = True
-            if args.worker_count != 4:
-                overrides["worker_count"] = args.worker_count
-            if args.force_structure:
-                overrides["force_structure"] = args.force_structure
-
-            if is_generate:
-                overrides["operation"] = "generate"
-                if args.genomes:
-                    overrides["genome_inputs"] = args.genomes
-                overrides["generator_backend"] = args.generator_backend
-                overrides["read_count"] = args.read_count
-                overrides["mean_read_length"] = args.mean_read_length
-                overrides["mean_quality"] = args.mean_quality
-                overrides["std_quality"] = args.std_quality
-                overrides["reads_per_file"] = args.reads_per_file
-                overrides["output_format"] = args.output_format
-                overrides["mix_reads"] = args.mix_reads
-
-            # Add species/mock generation parameters
-            if args.species:
-                overrides["species_inputs"] = args.species
-            if args.mock:
-                overrides["mock_name"] = args.mock
-            if args.taxid:
-                overrides["taxid_inputs"] = args.taxid
-            if args.sample_type:
-                overrides["sample_type"] = args.sample_type
-            if args.abundances:
-                overrides["abundances"] = args.abundances
-            if args.offline:
-                overrides["offline_mode"] = args.offline
-
-            config = create_config_from_profile(
-                args.profile,
-                args.source_dir,
-                args.target_dir,
-                args.interval,
-                **overrides,
-            )
-        else:
-            # Build timing model configuration
-            timing_model = args.timing_model or "uniform"
-            timing_model_params = {}
-
-            if timing_model == "random":
-                if args.random_factor is not None:
-                    timing_model_params["random_factor"] = args.random_factor
-            elif timing_model == "poisson":
-                if args.burst_probability is not None:
-                    timing_model_params["burst_probability"] = args.burst_probability
-                if args.burst_rate_multiplier is not None:
-                    timing_model_params["burst_rate_multiplier"] = (
-                        args.burst_rate_multiplier
-                    )
-            elif timing_model == "adaptive":
-                if args.adaptation_rate is not None:
-                    timing_model_params["adaptation_rate"] = args.adaptation_rate
-                if args.history_size is not None:
-                    timing_model_params["history_size"] = args.history_size
-
-            # Build base config kwargs
-            config_kwargs = {
-                "target_dir": args.target_dir,
-                "interval": args.interval,
-                "force_structure": args.force_structure,
-                "batch_size": args.batch_size,
-                "timing_model": timing_model,
-                "timing_model_params": timing_model_params,
-                "parallel_processing": args.parallel,
-                "worker_count": args.worker_count,
-            }
-
-            if is_generate:
-                config_kwargs["operation"] = "generate"
-                if args.genomes:
-                    config_kwargs["genome_inputs"] = args.genomes
-                config_kwargs["generator_backend"] = args.generator_backend
-                config_kwargs["read_count"] = args.read_count
-                config_kwargs["mean_read_length"] = args.mean_read_length
-                config_kwargs["mean_quality"] = args.mean_quality
-                config_kwargs["std_quality"] = args.std_quality
-                config_kwargs["reads_per_file"] = args.reads_per_file
-                config_kwargs["output_format"] = args.output_format
-                config_kwargs["mix_reads"] = args.mix_reads
-            else:
-                config_kwargs["source_dir"] = args.source_dir
-                config_kwargs["operation"] = args.operation
-
-            # Add species/mock generation parameters
-            if args.species:
-                config_kwargs["species_inputs"] = args.species
-            if args.mock:
-                config_kwargs["mock_name"] = args.mock
-            if args.taxid:
-                config_kwargs["taxid_inputs"] = args.taxid
-            if args.sample_type:
-                config_kwargs["sample_type"] = args.sample_type
-            if args.abundances:
-                config_kwargs["abundances"] = args.abundances
-            if args.offline:
-                config_kwargs["offline_mode"] = args.offline
-
-            config = SimulationConfig(**config_kwargs)
-
-        # Determine monitoring settings
-        enable_monitoring = not args.quiet and args.monitor != "none"
-        monitor_type = args.monitor if enable_monitoring else "default"
-
-        # Handle enhanced monitoring options
-        if monitor_type == "enhanced":
-            # Warn if psutil not available
-            try:
-                import psutil
-            except ImportError:
-                print(
-                    "Warning: Enhanced monitoring requires psutil. Install with: pip install nanorunner[enhanced]"
-                )
-                print("Falling back to detailed monitoring mode.")
-                monitor_type = "detailed"
-
-        # Run simulation
-        simulator = NanoporeSimulator(config, enable_monitoring, monitor_type)
-
-        # Notify user if builtin generator was selected
-        if is_generate and hasattr(simulator, "read_generator"):
-            from ..core.generators import BuiltinGenerator
-
-            if isinstance(simulator.read_generator, BuiltinGenerator):
-                print(
-                    "Note: Using builtin generator (error-free reads). "
-                    "For realistic error profiles, install badread: pip install badread"
-                )
-
-        # Print helpful instructions for enhanced monitoring
-        if monitor_type == "enhanced":
-            print("Enhanced monitoring active. Interactive controls:")
-            print("  - Ctrl+C: Graceful shutdown with summary")
-            print("  - SIGTERM: Graceful shutdown (on Unix systems)")
-            print("  - Progress is automatically checkpointed every 10 files")
-            print("  - Resource usage (CPU, memory) is monitored\n")
-
-        simulator.run_simulation()
-
-        # Post-simulation pipeline validation if requested
-        if args.pipeline:
-            print(f"\nValidating output for {args.pipeline} pipeline...")
-            report = validate_for_pipeline(args.pipeline, args.target_dir)
-            if report.get("valid", False):
-                print(f"✓ Output is compatible with {args.pipeline} pipeline")
-            else:
-                print(f"✗ Output may not be compatible with {args.pipeline} pipeline")
-                if report.get("warnings"):
-                    for warning in report["warnings"]:
-                        print(f"  ⚠ {warning}")
-
-    except KeyboardInterrupt:
-        print("\nSimulation interrupted by user")
-        return 1
-    except Exception as e:
-        print(f"Error: {e}")
-        return 1
-
-    return 0
+        app(standalone_mode=False)
+        return 0
+    except SystemExit as e:
+        return e.code if isinstance(e.code, int) else 0
 
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())

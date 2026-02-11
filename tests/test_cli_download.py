@@ -1,60 +1,63 @@
-"""Tests for download subcommand"""
+"""Tests for download subcommand using Typer CliRunner."""
 
 import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock, call
-import sys
+from unittest.mock import patch, MagicMock
 
-from nanopore_simulator.cli.main import main
+from typer.testing import CliRunner
+
+from nanopore_simulator.cli.main import app
+
+
+runner = CliRunner()
 
 
 class TestDownloadCommand:
     """Test suite for the download subcommand."""
 
-    def test_download_species(self, monkeypatch, tmp_path):
+    def test_download_species(self, tmp_path):
         """Test downloading genomes by species name."""
-        monkeypatch.setattr(
-            sys, "argv", ["nanorunner", "download", "--species", "Escherichia coli"]
-        )
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
             mock_cls.return_value = mock_resolver
-            mock_resolver.resolve.return_value = MagicMock(accession="GCF_000005845.2")
+            mock_resolver.resolve.return_value = MagicMock(
+                accession="GCF_000005845.2"
+            )
 
             with patch("nanopore_simulator.cli.main.download_genome") as mock_dl:
                 mock_dl.return_value = tmp_path / "genome.fna.gz"
-                result = main()
-                assert result == 0
+                result = runner.invoke(
+                    app, ["download", "--species", "Escherichia coli"]
+                )
+                assert result.exit_code == 0
                 mock_dl.assert_called_once()
 
-    def test_download_mock(self, monkeypatch, tmp_path):
+    def test_download_mock(self, tmp_path):
         """Test downloading genomes for a mock community."""
-        monkeypatch.setattr(
-            sys, "argv", ["nanorunner", "download", "--mock", "quick_3species"]
-        )
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
             mock_cls.return_value = mock_resolver
-            mock_resolver.resolve.return_value = MagicMock(accession="GCF_000005845.2")
+            mock_resolver.resolve.return_value = MagicMock(
+                accession="GCF_000005845.2"
+            )
 
             with patch("nanopore_simulator.cli.main.download_genome") as mock_dl:
                 mock_dl.return_value = tmp_path / "genome.fna.gz"
-                result = main()
-                assert result == 0
+                result = runner.invoke(
+                    app, ["download", "--mock", "quick_3species"]
+                )
+                assert result.exit_code == 0
                 # Should download 3 genomes
                 assert mock_dl.call_count == 3
 
-    def test_download_requires_species_or_mock(self, monkeypatch, capsys):
+    def test_download_requires_species_or_mock(self):
         """Test that download command requires --species, --mock, or --taxid."""
-        monkeypatch.setattr(sys, "argv", ["nanorunner", "download"])
-        result = main()
-        assert result == 1
-        captured = capsys.readouterr()
-        assert "Must specify" in captured.out
+        result = runner.invoke(app, ["download"])
+        assert result.exit_code == 1
+        assert "Must specify" in result.output
 
-    def test_download_taxid(self, monkeypatch, tmp_path):
+    def test_download_taxid(self, tmp_path):
         """Test downloading genomes by taxonomy ID."""
-        monkeypatch.setattr(sys, "argv", ["nanorunner", "download", "--taxid", "562"])
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
             mock_cls.return_value = mock_resolver
@@ -64,64 +67,57 @@ class TestDownloadCommand:
 
             with patch("nanopore_simulator.cli.main.download_genome") as mock_dl:
                 mock_dl.return_value = tmp_path / "genome.fna.gz"
-                result = main()
-                assert result == 0
+                result = runner.invoke(app, ["download", "--taxid", "562"])
+                assert result.exit_code == 0
                 mock_dl.assert_called_once()
 
-    def test_download_unknown_mock(self, monkeypatch, capsys):
+    def test_download_unknown_mock(self):
         """Test that unknown mock community returns error."""
-        monkeypatch.setattr(
-            sys, "argv", ["nanorunner", "download", "--mock", "nonexistent_mock"]
+        result = runner.invoke(
+            app, ["download", "--mock", "nonexistent_mock"]
         )
-        result = main()
-        assert result == 1
-        captured = capsys.readouterr()
-        assert "Unknown mock community" in captured.out
+        assert result.exit_code == 1
+        assert "Unknown mock community" in result.output
 
-    def test_download_unresolvable_species(self, monkeypatch, tmp_path, capsys):
+    def test_download_unresolvable_species(self):
         """Test warning for species that cannot be resolved."""
-        monkeypatch.setattr(
-            sys, "argv", ["nanorunner", "download", "--species", "Nonexistent species"]
-        )
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
             mock_cls.return_value = mock_resolver
             mock_resolver.resolve.return_value = None
 
-            result = main()
-            assert result == 1
-            captured = capsys.readouterr()
-            assert "Could not resolve" in captured.out
+            result = runner.invoke(
+                app, ["download", "--species", "Nonexistent species"]
+            )
+            assert result.exit_code == 1
+            assert "Could not resolve" in result.output
 
-    def test_download_multiple_species(self, monkeypatch, tmp_path):
+    def test_download_multiple_species(self, tmp_path):
         """Test downloading multiple species at once."""
-        monkeypatch.setattr(
-            sys,
-            "argv",
-            [
-                "nanorunner",
-                "download",
-                "--species",
-                "Escherichia coli",
-                "Staphylococcus aureus",
-            ],
-        )
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
             mock_cls.return_value = mock_resolver
-            mock_resolver.resolve.return_value = MagicMock(accession="GCF_000005845.2")
+            mock_resolver.resolve.return_value = MagicMock(
+                accession="GCF_000005845.2"
+            )
 
             with patch("nanopore_simulator.cli.main.download_genome") as mock_dl:
                 mock_dl.return_value = tmp_path / "genome.fna.gz"
-                result = main()
-                assert result == 0
+                result = runner.invoke(
+                    app,
+                    [
+                        "download",
+                        "--species",
+                        "Escherichia coli",
+                        "--species",
+                        "Staphylococcus aureus",
+                    ],
+                )
+                assert result.exit_code == 0
                 assert mock_dl.call_count == 2
 
-    def test_download_multiple_taxids(self, monkeypatch, tmp_path):
+    def test_download_multiple_taxids(self, tmp_path):
         """Test downloading multiple taxonomy IDs at once."""
-        monkeypatch.setattr(
-            sys, "argv", ["nanorunner", "download", "--taxid", "562", "1280"]
-        )
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
             mock_cls.return_value = mock_resolver
@@ -131,35 +127,44 @@ class TestDownloadCommand:
 
             with patch("nanopore_simulator.cli.main.download_genome") as mock_dl:
                 mock_dl.return_value = tmp_path / "genome.fna.gz"
-                result = main()
-                assert result == 0
+                result = runner.invoke(
+                    app,
+                    [
+                        "download",
+                        "--taxid",
+                        "562",
+                        "--taxid",
+                        "1280",
+                    ],
+                )
+                assert result.exit_code == 0
                 assert mock_dl.call_count == 2
 
-    def test_download_handles_download_failure(self, monkeypatch, capsys):
+    def test_download_handles_download_failure(self):
         """Test that download failures are handled gracefully."""
-        monkeypatch.setattr(
-            sys, "argv", ["nanorunner", "download", "--species", "Escherichia coli"]
-        )
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
             mock_cls.return_value = mock_resolver
-            mock_resolver.resolve.return_value = MagicMock(accession="GCF_000005845.2")
+            mock_resolver.resolve.return_value = MagicMock(
+                accession="GCF_000005845.2"
+            )
 
             with patch("nanopore_simulator.cli.main.download_genome") as mock_dl:
                 mock_dl.side_effect = RuntimeError("Download failed")
-                result = main()
-                # Should still complete with 0 (partial success)
-                assert result == 0
-                captured = capsys.readouterr()
-                assert "Failed" in captured.out
+                result = runner.invoke(
+                    app, ["download", "--species", "Escherichia coli"]
+                )
+                # No target provided; download-only path returns normally
+                # even when individual downloads fail
+                assert result.exit_code == 0
+                assert "Failed" in result.output
 
 
 class TestDownloadAndGenerate:
     """Test suite for the download + generate combined workflow.
 
-    Note: When using --species with nargs="+", target_dir must appear
-    before --species or after a -- separator to avoid argparse ambiguity.
-    With --mock (single value), target_dir can follow naturally.
+    When a --target is provided, successfully downloaded genomes are
+    used for read generation via NanoporeSimulator.
     """
 
     def _make_genome_file(self, path):
@@ -168,20 +173,9 @@ class TestDownloadAndGenerate:
         path.write_text(">seq1\nACGT\n")
         return path
 
-    def test_download_and_generate_mock(self, monkeypatch, tmp_path):
-        """Test download with target_dir triggers read generation for a mock community."""
+    def test_download_and_generate_mock(self, tmp_path):
+        """Test download with --target triggers read generation for a mock community."""
         target = tmp_path / "output"
-        monkeypatch.setattr(
-            sys,
-            "argv",
-            [
-                "nanorunner",
-                "download",
-                "--mock",
-                "quick_3species",
-                str(target),
-            ],
-        )
         genome_paths = [
             self._make_genome_file(tmp_path / "genome1.fna"),
             self._make_genome_file(tmp_path / "genome2.fna"),
@@ -190,7 +184,9 @@ class TestDownloadAndGenerate:
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
             mock_cls.return_value = mock_resolver
-            mock_resolver.resolve.return_value = MagicMock(accession="GCF_000005845.2")
+            mock_resolver.resolve.return_value = MagicMock(
+                accession="GCF_000005845.2"
+            )
 
             with patch("nanopore_simulator.cli.main.download_genome") as mock_dl:
                 mock_dl.side_effect = genome_paths
@@ -201,9 +197,18 @@ class TestDownloadAndGenerate:
                     mock_sim = MagicMock()
                     mock_sim_cls.return_value = mock_sim
 
-                    result = main()
+                    result = runner.invoke(
+                        app,
+                        [
+                            "download",
+                            "--mock",
+                            "quick_3species",
+                            "--target",
+                            str(target),
+                        ],
+                    )
 
-                    assert result == 0
+                    assert result.exit_code == 0
                     assert mock_dl.call_count == 3
 
                     # Verify simulator was created with correct config
@@ -218,22 +223,9 @@ class TestDownloadAndGenerate:
                     assert config.abundances is not None
                     mock_sim.run_simulation.assert_called_once()
 
-    def test_download_and_generate_species(self, monkeypatch, tmp_path):
+    def test_download_and_generate_species(self, tmp_path):
         """Test download+generate with --species instead of --mock."""
         target = tmp_path / "output"
-        # Place target_dir before --species to avoid nargs="+" ambiguity
-        monkeypatch.setattr(
-            sys,
-            "argv",
-            [
-                "nanorunner",
-                "download",
-                str(target),
-                "--species",
-                "Escherichia coli",
-                "Staphylococcus aureus",
-            ],
-        )
         genome_paths = [
             self._make_genome_file(tmp_path / "ecoli.fna"),
             self._make_genome_file(tmp_path / "saureus.fna"),
@@ -241,7 +233,9 @@ class TestDownloadAndGenerate:
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
             mock_cls.return_value = mock_resolver
-            mock_resolver.resolve.return_value = MagicMock(accession="GCF_000005845.2")
+            mock_resolver.resolve.return_value = MagicMock(
+                accession="GCF_000005845.2"
+            )
 
             with patch("nanopore_simulator.cli.main.download_genome") as mock_dl:
                 mock_dl.side_effect = genome_paths
@@ -252,9 +246,20 @@ class TestDownloadAndGenerate:
                     mock_sim = MagicMock()
                     mock_sim_cls.return_value = mock_sim
 
-                    result = main()
+                    result = runner.invoke(
+                        app,
+                        [
+                            "download",
+                            "--species",
+                            "Escherichia coli",
+                            "--species",
+                            "Staphylococcus aureus",
+                            "--target",
+                            str(target),
+                        ],
+                    )
 
-                    assert result == 0
+                    assert result.exit_code == 0
                     config = mock_sim_cls.call_args[0][0]
                     assert config.operation == "generate"
                     assert len(config.genome_inputs) == 2
@@ -263,41 +268,16 @@ class TestDownloadAndGenerate:
                     assert config.sample_type == "mixed"
                     mock_sim.run_simulation.assert_called_once()
 
-    def test_download_and_generate_custom_options(self, monkeypatch, tmp_path):
+    def test_download_and_generate_custom_options(self, tmp_path):
         """Test that custom generation options are passed through to config."""
         target = tmp_path / "output"
         genome_path = self._make_genome_file(tmp_path / "genome.fna")
-        # Place target_dir before --species to avoid nargs="+" ambiguity
-        monkeypatch.setattr(
-            sys,
-            "argv",
-            [
-                "nanorunner",
-                "download",
-                str(target),
-                "--species",
-                "Escherichia coli",
-                "--read-count",
-                "5000",
-                "--output-format",
-                "fastq",
-                "--interval",
-                "2",
-                "--mean-quality",
-                "25.0",
-                "--generator-backend",
-                "builtin",
-                "--batch-size",
-                "3",
-                "--sample-type",
-                "pure",
-                "--mix-reads",
-            ],
-        )
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
             mock_cls.return_value = mock_resolver
-            mock_resolver.resolve.return_value = MagicMock(accession="GCF_000005845.2")
+            mock_resolver.resolve.return_value = MagicMock(
+                accession="GCF_000005845.2"
+            )
 
             with patch("nanopore_simulator.cli.main.download_genome") as mock_dl:
                 mock_dl.return_value = genome_path
@@ -308,9 +288,33 @@ class TestDownloadAndGenerate:
                     mock_sim = MagicMock()
                     mock_sim_cls.return_value = mock_sim
 
-                    result = main()
+                    result = runner.invoke(
+                        app,
+                        [
+                            "download",
+                            "--species",
+                            "Escherichia coli",
+                            "--target",
+                            str(target),
+                            "--read-count",
+                            "5000",
+                            "--output-format",
+                            "fastq",
+                            "--interval",
+                            "2",
+                            "--mean-quality",
+                            "25.0",
+                            "--generator-backend",
+                            "builtin",
+                            "--batch-size",
+                            "3",
+                            "--sample-type",
+                            "pure",
+                            "--mix-reads",
+                        ],
+                    )
 
-                    assert result == 0
+                    assert result.exit_code == 0
                     config = mock_sim_cls.call_args[0][0]
                     assert config.read_count == 5000
                     assert config.output_format == "fastq"
@@ -321,17 +325,14 @@ class TestDownloadAndGenerate:
                     assert config.sample_type == "pure"
                     assert config.mix_reads is True
 
-    def test_download_only_no_target(self, monkeypatch, tmp_path):
-        """Test that omitting target_dir preserves download-only behavior."""
-        monkeypatch.setattr(
-            sys,
-            "argv",
-            ["nanorunner", "download", "--species", "Escherichia coli"],
-        )
+    def test_download_only_no_target(self, tmp_path):
+        """Test that omitting --target preserves download-only behavior."""
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
             mock_cls.return_value = mock_resolver
-            mock_resolver.resolve.return_value = MagicMock(accession="GCF_000005845.2")
+            mock_resolver.resolve.return_value = MagicMock(
+                accession="GCF_000005845.2"
+            )
 
             with patch("nanopore_simulator.cli.main.download_genome") as mock_dl:
                 mock_dl.return_value = tmp_path / "genome.fna.gz"
@@ -339,30 +340,20 @@ class TestDownloadAndGenerate:
                 with patch(
                     "nanopore_simulator.cli.main.NanoporeSimulator"
                 ) as mock_sim_cls:
-                    result = main()
+                    result = runner.invoke(
+                        app,
+                        ["download", "--species", "Escherichia coli"],
+                    )
 
-                    assert result == 0
+                    assert result.exit_code == 0
                     mock_dl.assert_called_once()
                     # No simulator should be created
                     mock_sim_cls.assert_not_called()
 
-    def test_download_and_generate_with_failures(self, monkeypatch, tmp_path, capsys):
+    def test_download_and_generate_with_failures(self, tmp_path):
         """Test generation runs with successfully downloaded genomes when some fail."""
         target = tmp_path / "output"
         genome_path = self._make_genome_file(tmp_path / "ecoli.fna")
-        # Place target_dir before --species to avoid nargs="+" ambiguity
-        monkeypatch.setattr(
-            sys,
-            "argv",
-            [
-                "nanorunner",
-                "download",
-                str(target),
-                "--species",
-                "Escherichia coli",
-                "Nonexistent species",
-            ],
-        )
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
             mock_cls.return_value = mock_resolver
@@ -381,13 +372,23 @@ class TestDownloadAndGenerate:
                     mock_sim = MagicMock()
                     mock_sim_cls.return_value = mock_sim
 
-                    result = main()
+                    result = runner.invoke(
+                        app,
+                        [
+                            "download",
+                            "--species",
+                            "Escherichia coli",
+                            "--species",
+                            "Nonexistent species",
+                            "--target",
+                            str(target),
+                        ],
+                    )
 
-                    assert result == 0
-                    captured = capsys.readouterr()
-                    assert "Could not resolve" in captured.out
+                    assert result.exit_code == 0
+                    assert "Could not resolve" in result.output
 
-                    # Simulator should still be created with the one successful genome
+                    # Simulator should still be created with one successful genome
                     mock_sim_cls.assert_called_once()
                     config = mock_sim_cls.call_args[0][0]
                     assert len(config.genome_inputs) == 1
@@ -395,26 +396,15 @@ class TestDownloadAndGenerate:
                     assert config.sample_type == "pure"  # single genome
                     mock_sim.run_simulation.assert_called_once()
 
-    def test_download_and_generate_all_downloads_fail(
-        self, monkeypatch, tmp_path, capsys
-    ):
+    def test_download_and_generate_all_downloads_fail(self, tmp_path):
         """Test that generation is skipped with error when all downloads fail."""
         target = tmp_path / "output"
-        monkeypatch.setattr(
-            sys,
-            "argv",
-            [
-                "nanorunner",
-                "download",
-                "--mock",
-                "quick_3species",
-                str(target),
-            ],
-        )
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
             mock_cls.return_value = mock_resolver
-            mock_resolver.resolve.return_value = MagicMock(accession="GCF_000005845.2")
+            mock_resolver.resolve.return_value = MagicMock(
+                accession="GCF_000005845.2"
+            )
 
             with patch("nanopore_simulator.cli.main.download_genome") as mock_dl:
                 mock_dl.side_effect = RuntimeError("Download failed")
@@ -422,34 +412,31 @@ class TestDownloadAndGenerate:
                 with patch(
                     "nanopore_simulator.cli.main.NanoporeSimulator"
                 ) as mock_sim_cls:
-                    result = main()
+                    result = runner.invoke(
+                        app,
+                        [
+                            "download",
+                            "--mock",
+                            "quick_3species",
+                            "--target",
+                            str(target),
+                        ],
+                    )
 
-                    assert result == 1
-                    captured = capsys.readouterr()
-                    assert "No genomes downloaded successfully" in captured.out
+                    assert result.exit_code == 1
+                    assert "No genomes downloaded successfully" in result.output
                     mock_sim_cls.assert_not_called()
 
-    def test_download_and_generate_simulation_error(
-        self, monkeypatch, tmp_path, capsys
-    ):
+    def test_download_and_generate_simulation_error(self, tmp_path):
         """Test error handling when simulation fails after successful download."""
         target = tmp_path / "output"
         genome_path = self._make_genome_file(tmp_path / "genome.fna")
-        monkeypatch.setattr(
-            sys,
-            "argv",
-            [
-                "nanorunner",
-                "download",
-                "--mock",
-                "quick_3species",
-                str(target),
-            ],
-        )
         with patch("nanopore_simulator.cli.main.SpeciesResolver") as mock_cls:
             mock_resolver = MagicMock()
             mock_cls.return_value = mock_resolver
-            mock_resolver.resolve.return_value = MagicMock(accession="GCF_000005845.2")
+            mock_resolver.resolve.return_value = MagicMock(
+                accession="GCF_000005845.2"
+            )
 
             with patch("nanopore_simulator.cli.main.download_genome") as mock_dl:
                 mock_dl.return_value = genome_path
@@ -463,8 +450,16 @@ class TestDownloadAndGenerate:
                         "Simulation failed"
                     )
 
-                    result = main()
+                    result = runner.invoke(
+                        app,
+                        [
+                            "download",
+                            "--mock",
+                            "quick_3species",
+                            "--target",
+                            str(target),
+                        ],
+                    )
 
-                    assert result == 1
-                    captured = capsys.readouterr()
-                    assert "Error during read generation" in captured.out
+                    assert result.exit_code == 1
+                    assert "Error during read generation" in result.output
