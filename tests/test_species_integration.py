@@ -135,11 +135,11 @@ class TestSpeciesIntegration:
 class TestSpeciesResolutionWorkflow:
     """Tests for the species resolution workflow."""
 
-    def test_resolver_ncbi_fallback(self) -> None:
-        """Verify SpeciesResolver can resolve species via NCBI.
+    def test_resolver_resolves_species(self) -> None:
+        """Verify SpeciesResolver can resolve species.
 
-        This test confirms that the resolver successfully queries NCBI
-        for species not in the GTDB index.
+        This test confirms that the resolver successfully queries GTDB API
+        or NCBI for species resolution.
         """
         resolver = SpeciesResolver()
         ref = resolver.resolve("Escherichia coli")
@@ -154,8 +154,7 @@ class TestSpeciesResolutionWorkflow:
         resolver = SpeciesResolver()
         suggestions = resolver.suggest("Escherichia")
 
-        # Suggestions may be empty if no GTDB index is present,
-        # but the method should not fail
+        # Suggestions may come from GTDB API or local index
         assert isinstance(suggestions, list)
 
 
