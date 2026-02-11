@@ -10,7 +10,7 @@ NanoRunner is a Python tool for testing nanopore sequencing analysis pipelines. 
 - **Replay mode**: Transfers existing FASTQ and POD5 files from a source directory to a target directory with configurable timing, replicating the temporal characteristics of a real sequencing run.
 - **Generate mode**: Produces simulated nanopore FASTQ reads from genome FASTA files, delivering them incrementally with the same timing models.
 
-Both modes support singleplex and multiplex (barcoded) output structures, multiple timing models, parallel processing, and real-time monitoring. The output is compatible with downstream pipelines such as nanometanf, Kraken, and miniknife.
+Both modes support singleplex and multiplex (barcoded) output structures, multiple timing models, parallel processing, and real-time monitoring. The output is compatible with downstream pipelines such as Nanometa Live and Kraken.
 
 ## Key Features
 
@@ -37,7 +37,7 @@ Both modes support singleplex and multiplex (barcoded) output structures, multip
 - **Checkpoint system**: Automatic progress preservation for recovery from interruptions
 
 ### Pipeline Integration
-- **Multi-pipeline support**: Built-in adapters for nanometanf, Kraken, miniknife, and generic workflows
+- **Multi-pipeline support**: Built-in adapters for Nanometa Live, Kraken, and generic workflows
 - **Validation framework**: Automated structure and format verification for pipeline compatibility
 - **Flexible output**: Support for file copying, symbolic linking, and read generation
 
@@ -229,7 +229,7 @@ nanorunner /data/source /watch/output --monitor none --quiet
 
 ```bash
 # Validate output compatibility with specific pipeline
-nanorunner /data/source /watch/output --pipeline nanometanf
+nanorunner /data/source /watch/output --pipeline nanometa
 
 # List supported pipeline adapters
 nanorunner --list-adapters
@@ -370,12 +370,12 @@ Supported naming conventions for automatic multiplex detection:
 
 ## Pipeline Integration
 
-### Primary Integration: nanometanf
-Both replay and generate modes produce output compatible with nanometanf's real-time monitoring:
+### Primary Integration: Nanometa Live
+Both replay and generate modes produce output compatible with Nanometa Live's real-time monitoring:
 
 ```bash
-# Configure nanometanf for simulated data consumption
-nextflow run nanometanf \
+# Configure nanometa for simulated data consumption
+nextflow run nanometa_live \
     --realtime_mode \
     --nanopore_output_dir /watch/output \
     --file_pattern "**/*.fastq{,.gz}" \
@@ -386,9 +386,8 @@ nextflow run nanometanf \
 ### Multi-Pipeline Support
 Built-in adapters provide validation for multiple bioinformatics workflows:
 
-- **nanometanf**: Real-time taxonomic classification with MinKNOW integration
-- **Kraken**: k-mer based taxonomic assignment
-- **miniknife**: Lightweight classification for resource-constrained environments
+- **nanometa**: Nanometa Live real-time taxonomic analysis pipeline
+- **kraken**: Kraken2/KrakenUniq taxonomic classification pipeline
 - **Generic**: Customizable adapter for arbitrary pipeline requirements
 
 ## Technical Requirements
@@ -467,7 +466,7 @@ For detailed troubleshooting steps, see [docs/troubleshooting.md](docs/troublesh
 
 ## License and Attribution
 
-This software is distributed under the MIT License and developed for research applications in bioinformatics pipeline validation. The simulator is designed to complement the nanometanf taxonomic classification pipeline and supports the broader Oxford Nanopore Technologies ecosystem.
+This software is distributed under the MIT License and developed for research applications in bioinformatics pipeline validation. The simulator is designed to complement the Nanometa Live taxonomic analysis pipeline and supports the broader Oxford Nanopore Technologies ecosystem.
 
 **Developed by**: [FOI Bioinformatics](https://github.com/FOI-Bioinformatics) - Swedish Defence Research Agency
 **Repository**: https://github.com/FOI-Bioinformatics/nanorunner

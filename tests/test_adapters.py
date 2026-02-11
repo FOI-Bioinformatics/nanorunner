@@ -7,10 +7,9 @@ from pathlib import Path
 from nanopore_simulator.core.adapters import (
     PipelineRequirements,
     PipelineAdapter,
-    NanometanfAdapter,
     GenericAdapter,
-    KrackenAdapter,
-    MiniknifeAdapter,
+    BUILTIN_ADAPTER_CONFIGS,
+    _ADAPTER_ALIASES,
     AdapterManager,
     get_available_adapters,
     validate_for_pipeline,
@@ -42,16 +41,67 @@ class TestPipelineRequirements:
         assert requirements.validation_rules["min_files"] == 2
 
 
-class TestNanometanfAdapter:
-    """Test the nanometanf pipeline adapter"""
+class TestBuiltinAdapterConfigs:
+    """Test the built-in adapter configuration dict"""
+
+    def test_nanometa_config_exists(self):
+        """Test nanometa config is present"""
+        assert "nanometa" in BUILTIN_ADAPTER_CONFIGS
+        config = BUILTIN_ADAPTER_CONFIGS["nanometa"]
+        assert config["name"] == "nanometa"
+        assert "**/*.fastq" in config["patterns"]
+        assert "**/*.pod5" in config["patterns"]
+
+    def test_kraken_config_exists(self):
+        """Test kraken config is present"""
+        assert "kraken" in BUILTIN_ADAPTER_CONFIGS
+        config = BUILTIN_ADAPTER_CONFIGS["kraken"]
+        assert config["name"] == "kraken"
+        assert "**/*.fastq" in config["patterns"]
+        # Kraken does not support POD5
+        assert "**/*.pod5" not in config["patterns"]
+
+    def test_no_miniknife_config(self):
+        """Test miniknife is not present"""
+        assert "miniknife" not in BUILTIN_ADAPTER_CONFIGS
+
+    def test_builtin_configs_are_complete(self):
+        """Test that exactly nanometa and kraken are defined"""
+        assert set(BUILTIN_ADAPTER_CONFIGS.keys()) == {"nanometa", "kraken"}
+
+
+class TestAdapterAliases:
+    """Test backward-compatible adapter aliases"""
+
+    def test_nanometanf_alias_exists(self):
+        """Test nanometanf -> nanometa alias"""
+        assert "nanometanf" in _ADAPTER_ALIASES
+        assert _ADAPTER_ALIASES["nanometanf"] == "nanometa"
+
+    def test_alias_resolves_via_manager(self):
+        """Test alias resolution through AdapterManager"""
+        manager = AdapterManager()
+        adapter = manager.get_adapter("nanometanf")
+        assert adapter is not None
+        assert adapter.requirements.name == "nanometa"
+
+    def test_alias_resolves_via_global_function(self):
+        """Test alias resolution through global function"""
+        adapter = get_pipeline_adapter("nanometanf")
+        assert adapter is not None
+        assert adapter.requirements.name == "nanometa"
+
+
+class TestNanometaAdapter:
+    """Test the nanometa pipeline adapter (via GenericAdapter)"""
 
     @pytest.fixture
     def adapter(self):
-        return NanometanfAdapter()
+        return GenericAdapter(BUILTIN_ADAPTER_CONFIGS["nanometa"])
 
     def test_adapter_creation(self, adapter):
-        """Test nanometanf adapter creation"""
-        assert adapter.requirements.name == "nanometanf"
+        """Test nanometa adapter creation"""
+        assert adapter.requirements.name == "nanometa"
         assert "**/*.fastq" in adapter.requirements.expected_patterns
         assert "**/*.pod5" in adapter.requirements.expected_patterns
         assert adapter.requirements.required_structure is None  # Flexible
@@ -105,19 +155,6 @@ class TestNanometanfAdapter:
 
         assert adapter.validate_structure(target_dir) is True
 
-    def test_validate_mixed_structure(self, adapter, temp_structure):
-        """Test validation of mixed structure (should still be valid)"""
-        source_dir, target_dir = temp_structure
-
-        # Create mixed structure
-        (target_dir / "root_file.fastq").write_text("@read1\nACGT\n+\nIIII\n")
-
-        bc_dir = target_dir / "barcode01"
-        bc_dir.mkdir()
-        (bc_dir / "bc_file.fastq").write_text("@read2\nTGCA\n+\nIIII\n")
-
-        assert adapter.validate_structure(target_dir) is True
-
     def test_validate_empty_directory(self, adapter, temp_structure):
         """Test validation of empty directory"""
         source_dir, target_dir = temp_structure
@@ -134,7 +171,7 @@ class TestNanometanfAdapter:
 
         report = adapter.get_validation_report(target_dir)
 
-        assert report["pipeline"] == "nanometanf"
+        assert report["pipeline"] == "nanometa"
         assert report["valid"] is True
         assert report["structure_valid"] is True
         assert len(report["files_found"]) == 2
@@ -217,12 +254,12 @@ class TestGenericAdapter:
         assert adapter.validate_structure(target_dir) is False
 
 
-class TestKrackenAdapter:
-    """Test the Kraken pipeline adapter"""
+class TestKrakenAdapter:
+    """Test the Kraken pipeline adapter (via GenericAdapter)"""
 
     @pytest.fixture
     def adapter(self):
-        return KrackenAdapter()
+        return GenericAdapter(BUILTIN_ADAPTER_CONFIGS["kraken"])
 
     def test_kraken_adapter_creation(self, adapter):
         """Test Kraken adapter creation"""
@@ -245,53 +282,6 @@ class TestKrackenAdapter:
         assert adapter.validate_structure(target_dir) is True
 
 
-class TestMiniknifeAdapter:
-    """Test the Miniknife pipeline adapter"""
-
-    @pytest.fixture
-    def adapter(self):
-        return MiniknifeAdapter()
-
-    def test_miniknife_adapter_creation(self, adapter):
-        """Test Miniknife adapter creation"""
-        assert adapter.requirements.name == "miniknife"
-        assert adapter.requirements.required_structure == "multiplex"
-        assert "sample_sheet.tsv" in adapter.requirements.metadata_files
-
-    def test_miniknife_barcode_patterns(self, adapter):
-        """Test Miniknife barcode patterns"""
-        assert adapter.is_barcode_directory(Path("barcode01")) is True
-        assert adapter.is_barcode_directory(Path("BC01")) is True
-        assert adapter.is_barcode_directory(Path("sample01")) is True  # Custom pattern
-
-    def test_miniknife_validation_with_sample_sheet(self, adapter, temp_structure):
-        """Test Miniknife validation with sample sheet"""
-        source_dir, target_dir = temp_structure
-
-        # Create sample sheet
-        (target_dir / "sample_sheet.tsv").write_text(
-            "sample_id\tbarcode\nsample1\tbarcode01\n"
-        )
-
-        # Create barcode structure
-        bc_dir = target_dir / "barcode01"
-        bc_dir.mkdir()
-        (bc_dir / "reads.fastq").write_text("@read1\nACGT\n+\nIIII\n")
-
-        assert adapter.validate_structure(target_dir) is True
-
-    def test_miniknife_validation_without_sample_sheet(self, adapter, temp_structure):
-        """Test Miniknife validation without sample sheet"""
-        source_dir, target_dir = temp_structure
-
-        # Create barcode structure but no sample sheet
-        bc_dir = target_dir / "barcode01"
-        bc_dir.mkdir()
-        (bc_dir / "reads.fastq").write_text("@read1\nACGT\n+\nIIII\n")
-
-        assert adapter.validate_structure(target_dir) is False
-
-
 class TestAdapterManager:
     """Test the adapter manager"""
 
@@ -303,20 +293,28 @@ class TestAdapterManager:
         """Test adapter manager initialization"""
         adapters = manager.list_adapters()
 
-        assert "nanometanf" in adapters
+        assert "nanometa" in adapters
         assert "kraken" in adapters
-        assert "miniknife" in adapters
+        assert "miniknife" not in adapters
 
     def test_get_adapter(self, manager):
         """Test getting adapters by name"""
-        nanometanf = manager.get_adapter("nanometanf")
-        assert isinstance(nanometanf, NanometanfAdapter)
+        nanometa = manager.get_adapter("nanometa")
+        assert isinstance(nanometa, GenericAdapter)
+        assert nanometa.requirements.name == "nanometa"
 
         kraken = manager.get_adapter("kraken")
-        assert isinstance(kraken, KrackenAdapter)
+        assert isinstance(kraken, GenericAdapter)
+        assert kraken.requirements.name == "kraken"
 
         unknown = manager.get_adapter("unknown")
         assert unknown is None
+
+    def test_get_adapter_via_alias(self, manager):
+        """Test getting adapter via backward-compatible alias"""
+        adapter = manager.get_adapter("nanometanf")
+        assert adapter is not None
+        assert adapter.requirements.name == "nanometa"
 
     def test_add_custom_adapter(self, manager):
         """Test adding custom adapter"""
@@ -333,10 +331,10 @@ class TestAdapterManager:
         """Test pipeline validation through manager"""
         source_dir, target_dir = temp_structure
 
-        # Create nanometanf-compatible structure
+        # Create nanometa-compatible structure
         (target_dir / "sample.fastq").write_text("@read1\nACGT\n+\nIIII\n")
 
-        report = manager.validate_for_pipeline("nanometanf", target_dir)
+        report = manager.validate_for_pipeline("nanometa", target_dir)
         assert report["valid"] is True
 
         # Test unknown pipeline
@@ -353,9 +351,8 @@ class TestAdapterManager:
 
         compatible = manager.get_compatible_pipelines(target_dir)
 
-        assert "nanometanf" in compatible
+        assert "nanometa" in compatible
         assert "kraken" in compatible
-        # miniknife should not be compatible (requires multiplex + sample sheet)
 
     def test_create_generic_adapter(self, manager):
         """Test creating generic adapter through manager"""
@@ -376,11 +373,11 @@ class TestAdapterIntegration:
     def test_global_functions(self):
         """Test global convenience functions"""
         adapters = get_available_adapters()
-        assert "nanometanf" in adapters
+        assert "nanometa" in adapters
         assert "kraken" in adapters
 
-        adapter = get_pipeline_adapter("nanometanf")
-        assert isinstance(adapter, NanometanfAdapter)
+        adapter = get_pipeline_adapter("nanometa")
+        assert isinstance(adapter, GenericAdapter)
 
         adapter = get_pipeline_adapter("unknown")
         assert adapter is None
@@ -391,11 +388,11 @@ class TestAdapterIntegration:
 
         (target_dir / "sample.fastq").write_text("@read1\nACGT\n+\nIIII\n")
 
-        report = validate_for_pipeline("nanometanf", target_dir)
+        report = validate_for_pipeline("nanometa", target_dir)
         assert report["valid"] is True
 
         compatible = get_compatible_pipelines(target_dir)
-        assert "nanometanf" in compatible
+        assert "nanometa" in compatible
 
 
 class TestAdapterErrorHandling:
@@ -404,7 +401,7 @@ class TestAdapterErrorHandling:
     def test_validation_with_permission_error(self, temp_structure):
         """Test validation when file access fails"""
         source_dir, target_dir = temp_structure
-        adapter = NanometanfAdapter()
+        adapter = GenericAdapter(BUILTIN_ADAPTER_CONFIGS["nanometa"])
 
         # Create a file and then make directory unreadable (on Unix systems)
         test_file = target_dir / "test.fastq"

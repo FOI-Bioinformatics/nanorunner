@@ -5,7 +5,7 @@ Example 5: Pipeline Integration and Validation
 Description:
     Demonstrates pipeline adapter usage for validating simulation
     output against specific bioinformatics pipeline requirements.
-    Shows validation for nanometanf, Kraken, and custom pipelines.
+    Shows validation for nanometa, Kraken, and custom pipelines.
 
 Usage:
     python examples/05_pipeline_integration.py
@@ -41,7 +41,7 @@ def list_available_adapters():
 
     adapters = get_available_adapters()
     for name, description in adapters.items():
-        print(f"  • {name}")
+        print(f"  - {name}")
         print(f"    {description}")
         print()
 
@@ -53,13 +53,8 @@ def simulate_with_validation(pipeline_name):
     print("=" * 60)
     print()
 
-    # Choose appropriate source structure for pipeline
-    if pipeline_name == "miniknife":
-        source_dir = Path("examples/sample_data/multiplex")
-        print("Using multiplex data (required for miniknife)")
-    else:
-        source_dir = Path("examples/sample_data/singleplex")
-        print("Using singleplex data")
+    source_dir = Path("examples/sample_data/singleplex")
+    print("Using singleplex data")
 
     target_dir = Path(tempfile.gettempdir()) / f"nanorunner_pipeline_{pipeline_name}"
 
@@ -88,8 +83,8 @@ def simulate_with_validation(pipeline_name):
     # Display validation results
     print(f"\nValidation Report for '{pipeline_name}':")
     print("-" * 60)
-    print(f"Valid:            {'✓ Yes' if report['valid'] else '✗ No'}")
-    print(f"Structure Valid:  {'✓' if report['structure_valid'] else '✗'}")
+    print(f"Valid:            {'Yes' if report['valid'] else 'No'}")
+    print(f"Structure Valid:  {'Yes' if report['structure_valid'] else 'No'}")
     print(f"Files Found:      {len(report.get('files_found', []))}")
 
     if report.get("files_found"):
@@ -100,12 +95,12 @@ def simulate_with_validation(pipeline_name):
             print(f"  ... and {len(report['files_found']) - 3} more")
 
     if report.get("warnings"):
-        print("\n⚠ Warnings:")
+        print("\nWarnings:")
         for warning in report["warnings"]:
             print(f"  - {warning}")
 
     if report.get("errors"):
-        print("\n✗ Errors:")
+        print("\nErrors:")
         for error in report["errors"]:
             print(f"  - {error}")
 
@@ -120,7 +115,7 @@ def detect_compatible_pipelines():
     print()
 
     # Test with singleplex data
-    target_dir = Path(tempfile.gettempdir()) / "nanorunner_pipeline_nanometanf"
+    target_dir = Path(tempfile.gettempdir()) / "nanorunner_pipeline_nanometa"
 
     if target_dir.exists():
         compatible = get_compatible_pipelines(target_dir)
@@ -128,7 +123,7 @@ def detect_compatible_pipelines():
         print(f"\nCompatible pipelines detected:")
         if compatible:
             for pipeline in compatible:
-                print(f"  ✓ {pipeline}")
+                print(f"  - {pipeline}")
         else:
             print("  (none - directory empty or incompatible)")
     else:
@@ -147,21 +142,8 @@ def main():
     list_available_adapters()
 
     # Simulate and validate for different pipelines
-    simulate_with_validation("nanometanf")
+    simulate_with_validation("nanometa")
     simulate_with_validation("kraken")
-
-    # Note: miniknife requires multiplex structure and sample sheet
-    # This will show validation warnings
-    print("=" * 60)
-    print("Pipeline: miniknife (expected to have warnings)")
-    print("=" * 60)
-    print()
-    print("Miniknife requires:")
-    print("  - Multiplex barcode structure")
-    print("  - sample_sheet.tsv file")
-    print()
-
-    simulate_with_validation("miniknife")
 
     # Detect compatible pipelines
     detect_compatible_pipelines()
@@ -172,10 +154,10 @@ def main():
     print("=" * 60)
     print()
     print("Pipeline adapters enable:")
-    print("  ✓ Validation of output structure")
-    print("  ✓ Format checking for specific pipelines")
-    print("  ✓ Automatic compatibility detection")
-    print("  ✓ Requirements verification")
+    print("  - Validation of output structure")
+    print("  - Format checking for specific pipelines")
+    print("  - Automatic compatibility detection")
+    print("  - Requirements verification")
     print()
 
     print("Typical workflow:")
@@ -187,7 +169,7 @@ def main():
 
     print("CLI usage:")
     print("  # Simulate with validation")
-    print("  nanorunner /source /target --pipeline nanometanf")
+    print("  nanorunner /source /target --pipeline nanometa")
     print()
     print("  # Validate existing directory")
     print("  nanorunner --validate-pipeline kraken /output/dir")

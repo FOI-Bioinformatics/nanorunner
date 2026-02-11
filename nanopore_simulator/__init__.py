@@ -2,7 +2,7 @@
 Nanopore Simulator Package
 
 A Python package for simulating nanopore sequencing runs by copying/linking
-FASTQ or POD5 files to create folder structures that nanometanf can watch.
+FASTQ or POD5 files to create folder structures that downstream pipelines can watch.
 """
 
 from .core.config import SimulationConfig

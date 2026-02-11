@@ -30,7 +30,7 @@ Comprehensive guides and references for the NanoRunner nanopore sequencing simul
 ### Architecture & Design
 - **Core Components**: See [CLAUDE.md - Architecture](../CLAUDE.md#architecture)
 - **Timing Models**: Uniform, Random, Poisson, Adaptive implementations
-- **Pipeline Adapters**: Framework for nanometanf, Kraken, miniknife integration
+- **Pipeline Adapters**: Framework for Nanometa Live, Kraken, and custom pipeline integration
 
 ## Testing Documentation
 

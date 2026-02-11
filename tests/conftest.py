@@ -46,13 +46,10 @@ def pytest_configure(config):
 
     # Pipeline-specific markers
     config.addinivalue_line(
-        "markers", "nanometanf: marks tests specific to nanometanf pipeline integration"
+        "markers", "nanometa: marks tests specific to nanometa pipeline integration"
     )
     config.addinivalue_line(
         "markers", "kraken: marks tests specific to Kraken pipeline integration"
-    )
-    config.addinivalue_line(
-        "markers", "miniknife: marks tests specific to miniknife pipeline integration"
     )
 
     # System requirement markers

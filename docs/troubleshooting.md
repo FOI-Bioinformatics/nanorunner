@@ -211,7 +211,7 @@ nanorunner /source /target --monitor detailed 2>&1 | tee simulation.log
 **Diagnosis**:
 ```bash
 # Check what pipelines are compatible
-nanorunner --validate-pipeline nanometanf /target
+nanorunner --validate-pipeline nanometa /target
 
 # Check output structure
 ls -R /target
@@ -221,8 +221,7 @@ find /target -name "*.fastq*"
 ```
 
 **Solutions**:
-- **For miniknife**: Requires multiplex structure with barcode directories
-- **For nanometanf**: Works with both singleplex and multiplex
+- **For nanometa**: Works with both singleplex and multiplex
 - **For kraken**: Works with any structure
 
 ### Pipeline Adapter Not Found

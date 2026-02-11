@@ -286,11 +286,11 @@ def invalid_config_params(tmp_path):
 
 
 @pytest.fixture
-def nanometanf_config(tmp_path):
-    """Configuration optimized for nanometanf pipeline testing.
+def nanometa_config(tmp_path):
+    """Configuration optimized for nanometa pipeline testing.
 
     Returns:
-        SimulationConfig optimized for nanometanf integration
+        SimulationConfig optimized for nanometa integration
     """
     source_dir = tmp_path / "source"
     target_dir = tmp_path / "target"
@@ -299,10 +299,10 @@ def nanometanf_config(tmp_path):
     return SimulationConfig(
         source_dir=source_dir,
         target_dir=target_dir,
-        interval=5.0,  # 5-second intervals like nanometanf expects
+        interval=5.0,  # 5-second intervals for real-time consumption
         batch_size=10,  # Batch processing for efficiency
         timing_model="poisson",  # Realistic sequencing timing
-        operation="copy",  # nanometanf needs actual files
+        operation="copy",  # Pipeline needs actual files
         timing_model_params={"burst_probability": 0.1, "burst_rate_multiplier": 2.0},
     )
 
@@ -325,28 +325,6 @@ def kraken_config(tmp_path):
         batch_size=5,
         timing_model="uniform",  # Consistent for reproducible testing
         operation="copy",
-    )
-
-
-@pytest.fixture
-def miniknife_config(tmp_path):
-    """Configuration optimized for miniknife pipeline testing.
-
-    Returns:
-        SimulationConfig suitable for miniknife workflow
-    """
-    source_dir = tmp_path / "source"
-    target_dir = tmp_path / "target"
-    source_dir.mkdir()
-
-    return SimulationConfig(
-        source_dir=source_dir,
-        target_dir=target_dir,
-        interval=2.0,
-        batch_size=3,
-        timing_model="random",
-        operation="link",  # miniknife can work with links
-        timing_model_params={"random_factor": 0.25},
     )
 
 

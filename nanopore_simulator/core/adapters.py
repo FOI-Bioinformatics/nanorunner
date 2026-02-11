@@ -135,77 +135,6 @@ class PipelineAdapter(ABC):
         return report
 
 
-class NanometanfAdapter(PipelineAdapter):
-    """Adapter for the nanometanf pipeline"""
-
-    def __init__(self) -> None:
-        requirements = PipelineRequirements(
-            name="nanometanf",
-            description="Oxford Nanopore taxonomic analysis pipeline",
-            expected_patterns=[
-                "**/*.fastq",
-                "**/*.fq",
-                "**/*.fastq.gz",
-                "**/*.fq.gz",
-                "**/*.pod5",
-            ],
-            required_structure=None,  # Supports both singleplex and multiplex
-            barcode_patterns=[
-                r"^barcode\d+$",
-                r"^BC\d+$",
-                r"^bc\d+$",
-                r"^unclassified$",
-            ],
-            metadata_files=None,  # No specific metadata required
-            validation_rules={
-                "min_files": 1,
-                "supported_extensions": [
-                    ".fastq",
-                    ".fq",
-                    ".fastq.gz",
-                    ".fq.gz",
-                    ".pod5",
-                ],
-            },
-        )
-        super().__init__(requirements)
-
-    def validate_structure(self, target_dir: Path) -> bool:
-        """Validate nanometanf directory structure"""
-        if not target_dir.exists():
-            return False
-
-        # Check for any supported files
-        supported_files = []
-        for pattern_str in self.requirements.expected_patterns:
-            pattern_files = list(target_dir.glob(pattern_str))
-            supported_files.extend(pattern_files)
-
-        # Must have at least one supported file
-        min_files = 1
-        if self.requirements.validation_rules is not None:
-            min_files = self.requirements.validation_rules.get("min_files", 1)
-        if len(supported_files) < min_files:
-            return False
-
-        # Check if structure is consistent (either all in root or all in barcode dirs)
-        root_files = [f for f in supported_files if f.parent == target_dir]
-        barcode_files = [f for f in supported_files if f.parent != target_dir]
-
-        if root_files and barcode_files:
-            # Mixed structure - check if barcode directories are valid
-            barcode_dirs = set(f.parent for f in barcode_files)
-            for barcode_dir in barcode_dirs:
-                if not self.is_barcode_directory(barcode_dir):
-                    return False
-
-        return True
-
-    def get_expected_patterns(self) -> List[str]:
-        """Get file patterns expected by nanometanf"""
-        return self.requirements.expected_patterns.copy()
-
-
 class GenericAdapter(PipelineAdapter):
     """Generic adapter for custom pipeline configurations"""
 
@@ -290,115 +219,46 @@ class GenericAdapter(PipelineAdapter):
         return self.requirements.expected_patterns.copy()
 
 
-class KrackenAdapter(PipelineAdapter):
-    """Adapter for Kraken2/KrakenUniq pipelines"""
+# Built-in adapter configurations (data-driven, mirroring BUILTIN_PROFILES pattern)
+BUILTIN_ADAPTER_CONFIGS: Dict[str, Dict[str, Any]] = {
+    "nanometa": {
+        "name": "nanometa",
+        "description": "Nanometa Live real-time taxonomic analysis pipeline",
+        "patterns": [
+            "**/*.fastq",
+            "**/*.fq",
+            "**/*.fastq.gz",
+            "**/*.fq.gz",
+            "**/*.pod5",
+        ],
+    },
+    "kraken": {
+        "name": "kraken",
+        "description": "Kraken2/KrakenUniq taxonomic classification pipeline",
+        "patterns": ["**/*.fastq", "**/*.fq", "**/*.fastq.gz", "**/*.fq.gz"],
+    },
+}
 
-    def __init__(self) -> None:
-        requirements = PipelineRequirements(
-            name="kraken",
-            description="Kraken2/KrakenUniq taxonomic classification pipeline",
-            expected_patterns=["**/*.fastq", "**/*.fq", "**/*.fastq.gz", "**/*.fq.gz"],
-            required_structure=None,
-            metadata_files=None,
-            validation_rules={
-                "min_files": 1,
-                "supported_extensions": [".fastq", ".fq", ".fastq.gz", ".fq.gz"],
-            },
-        )
-        super().__init__(requirements)
-
-    def validate_structure(self, target_dir: Path) -> bool:
-        """Validate Kraken pipeline structure"""
-        if not target_dir.exists():
-            return False
-
-        # Check for supported files
-        supported_files = []
-        for pattern_str in self.requirements.expected_patterns:
-            pattern_files = list(target_dir.glob(pattern_str))
-            supported_files.extend(pattern_files)
-
-        return len(supported_files) >= 1
-
-    def get_expected_patterns(self) -> List[str]:
-        """Get file patterns expected by Kraken"""
-        return self.requirements.expected_patterns.copy()
-
-
-class MiniknifeAdapter(PipelineAdapter):
-    """Adapter for Miniknife pipeline"""
-
-    def __init__(self) -> None:
-        requirements = PipelineRequirements(
-            name="miniknife",
-            description="Miniknife nanopore taxonomic analysis pipeline",
-            expected_patterns=["**/*.fastq", "**/*.fq", "**/*.fastq.gz", "**/*.fq.gz"],
-            required_structure="multiplex",  # Typically requires barcoded samples
-            barcode_patterns=[
-                r"^barcode\d+$",
-                r"^bc\d+$",  # Changed to lowercase since is_barcode_directory uses .lower()
-                r"^sample\d+$",
-            ],
-            metadata_files=["sample_sheet.tsv"],
-            validation_rules={"min_files": 1, "require_sample_sheet": True},
-        )
-        super().__init__(requirements)
-
-    def validate_structure(self, target_dir: Path) -> bool:
-        """Validate Miniknife pipeline structure"""
-        if not target_dir.exists():
-            return False
-
-        # Check for sample sheet if required
-        require_sample_sheet = False
-        if self.requirements.validation_rules is not None:
-            require_sample_sheet = self.requirements.validation_rules.get(
-                "require_sample_sheet", False
-            )
-        if require_sample_sheet:
-            sample_sheet = target_dir / "sample_sheet.tsv"
-            if not sample_sheet.exists():
-                return False
-
-        # Check for barcode structure
-        barcode_dirs = [
-            d
-            for d in target_dir.iterdir()
-            if d.is_dir() and self.is_barcode_directory(d)
-        ]
-
-        if not barcode_dirs:
-            return False
-
-        # Check for files in barcode directories
-        total_files = 0
-        for barcode_dir in barcode_dirs:
-            for pattern_str in self.requirements.expected_patterns:
-                # Remove ** prefix for individual directory search
-                simple_pattern = pattern_str.replace("**/", "")
-                files = list(barcode_dir.glob(simple_pattern))
-                total_files += len(files)
-
-        return total_files >= 1
-
-    def get_expected_patterns(self) -> List[str]:
-        """Get file patterns expected by Miniknife"""
-        return self.requirements.expected_patterns.copy()
+# Aliases for backward compatibility
+_ADAPTER_ALIASES: Dict[str, str] = {
+    "nanometanf": "nanometa",
+}
 
 
 class AdapterManager:
     """Manages pipeline adapters"""
 
     def __init__(self) -> None:
-        self.adapters = {
-            "nanometanf": NanometanfAdapter(),
-            "kraken": KrackenAdapter(),
-            "miniknife": MiniknifeAdapter(),
-        }
+        self.adapters: Dict[str, PipelineAdapter] = {}
+        for name, config in BUILTIN_ADAPTER_CONFIGS.items():
+            self.adapters[name] = GenericAdapter(config)
 
     def get_adapter(self, name: str) -> Optional[PipelineAdapter]:
         """Get a pipeline adapter by name"""
-        adapter = self.adapters.get(name.lower())
+        key = name.lower()
+        # Resolve aliases
+        key = _ADAPTER_ALIASES.get(key, key)
+        adapter = self.adapters.get(key)
         return adapter if adapter is not None else None
 
     def add_adapter(self, name: str, adapter: PipelineAdapter) -> None:

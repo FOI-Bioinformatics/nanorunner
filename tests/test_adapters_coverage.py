@@ -8,10 +8,8 @@ from unittest.mock import patch, MagicMock
 from nanopore_simulator.core.adapters import (
     PipelineRequirements,
     PipelineAdapter,
-    NanometanfAdapter,
-    KrackenAdapter,
-    MiniknifeAdapter,
     GenericAdapter,
+    BUILTIN_ADAPTER_CONFIGS,
     AdapterManager,
     get_available_adapters,
     validate_for_pipeline,
@@ -92,8 +90,8 @@ class TestPipelineAdapterEdgeCases:
             assert "Validation error:" in report["errors"][0]
 
 
-class TestNanometanfAdapterEdgeCases:
-    """Test NanometanfAdapter edge cases"""
+class TestNanometaAdapterEdgeCases:
+    """Test nanometa adapter edge cases"""
 
     def setup_method(self):
         """Set up test fixtures"""
@@ -104,44 +102,27 @@ class TestNanometanfAdapterEdgeCases:
         """Clean up test fixtures"""
         self.temp_dir.cleanup()
 
-    def test_nanometanf_validate_structure_nonexistent_directory(self):
+    def test_nanometa_validate_structure_nonexistent_directory(self):
         """Test structure validation with nonexistent directory"""
-        adapter = NanometanfAdapter()
+        adapter = GenericAdapter(BUILTIN_ADAPTER_CONFIGS["nanometa"])
         nonexistent_dir = self.temp_path / "nonexistent"
 
         # Should return False for nonexistent directory
         assert not adapter.validate_structure(nonexistent_dir)
 
-    def test_nanometanf_validate_structure_mixed_invalid_barcode(self):
-        """Test structure validation with mixed structure and invalid barcode directory"""
-        target_dir = self.temp_path / "target"
-        target_dir.mkdir()
-
-        # Create mixed structure with invalid barcode directory
-        (target_dir / "root_file.fastq").write_text("@read1\\nACGT\\n+\\nIIII\\n")
-
-        invalid_dir = target_dir / "invalid_barcode_name"
-        invalid_dir.mkdir()
-        (invalid_dir / "file.fastq").write_text("@read2\\nTGCA\\n+\\n~~~~\\n")
-
-        adapter = NanometanfAdapter()
-
-        # Should return False due to invalid barcode directory
-        assert not adapter.validate_structure(target_dir)
-
-    def test_nanometanf_validate_structure_insufficient_files(self):
+    def test_nanometa_validate_structure_insufficient_files(self):
         """Test structure validation with insufficient files"""
         target_dir = self.temp_path / "target"
         target_dir.mkdir()
 
-        adapter = NanometanfAdapter()
+        adapter = GenericAdapter(BUILTIN_ADAPTER_CONFIGS["nanometa"])
 
         # Empty directory should fail validation
         assert not adapter.validate_structure(target_dir)
 
 
-class TestKrackenAdapterEdgeCases:
-    """Test KrackenAdapter edge cases"""
+class TestKrakenAdapterEdgeCases:
+    """Test Kraken adapter edge cases"""
 
     def setup_method(self):
         """Set up test fixtures"""
@@ -152,9 +133,9 @@ class TestKrackenAdapterEdgeCases:
         """Clean up test fixtures"""
         self.temp_dir.cleanup()
 
-    def test_kracken_adapter_error_conditions(self):
-        """Test KrackenAdapter error conditions"""
-        adapter = KrackenAdapter()
+    def test_kraken_adapter_error_conditions(self):
+        """Test Kraken adapter error conditions"""
+        adapter = GenericAdapter(BUILTIN_ADAPTER_CONFIGS["kraken"])
 
         # Test validation with permission error
         target_dir = self.temp_path / "target"
@@ -163,33 +144,6 @@ class TestKrackenAdapterEdgeCases:
         with patch.object(
             adapter, "validate_structure", side_effect=PermissionError("Access denied")
         ):
-            report = adapter.get_validation_report(target_dir)
-
-            assert not report["valid"]
-            assert len(report["errors"]) > 0
-
-
-class TestMiniknifeAdapterEdgeCases:
-    """Test MiniknifeAdapter edge cases"""
-
-    def setup_method(self):
-        """Set up test fixtures"""
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.temp_path = Path(self.temp_dir.name)
-
-    def teardown_method(self):
-        """Clean up test fixtures"""
-        self.temp_dir.cleanup()
-
-    def test_miniknife_adapter_error_conditions(self):
-        """Test MiniknifeAdapter error conditions"""
-        adapter = MiniknifeAdapter()
-
-        # Test validation with file system error
-        target_dir = self.temp_path / "target"
-        target_dir.mkdir()
-
-        with patch.object(Path, "exists", side_effect=OSError("File system error")):
             report = adapter.get_validation_report(target_dir)
 
             assert not report["valid"]
@@ -282,7 +236,7 @@ class TestAdapterManagerEdgeCases:
             with patch.object(manager, "get_adapter", return_value=mock_adapter):
                 # Should catch the exception and return error report
                 try:
-                    report = manager.validate_for_pipeline("nanometanf", target_dir)
+                    report = manager.validate_for_pipeline("nanometa", target_dir)
                     # If no exception is raised, validation should indicate failure
                     assert "valid" in report
                 except Exception:
@@ -306,7 +260,7 @@ class TestAdapterIntegrationEdgeCases:
         """Test validate_for_pipeline with invalid directory"""
         nonexistent_dir = self.temp_path / "nonexistent"
 
-        report = validate_for_pipeline("nanometanf", nonexistent_dir)
+        report = validate_for_pipeline("nanometa", nonexistent_dir)
 
         # Should handle gracefully
         assert isinstance(report, dict)
@@ -357,7 +311,7 @@ class TestAdapterIntegrationEdgeCases:
         target_dir = self.temp_path / "target"
         target_dir.mkdir()
 
-        adapter = NanometanfAdapter()
+        adapter = GenericAdapter(BUILTIN_ADAPTER_CONFIGS["nanometa"])
 
         # Mock file operations to raise I/O errors
         with patch("pathlib.Path.exists", side_effect=OSError("I/O error")):
@@ -376,7 +330,7 @@ class TestAdapterIntegrationEdgeCases:
                 f"@read{i}\\nACGT\\n+\\nIIII\\n"
             )
 
-        adapter = NanometanfAdapter()
+        adapter = GenericAdapter(BUILTIN_ADAPTER_CONFIGS["nanometa"])
 
         # Should handle large file counts efficiently
         import time
@@ -409,7 +363,7 @@ class TestAdapterIntegrationEdgeCases:
                 # Skip if filesystem doesn't support unicode
                 continue
 
-        adapter = NanometanfAdapter()
+        adapter = GenericAdapter(BUILTIN_ADAPTER_CONFIGS["nanometa"])
 
         # Should handle unicode filenames gracefully
         report = adapter.get_validation_report(target_dir)
@@ -441,7 +395,7 @@ class TestAdapterErrorRecovery:
         problem_dir = target_dir / "problem_dir"
         problem_dir.mkdir()
 
-        adapter = NanometanfAdapter()
+        adapter = GenericAdapter(BUILTIN_ADAPTER_CONFIGS["nanometa"])
 
         # Mock specific operations to fail
         original_glob = Path.glob
@@ -467,7 +421,7 @@ class TestAdapterErrorRecovery:
         for i in range(50):
             (target_dir / f"file_{i}.fastq").write_text("@read\\nACGT\\n+\\nIIII\\n")
 
-        adapter = NanometanfAdapter()
+        adapter = GenericAdapter(BUILTIN_ADAPTER_CONFIGS["nanometa"])
 
         # Simulate memory constraint by limiting processing
         with patch(

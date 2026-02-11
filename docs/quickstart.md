@@ -307,7 +307,7 @@ nanorunner /data/source /watch/output --monitor enhanced
 
 ```bash
 # Simulate with validation
-nanorunner /data/source /watch/output --pipeline nanometanf
+nanorunner /data/source /watch/output --pipeline nanometa
 
 # Validate existing directory
 nanorunner --validate-pipeline kraken /path/to/output
@@ -320,9 +320,8 @@ nanorunner --list-adapters
 ```
 
 **Built-in adapters:**
-- `nanometanf` - Real-time taxonomic classification
-- `kraken` - k-mer based classification
-- `miniknife` - Lightweight classification
+- `nanometa` - Nanometa Live real-time taxonomic analysis
+- `kraken` - Kraken2/KrakenUniq taxonomic classification
 
 Both replay and generate modes produce output that is compatible with these pipelines.
 
@@ -483,7 +482,7 @@ nanorunner --species "E. coli" "S. aureus" /target
 nanorunner --mock zymo_d6300 /target
 
 # Replay with pipeline validation
-nanorunner /source /target --pipeline nanometanf
+nanorunner /source /target --pipeline nanometa
 
 # List options
 nanorunner --list-profiles

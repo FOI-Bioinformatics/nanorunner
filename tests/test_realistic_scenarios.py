@@ -119,7 +119,7 @@ class TestRealisticSequencingScenarios:
         target_dir = run_data["run_dir"].parent / "multiplex_output"
 
         # Validate multiplex structure first
-        validation_result = validate_for_pipeline("nanometanf", run_data["run_dir"])
+        validation_result = validate_for_pipeline("nanometa", run_data["run_dir"])
         if isinstance(validation_result, dict):
             assert validation_result.get("valid", False)
             # Check if it has barcode directories (indicates multiplex)
@@ -159,13 +159,13 @@ class TestRealisticSequencingScenarios:
         assert hasattr(simulator.timing_model, "interval_history")
 
     @pytest.mark.slow
-    def test_realistic_pipeline_integration_nanometanf(self, multiplex_run_fixture):
+    def test_realistic_pipeline_integration_nanometa(self, multiplex_run_fixture):
         """Test realistic integration with nanometanf pipeline expectations"""
         run_data = multiplex_run_fixture
-        target_dir = run_data["run_dir"].parent / "nanometanf_watch"
+        target_dir = run_data["run_dir"].parent / "nanometa_watch"
 
         # Validate for nanometanf pipeline
-        adapter = get_pipeline_adapter("nanometanf")
+        adapter = get_pipeline_adapter("nanometa")
         if adapter:
             validation = adapter.validate_structure(run_data["run_dir"])
 

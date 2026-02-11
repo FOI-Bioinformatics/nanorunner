@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Breaking: Pipeline Adapters**: Removed `miniknife` adapter (fictional pipeline
+  with no published tool). Renamed `nanometanf` adapter to `nanometa` to align with
+  the published Nanometa Live tool. Both built-in adapters (`nanometa`, `kraken`) are
+  now data-driven via `BUILTIN_ADAPTER_CONFIGS` using `GenericAdapter`, replacing the
+  previous concrete `NanometanfAdapter`, `KrackenAdapter`, and `MiniknifeAdapter`
+  classes. The `PipelineAdapter` ABC and `GenericAdapter` remain available for custom
+  adapters. A backward-compatible alias maps `nanometanf` to `nanometa`.
 - **Breaking: Configuration Profiles**: Consolidated 11 built-in profiles into 7
   with clearer names and distinct timing behaviors.
   - `development_testing` -> `development`

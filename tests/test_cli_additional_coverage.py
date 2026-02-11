@@ -238,12 +238,12 @@ class TestCLIAdditionalCoverage:
                     "replay",
                     "--source", str(self.source_dir),
                     "--target", str(self.target_dir),
-                    "--pipeline", "nanometanf",
+                    "--pipeline", "nanometa",
                 ])
 
                 assert result.exit_code == 0, result.output
-                assert "Validating output for nanometanf pipeline" in result.output
-                assert "Output is compatible with nanometanf pipeline" in result.output
+                assert "Validating output for nanometa pipeline" in result.output
+                assert "Output is compatible with nanometa pipeline" in result.output
 
     def test_cli_post_simulation_pipeline_validation_failure(self):
         """Test post-simulation pipeline validation with warnings."""

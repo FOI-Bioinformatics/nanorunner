@@ -20,9 +20,8 @@ from nanopore_simulator.core.monitoring import (
     ProgressDisplay,
 )
 from nanopore_simulator.core.adapters import (
-    NanometanfAdapter,
-    KrackenAdapter,
     GenericAdapter,
+    BUILTIN_ADAPTER_CONFIGS,
 )
 
 
@@ -399,17 +398,17 @@ class TestMonitoringMetrics:
 class TestPipelineAdapters:
     """Unit tests for pipeline adapter classes"""
 
-    def test_nanometanf_adapter_basic(self):
-        """Test NanometanfAdapter basic functionality"""
-        adapter = NanometanfAdapter()
+    def test_nanometa_adapter_basic(self):
+        """Test nanometa adapter basic functionality"""
+        adapter = GenericAdapter(BUILTIN_ADAPTER_CONFIGS["nanometa"])
 
-        assert adapter.requirements.name == "nanometanf"
+        assert adapter.requirements.name == "nanometa"
         assert "fastq" in adapter.requirements.expected_patterns[0]
         assert "pod5" in adapter.requirements.expected_patterns[-1]
 
-    def test_nanometanf_adapter_file_support(self):
-        """Test NanometanfAdapter file support detection"""
-        adapter = NanometanfAdapter()
+    def test_nanometa_adapter_file_support(self):
+        """Test nanometa adapter file support detection"""
+        adapter = GenericAdapter(BUILTIN_ADAPTER_CONFIGS["nanometa"])
 
         # Should support these files
         assert adapter.supports_file(Path("test.fastq"))
@@ -422,9 +421,9 @@ class TestPipelineAdapters:
         assert not adapter.supports_file(Path("test.bam"))
         assert not adapter.supports_file(Path("test.sam"))
 
-    def test_nanometanf_adapter_barcode_detection(self):
-        """Test NanometanfAdapter barcode directory detection"""
-        adapter = NanometanfAdapter()
+    def test_nanometa_adapter_barcode_detection(self):
+        """Test nanometa adapter barcode directory detection"""
+        adapter = GenericAdapter(BUILTIN_ADAPTER_CONFIGS["nanometa"])
 
         # Should recognize these as barcode directories
         assert adapter.is_barcode_directory(Path("barcode01"))
@@ -439,8 +438,8 @@ class TestPipelineAdapters:
         assert not adapter.is_barcode_directory(Path("temp"))
 
     def test_kraken_adapter_basic(self):
-        """Test KrackenAdapter basic functionality"""
-        adapter = KrackenAdapter()
+        """Test Kraken adapter basic functionality"""
+        adapter = GenericAdapter(BUILTIN_ADAPTER_CONFIGS["kraken"])
 
         assert adapter.requirements.name == "kraken"
         assert any(
@@ -477,7 +476,7 @@ class TestPipelineAdapters:
             (temp_path / "test.fastq").touch()
             (temp_path / "test2.fastq").touch()
 
-            adapter = NanometanfAdapter()
+            adapter = GenericAdapter(BUILTIN_ADAPTER_CONFIGS["nanometa"])
 
             # Should validate successfully
             assert adapter.validate_structure(temp_path) == True
@@ -493,7 +492,7 @@ class TestPipelineAdapters:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
 
-            adapter = NanometanfAdapter()
+            adapter = GenericAdapter(BUILTIN_ADAPTER_CONFIGS["nanometa"])
 
             # Should fail validation
             assert adapter.validate_structure(temp_path) == False

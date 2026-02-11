@@ -18,7 +18,7 @@ authors = [
 maintainers = [
     {name = "FOI Bioinformatics", email = "bioinformatics@foi.se"},
 ]
-keywords = ["nanopore", "sequencing", "bioinformatics", "simulation", "oxford-nanopore", "fastq", "pod5", "timing-models", "parallel-processing", "real-time-monitoring", "pipeline-testing", "nanometanf"]
+keywords = ["nanopore", "sequencing", "bioinformatics", "simulation", "oxford-nanopore", "fastq", "pod5", "timing-models", "parallel-processing", "real-time-monitoring", "pipeline-testing", "nanometa"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",

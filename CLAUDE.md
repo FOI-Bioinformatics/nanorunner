@@ -143,7 +143,7 @@ nanorunner --genomes genome.fa /target --mean-quality 25 --std-quality 3
 - `timing.py`: Timing model implementations (UniformTimingModel, RandomTimingModel, PoissonTimingModel, AdaptiveTimingModel)
 - `generators.py`: Read generation backends (BuiltinGenerator, BadreadGenerator, NanoSimGenerator) with ABC, factory, and FASTA parsing
 - `profiles.py`: Configuration profile system with built-in profiles for sequencing and generation scenarios
-- `adapters.py`: Pipeline adapter framework for nanometanf, Kraken, miniknife, and generic pipelines
+- `adapters.py`: Pipeline adapter framework with data-driven BUILTIN_ADAPTER_CONFIGS (nanometa, kraken), GenericAdapter, and backward-compatible aliases
 - `monitoring.py`: Enhanced progress monitoring with resource tracking, predictive ETA, and interactive controls
 
 **nanopore_simulator/cli/**
@@ -213,7 +213,9 @@ nanorunner --genomes genome.fa /target --mean-quality 25 --std-quality 3
 
 **Pipeline Adapter Framework:**
 - Standardized validation interface for different bioinformatics pipelines
-- Built-in adapters: NanometanfAdapter, KrackenAdapter, MiniknifeAdapter, GenericAdapter
+- Built-in adapters defined via `BUILTIN_ADAPTER_CONFIGS`: `nanometa`, `kraken` (both use `GenericAdapter`)
+- Backward-compatible alias: `nanometanf` -> `nanometa`
+- `PipelineAdapter` ABC available for custom adapter subclasses
 - File pattern validation and structure requirements checking
 
 ### Supported File Types
@@ -261,15 +263,15 @@ nanorunner --genomes genome.fa /target --mean-quality 25 --std-quality 3
 
 ## Integration Context
 
-### Primary Integration: nanometanf Pipeline
-The simulator is designed for testing the nanometanf real-time taxonomic classification pipeline. Both replay and generate modes produce output compatible with nanometanf's `watchPath()` behavior:
+### Primary Integration: Nanometa Live
+The simulator is designed for testing the Nanometa Live real-time taxonomic analysis pipeline (`github.com/FOI-Bioinformatics/nanometa_live`). Both replay and generate modes produce output compatible with its watch-directory behavior:
 - Same barcode directory patterns (`barcode01/`, `barcode02/`, `unclassified/`)
 - Same file extensions (`.fastq`, `.fastq.gz`)
 - Files appear incrementally with timing
 
 ```bash
-# Configure nanometanf for simulated data consumption
-nextflow run nanometanf \
+# Configure nanometa for simulated data consumption
+nextflow run nanometa_live \
     --realtime_mode \
     --nanopore_output_dir /watch/output \
     --file_pattern "**/*.fastq{,.gz}" \
@@ -279,9 +281,8 @@ nextflow run nanometanf \
 
 ### Multi-Pipeline Support
 Pipeline adapters enable validation and testing across multiple bioinformatics workflows:
-- **Nanometanf**: Real-time taxonomic classification
-- **Kraken**: k-mer based taxonomic assignment
-- **Miniknife**: Lightweight classification tool
+- **nanometa**: Nanometa Live real-time taxonomic analysis
+- **kraken**: Kraken2/KrakenUniq taxonomic classification
 - **Generic**: Customizable adapter for arbitrary pipelines
 
 ### Timing Models

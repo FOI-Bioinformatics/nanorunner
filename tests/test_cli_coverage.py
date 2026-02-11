@@ -55,9 +55,8 @@ class TestCLICommandFunctions:
             "nanopore_simulator.cli.main.get_available_adapters"
         ) as mock_adapters:
             mock_adapters.return_value = {
-                "nanometanf": "Real-time taxonomic classification pipeline",
-                "kraken": "K-mer based taxonomic assignment",
-                "generic": "Generic adapter for any pipeline",
+                "nanometa": "Nanometa Live real-time taxonomic analysis pipeline",
+                "kraken": "Kraken2/KrakenUniq taxonomic classification pipeline",
             }
 
             result = list_adapters_command()
@@ -65,10 +64,9 @@ class TestCLICommandFunctions:
             captured = capsys.readouterr()
             assert result == 0
             assert "Available Pipeline Adapters:" in captured.out
-            assert "nanometanf" in captured.out
+            assert "nanometa" in captured.out
             assert "kraken" in captured.out
-            assert "generic" in captured.out
-            assert "Real-time taxonomic classification pipeline" in captured.out
+            assert "Nanometa Live real-time taxonomic analysis pipeline" in captured.out
 
     def test_recommend_profiles_command_success(self, capsys):
         """Test recommend profiles command with valid directory."""
@@ -131,11 +129,11 @@ class TestCLICommandFunctions:
                     "recommendations": [],
                 }
 
-                result = validate_pipeline_command(target_dir, "nanometanf")
+                result = validate_pipeline_command(target_dir, "nanometa")
 
                 captured = capsys.readouterr()
                 assert result == 0
-                assert "Pipeline validation report for 'nanometanf':" in captured.out
+                assert "Pipeline validation report for 'nanometa':" in captured.out
                 assert "Valid: yes" in captured.out
 
     def test_validate_pipeline_command_invalid(self, capsys):
@@ -177,7 +175,7 @@ class TestCLICommandFunctions:
                     "errors": ["No FASTQ files"],
                 }
 
-                result = validate_pipeline_command(target_dir, "nanometanf")
+                result = validate_pipeline_command(target_dir, "nanometa")
 
                 captured = capsys.readouterr()
                 assert result == 1
@@ -188,7 +186,7 @@ class TestCLICommandFunctions:
         """Test validate pipeline command with nonexistent directory."""
         nonexistent_dir = Path("/nonexistent/directory/path")
 
-        result = validate_pipeline_command(nonexistent_dir, "nanometanf")
+        result = validate_pipeline_command(nonexistent_dir, "nanometa")
 
         captured = capsys.readouterr()
         assert result == 1
@@ -222,13 +220,13 @@ class TestCLISpecialOptions:
             "nanopore_simulator.cli.main.get_available_adapters"
         ) as mock_adapters:
             mock_adapters.return_value = {
-                "nanometanf": "Real-time taxonomic classification pipeline",
-                "kraken": "K-mer based taxonomic assignment",
+                "nanometa": "Nanometa Live real-time taxonomic analysis pipeline",
+                "kraken": "Kraken2/KrakenUniq taxonomic classification pipeline",
             }
             result = runner.invoke(app, ["list-adapters"])
             assert result.exit_code == 0
             assert "Available Pipeline Adapters:" in result.output
-            assert "nanometanf" in result.output
+            assert "nanometa" in result.output
 
     def test_cli_list_generators(self):
         """Test list-generators subcommand."""
@@ -290,13 +288,13 @@ class TestCLISpecialOptions:
                     [
                         "validate",
                         "--pipeline",
-                        "nanometanf",
+                        "nanometa",
                         "--target",
                         str(target_dir),
                     ],
                 )
                 assert result.exit_code == 0
-                assert "Pipeline validation report for 'nanometanf':" in result.output
+                assert "Pipeline validation report for 'nanometa':" in result.output
                 assert "Valid: yes" in result.output
 
 
