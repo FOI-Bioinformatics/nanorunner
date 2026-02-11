@@ -69,7 +69,7 @@ class TestCLICommandFunctions:
             assert "Nanometa Live real-time taxonomic analysis pipeline" in captured.out
 
     def test_recommend_profiles_command_success(self, capsys):
-        """Test recommend profiles command with valid directory."""
+        """Test recommend profiles command with sequencing files."""
         with tempfile.TemporaryDirectory() as temp_dir:
             source_dir = Path(temp_dir)
 
@@ -96,9 +96,9 @@ class TestCLICommandFunctions:
                     captured = capsys.readouterr()
                     assert result == 0
                     assert f"Analysis of {source_dir}:" in captured.out
-                    assert "Found 2 sequencing files" in captured.out
+                    assert "Found 2 sequencing file(s)" in captured.out
                     assert "Detected structure:" in captured.out
-                    assert "Recommended profiles for 2 files:" in captured.out
+                    assert "Recommended replay profiles for 2 files:" in captured.out
                     assert "bursty" in captured.out
 
     def test_recommend_profiles_command_nonexistent_dir(self, capsys):
@@ -110,6 +110,87 @@ class TestCLICommandFunctions:
         captured = capsys.readouterr()
         assert result == 1
         assert "Error: Source directory does not exist" in captured.out
+
+    def test_recommend_profiles_command_no_source(self, capsys):
+        """Test recommend profiles command with no source shows overview."""
+        result = recommend_profiles_command()
+
+        captured = capsys.readouterr()
+        assert result == 0
+        assert "Available Configuration Profiles" in captured.out
+        assert "Replay profiles" in captured.out
+        assert "Generate profiles" in captured.out
+        assert "development" in captured.out
+        assert "generate_test" in captured.out
+
+    def test_recommend_profiles_command_genome_files(self, capsys):
+        """Test recommend profiles command with genome FASTA files."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_dir = Path(temp_dir)
+            (source_dir / "genome.fasta").write_text(">chr1\\nACGTACGT\\n")
+
+            with patch(
+                "nanopore_simulator.cli.main.get_generate_recommendations"
+            ) as mock_rec:
+                with patch(
+                    "nanopore_simulator.cli.main.get_available_profiles"
+                ) as mock_profiles:
+                    mock_rec.return_value = [
+                        "generate_test",
+                        "generate_standard",
+                    ]
+                    mock_profiles.return_value = {
+                        "generate_test": "Quick smoke test",
+                        "generate_standard": "Standard run",
+                    }
+
+                    result = recommend_profiles_command(source_dir)
+
+                    captured = capsys.readouterr()
+                    assert result == 0
+                    assert "genome FASTA file(s)" in captured.out
+                    assert "Recommended generate profiles" in captured.out
+
+    def test_recommend_profiles_command_both_types(self, capsys):
+        """Test recommend with both sequencing and genome files."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_dir = Path(temp_dir)
+            (source_dir / "reads.fastq").write_text("@r1\\nACGT\\n+\\nIIII\\n")
+            (source_dir / "genome.fa").write_text(">chr1\\nACGT\\n")
+
+            with patch(
+                "nanopore_simulator.cli.main.get_profile_recommendations"
+            ) as mock_replay_rec:
+                with patch(
+                    "nanopore_simulator.cli.main.get_generate_recommendations"
+                ) as mock_gen_rec:
+                    with patch(
+                        "nanopore_simulator.cli.main.get_available_profiles"
+                    ) as mock_profiles:
+                        mock_replay_rec.return_value = ["bursty"]
+                        mock_gen_rec.return_value = ["generate_test"]
+                        mock_profiles.return_value = {
+                            "bursty": "Burst pattern",
+                            "generate_test": "Quick test",
+                        }
+
+                        result = recommend_profiles_command(source_dir)
+
+                        captured = capsys.readouterr()
+                        assert result == 0
+                        assert "sequencing file(s)" in captured.out
+                        assert "genome FASTA file(s)" in captured.out
+
+    def test_recommend_profiles_command_empty_dir(self, capsys):
+        """Test recommend with an empty directory."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_dir = Path(temp_dir)
+
+            result = recommend_profiles_command(source_dir)
+
+            captured = capsys.readouterr()
+            assert result == 1
+            assert "No sequencing or genome files found" in captured.out
 
     def test_validate_pipeline_command_success(self, capsys):
         """Test validate pipeline command with valid directory."""
@@ -265,6 +346,12 @@ class TestCLISpecialOptions:
                     )
                     assert result.exit_code == 0
                     assert "Analysis of" in result.output
+
+    def test_cli_recommend_no_source(self):
+        """Test recommend subcommand with no --source shows overview."""
+        result = runner.invoke(app, ["recommend"])
+        assert result.exit_code == 0
+        assert "Available Configuration Profiles" in result.output
 
     def test_cli_validate_pipeline(self):
         """Test validate subcommand via CliRunner with a real directory."""

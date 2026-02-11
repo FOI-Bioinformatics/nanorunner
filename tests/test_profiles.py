@@ -11,6 +11,7 @@ from nanopore_simulator.core.profiles import (
     get_available_profiles,
     create_config_from_profile,
     get_profile_recommendations,
+    get_generate_recommendations,
     validate_profile_name,
 )
 from nanopore_simulator.core.config import SimulationConfig
@@ -361,6 +362,43 @@ class TestProfileRecommendations:
         recommendations = get_profile_recommendations(200, "general")
 
         assert "development" in recommendations
+
+
+class TestGenerateRecommendations:
+    """Test generate-mode profile recommendations."""
+
+    def test_small_input_suggests_test_first(self):
+        """Small genome sets should suggest generate_test first."""
+        recs = get_generate_recommendations(1, total_size_mb=5)
+        assert recs == ["generate_test", "generate_standard"]
+
+    def test_two_small_genomes(self):
+        """Two genomes under 20 MB should suggest generate_test first."""
+        recs = get_generate_recommendations(2, total_size_mb=10)
+        assert recs == ["generate_test", "generate_standard"]
+
+    def test_large_input_suggests_standard_first(self):
+        """Many genomes should suggest generate_standard first."""
+        recs = get_generate_recommendations(5, total_size_mb=100)
+        assert recs == ["generate_standard", "generate_test"]
+
+    def test_small_count_but_large_size(self):
+        """Few genomes but large total size should suggest standard first."""
+        recs = get_generate_recommendations(2, total_size_mb=50)
+        assert recs == ["generate_standard", "generate_test"]
+
+    def test_default_size_zero(self):
+        """Default total_size_mb of 0 with small count suggests test first."""
+        recs = get_generate_recommendations(1)
+        assert recs == ["generate_test", "generate_standard"]
+
+    def test_always_returns_both(self):
+        """Both generate profiles should always be present."""
+        for count, size in [(1, 0), (10, 500), (2, 19)]:
+            recs = get_generate_recommendations(count, size)
+            assert "generate_test" in recs
+            assert "generate_standard" in recs
+            assert len(recs) == 2
 
 
 class TestProfileIntegration:

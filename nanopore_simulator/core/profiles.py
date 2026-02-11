@@ -327,6 +327,20 @@ def get_profile_recommendations(
     return profile_manager.get_profile_recommendations(file_count, use_case)
 
 
+def get_generate_recommendations(
+    genome_count: int, total_size_mb: float = 0
+) -> list[str]:
+    """Recommend generate-mode profiles based on genome count and total size.
+
+    For small inputs (few genomes, modest total size), suggests
+    ``generate_test`` first for quick feedback.  For larger inputs,
+    suggests ``generate_standard`` first.
+    """
+    if genome_count <= 2 and total_size_mb < 20:
+        return ["generate_test", "generate_standard"]
+    return ["generate_standard", "generate_test"]
+
+
 def validate_profile_name(name: str) -> bool:
     """Validate if a profile name exists"""
     return profile_manager.get_profile(name) is not None

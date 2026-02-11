@@ -5,16 +5,17 @@ from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import click
 import typer
 
 from .. import __version__
 from ..core.config import SimulationConfig
 from ..core.simulator import NanoporeSimulator
 from ..core.profiles import (
+    BUILTIN_PROFILES,
     get_available_profiles,
     create_config_from_profile,
     get_profile_recommendations,
+    get_generate_recommendations,
     validate_profile_name,
 )
 from ..core.adapters import (
@@ -464,8 +465,99 @@ def list_mocks_cmd() -> None:
 # ---------------------------------------------------------------------------
 
 
-def recommend_profiles_command(source_dir: Path) -> int:
-    """Recommend profiles based on source directory."""
+_GENOME_EXTENSIONS = {".fa", ".fasta", ".fa.gz", ".fasta.gz"}
+
+
+def _find_genome_files(directory: Path) -> list:
+    """Return genome FASTA files found directly inside *directory*."""
+    return [
+        f
+        for f in directory.iterdir()
+        if f.is_file()
+        and any(f.name.lower().endswith(ext) for ext in _GENOME_EXTENSIONS)
+    ]
+
+
+def _show_profile_overview() -> int:
+    """Show all profiles grouped by mode when no source directory is given."""
+    profiles = get_available_profiles()
+
+    replay_names = [
+        n for n in BUILTIN_PROFILES if not n.startswith("generate_")
+    ]
+    generate_names = [
+        n for n in BUILTIN_PROFILES if n.startswith("generate_")
+    ]
+
+    print("Available Configuration Profiles")
+    print("=" * 55)
+
+    print("\nReplay profiles (for existing FASTQ/POD5 files):")
+    for name in replay_names:
+        desc = profiles.get(name, "")
+        print(f"  {name:20} - {desc}")
+
+    print("\nGenerate profiles (for genome FASTA files):")
+    for name in generate_names:
+        desc = profiles.get(name, "")
+        print(f"  {name:20} - {desc}")
+
+    print("\nUse --source <dir> to get recommendations for a specific directory.")
+    return 0
+
+
+def _show_replay_recommendations(
+    source_dir: Path, file_count: int
+) -> None:
+    """Print replay-mode profile recommendations."""
+    try:
+        structure = FileStructureDetector.detect_structure(source_dir)
+    except ValueError as e:
+        print(f"\n  Error detecting structure: {e}")
+        return
+    print(f"  Detected structure: {structure}")
+
+    recommendations = get_profile_recommendations(file_count, "general")
+    profiles = get_available_profiles()
+    print(f"\nRecommended replay profiles for {file_count} files:")
+    for i, name in enumerate(recommendations, 1):
+        desc = profiles.get(name, "Unknown profile")
+        print(f"  {i}. {name} - {desc}")
+
+
+def _show_generate_recommendations(
+    genome_files: list,
+) -> None:
+    """Print generate-mode profile recommendations."""
+    total_size = sum(f.stat().st_size for f in genome_files)
+    total_size_mb = total_size / (1024 * 1024)
+
+    print(f"  Found {len(genome_files)} genome FASTA file(s):")
+    for gf in genome_files[:5]:
+        print(f"    {gf.name}")
+    if len(genome_files) > 5:
+        print(f"    ... and {len(genome_files) - 5} more")
+
+    recommendations = get_generate_recommendations(
+        len(genome_files), total_size_mb
+    )
+    profiles = get_available_profiles()
+    print(f"\nRecommended generate profiles for {len(genome_files)} genome(s):")
+    for i, name in enumerate(recommendations, 1):
+        desc = profiles.get(name, "Unknown profile")
+        print(f"  {i}. {name} - {desc}")
+
+
+def recommend_profiles_command(source_dir: Optional[Path] = None) -> int:
+    """Recommend profiles based on source directory contents.
+
+    When *source_dir* is ``None``, displays a categorised overview of all
+    available profiles.  Otherwise analyses the directory for sequencing
+    and/or genome files and recommends appropriate profiles.
+    """
+    if source_dir is None:
+        return _show_profile_overview()
+
     if not source_dir.exists():
         print(f"Error: Source directory does not exist: {source_dir}")
         return 1
@@ -474,74 +566,40 @@ def recommend_profiles_command(source_dir: Path) -> int:
         print(f"Error: Not a directory: {source_dir}")
         return 1
 
-    files = FileStructureDetector._find_sequencing_files(source_dir)
-    file_count = len(files)
+    seq_files = FileStructureDetector._find_sequencing_files(source_dir)
+    genome_files = _find_genome_files(source_dir)
 
-    print(f"Analysis of {source_dir}:")
-    print(f"  Found {file_count} sequencing files")
-
-    if file_count == 0:
-        genome_extensions = {".fa", ".fasta", ".fa.gz", ".fasta.gz"}
-        genome_files = [
-            f
-            for f in source_dir.iterdir()
-            if f.is_file()
-            and any(f.name.lower().endswith(ext) for ext in genome_extensions)
-        ]
-        barcode_seq_count = 0
+    # Also check barcode subdirectories for sequencing files
+    if not seq_files:
         for subdir in source_dir.iterdir():
             if subdir.is_dir():
-                barcode_seq_count += len(
+                seq_files.extend(
                     FileStructureDetector._find_sequencing_files(subdir)
                 )
 
-        if genome_files:
-            print(f"\n  Found {len(genome_files)} genome FASTA file(s) instead:")
-            for gf in genome_files[:5]:
-                print(f"    {gf.name}")
-            if len(genome_files) > 5:
-                print(f"    ... and {len(genome_files) - 5} more")
-            print("\n  recommend is for replay mode (existing sequencing reads).")
-            print("  To generate reads from genome FASTA files, use:")
-            print(f"    nanorunner generate --genomes {genome_files[0].name} --target <target_dir>")
-            return 1
+    has_seq = len(seq_files) > 0
+    has_genomes = len(genome_files) > 0
 
-        if barcode_seq_count > 0:
-            pass
-        else:
-            all_files = [f for f in source_dir.iterdir() if f.is_file()]
-            print("\n  No sequencing files found. recommend expects a directory")
-            print("  containing FASTQ or POD5 files for replay mode.")
-            print(
-                f"  Supported extensions: {', '.join(sorted(FileStructureDetector.SUPPORTED_EXTENSIONS))}"
-            )
-            if all_files:
-                extensions = set()
-                for f in all_files:
-                    name = f.name.lower()
-                    if ".gz" in name:
-                        ext = "." + ".".join(name.rsplit(".", 2)[-2:])
-                    else:
-                        ext = f.suffix.lower()
-                    extensions.add(ext)
-                print(
-                    f"  Files found with extensions: {', '.join(sorted(extensions))}"
-                )
-            return 1
-
-    try:
-        structure = FileStructureDetector.detect_structure(source_dir)
-    except ValueError as e:
-        print(f"\n  Error: {e}")
+    if not has_seq and not has_genomes:
+        print(f"Analysis of {source_dir}:")
+        print("  No sequencing or genome files found.")
+        seq_exts = sorted(FileStructureDetector.SUPPORTED_EXTENSIONS)
+        gen_exts = sorted(_GENOME_EXTENSIONS)
+        print(f"  Supported sequencing extensions: {', '.join(seq_exts)}")
+        print(f"  Supported genome extensions: {', '.join(gen_exts)}")
         return 1
-    print(f"  Detected structure: {structure}")
 
-    recommendations = get_profile_recommendations(file_count, "general")
-    print(f"\nRecommended profiles for {file_count} files:")
-    for i, profile_name in enumerate(recommendations, 1):
-        profiles = get_available_profiles()
-        description = profiles.get(profile_name, "Unknown profile")
-        print(f"  {i}. {profile_name} - {description}")
+    print(f"Analysis of {source_dir}:")
+
+    if has_seq:
+        print(f"  Found {len(seq_files)} sequencing file(s)")
+        _show_replay_recommendations(source_dir, len(seq_files))
+
+    if has_seq and has_genomes:
+        print()
+
+    if has_genomes:
+        _show_generate_recommendations(genome_files)
 
     return 0
 
@@ -580,9 +638,9 @@ def validate_pipeline_command(target_dir: Path, pipeline: str) -> int:
 
 @app.command("recommend")
 def recommend_cmd(
-    source: Path = typer.Option(
-        ..., "--source", "-s",
-        help="Source directory to analyse.",
+    source: Optional[Path] = typer.Option(
+        None, "--source", "-s",
+        help="Source directory to analyse (omit for an overview of all profiles).",
         exists=True, file_okay=False, resolve_path=True,
     ),
 ) -> None:
@@ -1151,16 +1209,10 @@ def download(
 def main() -> int:
     """Entry point for console_scripts and bin/nanopore-simulator."""
     try:
-        app(standalone_mode=False)
+        app()
         return 0
     except SystemExit as e:
         return e.code if isinstance(e.code, int) else 0
-    except click.exceptions.ClickException:
-        # click 8.3+ raises NoArgsIsHelpError (a ClickException subclass)
-        # instead of Exit when no_args_is_help=True and no args are given.
-        # With standalone_mode=False the exception propagates after help
-        # has already been displayed.
-        return 0
 
 
 if __name__ == "__main__":
