@@ -416,13 +416,14 @@ class TestCLIAdditionalCoverage:
                     captured = capsys.readouterr()
                     assert "Simulation interrupted by user" in captured.out
 
-    def test_cli_missing_source_target_args(self):
-        """Test CLI error when source/target dirs are missing"""
+    def test_cli_no_args_shows_help(self):
+        """Test CLI with no arguments shows help and exits cleanly"""
         with patch.object(sys, "argv", ["nanorunner"]):
-            with pytest.raises(SystemExit) as exc_info:
-                main()
-            assert exc_info.value.code == 2
+            result = main()
+            assert result == 0
 
+    def test_cli_missing_target_arg(self):
+        """Test CLI error when only source dir is provided"""
         with patch.object(sys, "argv", ["nanorunner", "/source"]):
             with pytest.raises(SystemExit) as exc_info:
                 main()

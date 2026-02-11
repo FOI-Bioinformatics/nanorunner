@@ -79,13 +79,15 @@ def list_mocks_command() -> int:
 
 
 def download_command(args: argparse.Namespace) -> int:
-    """Download genomes for offline use.
+    """Download genomes for offline use, optionally generating reads.
 
     Downloads genomes specified by species names, mock communities, or
-    taxonomy IDs and caches them locally for offline simulation runs.
+    taxonomy IDs and caches them locally. If a target directory is provided,
+    also generates simulated reads into that directory.
 
     Args:
-        args: Parsed command-line arguments containing species, mock, or taxid.
+        args: Parsed command-line arguments containing species, mock, or taxid,
+            and optional target_dir with generation parameters.
 
     Returns:
         0 on success, 1 on error.
@@ -96,6 +98,7 @@ def download_command(args: argparse.Namespace) -> int:
 
     resolver = SpeciesResolver()
     genomes_to_download = []
+    mock = None
 
     if args.mock:
         mock = get_mock_community(args.mock)
@@ -144,14 +147,70 @@ def download_command(args: argparse.Namespace) -> int:
         return 1
 
     print(f"Downloading {len(genomes_to_download)} genome(s)...")
+    successful_downloads: List[tuple] = []
     for name, ref in genomes_to_download:
         try:
             path = download_genome(ref, resolver.cache)
             print(f"  Downloaded: {name} -> {path}")
+            successful_downloads.append((name, ref, path))
         except Exception as e:
             print(f"  Failed: {name} - {e}")
 
     print("Download complete")
+
+    # If target_dir provided, generate reads from downloaded genomes
+    if args.target_dir is not None:
+        if not successful_downloads:
+            print("Error: No genomes downloaded successfully, cannot generate reads")
+            return 1
+
+        genome_paths = [path for _, _, path in successful_downloads]
+
+        # Determine sample type
+        sample_type = args.sample_type
+        if sample_type is None:
+            sample_type = "mixed" if len(genome_paths) > 1 else "pure"
+
+        # Compute abundances from mock community if applicable
+        abundances = None
+        if mock is not None:
+            downloaded_names = {name for name, _, _ in successful_downloads}
+            abundances = []
+            for org in mock.organisms:
+                if org.name in downloaded_names:
+                    abundances.append(org.abundance)
+            # Renormalize if some organisms failed to download
+            total = sum(abundances)
+            if total > 0 and abs(total - 1.0) > 0.001:
+                abundances = [a / total for a in abundances]
+
+        try:
+            config = SimulationConfig(
+                target_dir=args.target_dir,
+                operation="generate",
+                genome_inputs=genome_paths,
+                generator_backend=args.generator_backend,
+                read_count=args.read_count,
+                mean_read_length=args.mean_read_length,
+                mean_quality=args.mean_quality,
+                std_quality=args.std_quality,
+                reads_per_file=args.reads_per_file,
+                output_format=args.output_format,
+                mix_reads=args.mix_reads,
+                interval=args.interval,
+                batch_size=args.batch_size,
+                sample_type=sample_type,
+                abundances=abundances,
+            )
+
+            print(f"\nGenerating reads into {args.target_dir}...")
+            simulator = NanoporeSimulator(config, enable_monitoring=True)
+            simulator.run_simulation()
+            print("Read generation complete")
+        except Exception as e:
+            print(f"Error during read generation: {e}")
+            return 1
+
     return 0
 
 
@@ -280,7 +339,11 @@ def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "download":
         download_parser = argparse.ArgumentParser(
             prog="nanorunner download",
-            description="Pre-download genomes for offline use",
+            description=(
+                "Pre-download genomes for offline use. If TARGET_DIR is provided,\n"
+                "also generate simulated reads into that directory."
+            ),
+            formatter_class=argparse.RawDescriptionHelpFormatter,
         )
         download_parser.add_argument(
             "--species",
@@ -299,6 +362,77 @@ def main() -> int:
             nargs="+",
             help="NCBI taxonomy IDs to download",
         )
+        download_parser.add_argument(
+            "target_dir",
+            type=Path,
+            nargs="?",
+            default=None,
+            help="Target directory for read generation (if omitted, download only)",
+        )
+        download_parser.add_argument(
+            "--read-count",
+            type=int,
+            default=1000,
+            help="Total number of reads to generate across all genomes (default: 1000)",
+        )
+        download_parser.add_argument(
+            "--reads-per-file",
+            type=int,
+            default=100,
+            help="Number of reads per output file (default: 100)",
+        )
+        download_parser.add_argument(
+            "--mean-read-length",
+            type=int,
+            default=5000,
+            help="Mean read length in bases (default: 5000)",
+        )
+        download_parser.add_argument(
+            "--mean-quality",
+            type=float,
+            default=20.0,
+            help="Mean Phred quality score for generated reads (default: 20.0, typical for R10.4.1 + SUP)",
+        )
+        download_parser.add_argument(
+            "--std-quality",
+            type=float,
+            default=4.0,
+            help="Standard deviation of quality scores (default: 4.0)",
+        )
+        download_parser.add_argument(
+            "--output-format",
+            choices=["fastq", "fastq.gz"],
+            default="fastq.gz",
+            help="Output file format (default: fastq.gz)",
+        )
+        download_parser.add_argument(
+            "--generator-backend",
+            choices=["auto", "builtin", "badread", "nanosim"],
+            default="auto",
+            help="Read generation backend (default: auto)",
+        )
+        download_parser.add_argument(
+            "--interval",
+            type=float,
+            default=5.0,
+            help="Seconds between file operations (default: 5.0)",
+        )
+        download_parser.add_argument(
+            "--batch-size",
+            type=int,
+            default=1,
+            help="Number of files to process per interval (default: 1)",
+        )
+        download_parser.add_argument(
+            "--sample-type",
+            choices=["pure", "mixed"],
+            help="Sample type: pure (per-species barcodes) or mixed (interleaved)",
+        )
+        download_parser.add_argument(
+            "--mix-reads",
+            action="store_true",
+            help="Mix reads from all genomes into shared files (singleplex mode)",
+        )
         args = download_parser.parse_args(sys.argv[2:])
         return download_command(args)
 
@@ -308,7 +442,7 @@ def main() -> int:
         "       %(prog)s --genomes FASTA [...] TARGET_DIR [options]\n"
         "       %(prog)s --species/--mock/--taxid ... TARGET_DIR [options]\n"
         "       %(prog)s --list-profiles | --list-mocks | ...\n"
-        "       %(prog)s download --species/--mock/--taxid ...",
+        "       %(prog)s download --species/--mock/--taxid ... [TARGET_DIR] [options]",
         description=(
             "Nanopore sequencing run simulator for testing bioinformatics"
             " pipelines.\n"
@@ -329,8 +463,8 @@ def main() -> int:
             " [options]\n"
             "            Resolve species via GTDB/NCBI and generate reads.\n"
             "\n"
-            "  Download  nanorunner download --species/--mock/--taxid ...\n"
-            "            Pre-download genomes for offline use."
+            "  Download  nanorunner download --species/--mock/--taxid ... [TARGET]\n"
+            "            Pre-download genomes. Add TARGET to also generate reads."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
@@ -352,6 +486,7 @@ Examples:
   Download:
     nanorunner download --species "Escherichia coli"
     nanorunner download --mock quick_3species
+    nanorunner download --mock quick_3species /watch/output --read-count 5000
 
   Enhanced features require: pip install nanorunner[enhanced]""",
     )
@@ -600,6 +735,11 @@ Examples:
     )
 
     args = parser.parse_args()
+
+    # No arguments at all: show help instead of an error
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return 0
 
     # Handle command-specific operations
     if args.list_profiles:
