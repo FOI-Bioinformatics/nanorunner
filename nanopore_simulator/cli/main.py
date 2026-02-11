@@ -465,7 +465,7 @@ def list_mocks_cmd() -> None:
 # ---------------------------------------------------------------------------
 
 
-_GENOME_EXTENSIONS = {".fa", ".fasta", ".fa.gz", ".fasta.gz"}
+_GENOME_EXTENSIONS = {".fa", ".fasta", ".fna", ".fa.gz", ".fasta.gz", ".fna.gz"}
 
 
 def _find_genome_files(directory: Path) -> list:
@@ -476,6 +476,37 @@ def _find_genome_files(directory: Path) -> list:
         if f.is_file()
         and any(f.name.lower().endswith(ext) for ext in _GENOME_EXTENSIONS)
     ]
+
+
+def _expand_genome_paths(paths: List[Path]) -> List[Path]:
+    """Expand a list of genome paths, resolving directories to contained files.
+
+    Each element may be a file (kept as-is) or a directory (scanned for
+    genome files matching ``_GENOME_EXTENSIONS``).  Raises ``typer.Exit``
+    on missing paths, non-genome files, or empty directories.
+    """
+    expanded: List[Path] = []
+    for p in paths:
+        if not p.exists():
+            typer.echo(f"Error: Path does not exist: {p}", err=True)
+            raise typer.Exit(code=2)
+        if p.is_dir():
+            found = sorted(_find_genome_files(p))
+            if not found:
+                exts = ", ".join(sorted(_GENOME_EXTENSIONS))
+                typer.echo(
+                    f"Error: No genome files found in directory: {p}\n"
+                    f"  Supported extensions: {exts}",
+                    err=True,
+                )
+                raise typer.Exit(code=2)
+            typer.echo(
+                f"Expanded directory {p.name}/ -> {len(found)} genome file(s)"
+            )
+            expanded.extend(found)
+        else:
+            expanded.append(p)
+    return expanded
 
 
 def _show_profile_overview() -> int:
@@ -954,12 +985,9 @@ def generate(
         )
         raise typer.Exit(code=1)
 
-    # Validate genome files exist
+    # Validate and expand genome paths (directories -> contained files)
     if genomes:
-        for gpath in genomes:
-            if not gpath.exists():
-                typer.echo(f"Error: Genome file does not exist: {gpath}", err=True)
-                raise typer.Exit(code=2)
+        genomes = _expand_genome_paths(genomes)
 
     _validate_timing_params(
         burst_probability, burst_rate_multiplier, random_factor,

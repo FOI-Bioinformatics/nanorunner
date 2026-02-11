@@ -120,8 +120,8 @@ class ReadGenerator(ABC):
     def _output_filename(self, genome: GenomeInput, file_index: int) -> str:
         """Generate output filename based on genome and index."""
         stem = genome.fasta_path.stem
-        # Remove .fasta or .fa suffix if double-extension like genome.fasta.gz
-        if stem.endswith((".fasta", ".fa")):
+        # Remove .fasta/.fa/.fna suffix if double-extension like genome.fasta.gz
+        if stem.endswith((".fasta", ".fa", ".fna")):
             stem = Path(stem).stem
         ext = ".fastq.gz" if self.config.output_format == "fastq.gz" else ".fastq"
         return f"{stem}_reads_{file_index:04d}{ext}"
