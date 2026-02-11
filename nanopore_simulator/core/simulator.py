@@ -396,30 +396,36 @@ class NanoporeSimulator:
         for idx, (gp, rc) in enumerate(zip(genome_inputs, per_genome_reads)):
             self.logger.info(f"Genome {idx + 1} ({Path(gp).name}): {rc} reads")
 
+        rpf = self.config.reads_per_file
+
         if structure == "multiplex":
             for idx, genome_path in enumerate(genome_inputs):
                 barcode = f"barcode{idx + 1:02d}"
                 barcode_dir = self.config.target_dir / barcode
                 genome = GenomeInput(fasta_path=genome_path, barcode=barcode)
-                n_files = max(
-                    1,
-                    math.ceil(per_genome_reads[idx] / self.config.reads_per_file),
-                )
+                n_files = max(1, math.ceil(per_genome_reads[idx] / rpf))
+                remaining = per_genome_reads[idx]
                 for fi in range(n_files):
+                    chunk = min(rpf, remaining)
+                    remaining -= chunk
                     manifest.append(
                         {
                             "genome": genome,
                             "target": barcode_dir,
                             "file_index": fi,
                             "barcode": barcode,
+                            "num_reads": chunk,
                         }
                     )
         elif self.config.mix_reads:
             # Singleplex mixed: pool reads from all genomes into shared files
-            total_files = max(1, math.ceil(total_reads / self.config.reads_per_file))
+            total_files = max(1, math.ceil(total_reads / rpf))
             genomes = [GenomeInput(fasta_path=gp) for gp in genome_inputs]
             weights = abundances if abundances else [1.0 / n_genomes] * n_genomes
+            remaining = total_reads
             for fi in range(total_files):
+                chunk = min(rpf, remaining)
+                remaining -= chunk
                 genome = random.choices(genomes, weights=weights, k=1)[0]
                 manifest.append(
                     {
@@ -427,23 +433,25 @@ class NanoporeSimulator:
                         "target": self.config.target_dir,
                         "file_index": fi,
                         "barcode": None,
+                        "num_reads": chunk,
                     }
                 )
         else:
             # Singleplex separate: each genome gets abundance-weighted file counts
             for idx, genome_path in enumerate(genome_inputs):
                 genome = GenomeInput(fasta_path=genome_path)
-                n_files = max(
-                    1,
-                    math.ceil(per_genome_reads[idx] / self.config.reads_per_file),
-                )
+                n_files = max(1, math.ceil(per_genome_reads[idx] / rpf))
+                remaining = per_genome_reads[idx]
                 for fi in range(n_files):
+                    chunk = min(rpf, remaining)
+                    remaining -= chunk
                     manifest.append(
                         {
                             "genome": genome,
                             "target": self.config.target_dir,
                             "file_index": fi,
                             "barcode": None,
+                            "num_reads": chunk,
                         }
                     )
 
@@ -652,6 +660,7 @@ class NanoporeSimulator:
         output_dir = file_info["target"]
         file_index = file_info["file_index"]
         barcode = file_info["barcode"]
+        num_reads = file_info.get("num_reads")
 
         dir_start = time.time()
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -661,7 +670,9 @@ class NanoporeSimulator:
             self.progress_monitor.record_timing("directory_creation", dir_duration)
 
         file_op_start = time.time()
-        output_path = self.read_generator.generate_reads(genome, output_dir, file_index)
+        output_path = self.read_generator.generate_reads(
+            genome, output_dir, file_index, num_reads=num_reads
+        )
         file_op_duration = time.time() - file_op_start
         total_duration = time.time() - operation_start
 

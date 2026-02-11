@@ -93,7 +93,11 @@ class ReadGenerator(ABC):
 
     @abstractmethod
     def generate_reads(
-        self, genome: GenomeInput, output_dir: Path, file_index: int
+        self,
+        genome: GenomeInput,
+        output_dir: Path,
+        file_index: int,
+        num_reads: Optional[int] = None,
     ) -> Path:
         """Generate one FASTQ file of simulated reads from a genome.
 
@@ -101,6 +105,8 @@ class ReadGenerator(ABC):
             genome: Input genome specification.
             output_dir: Directory to write the output file.
             file_index: Index for naming the output file.
+            num_reads: Number of reads to generate. If None, uses
+                config.reads_per_file.
 
         Returns:
             Path to the generated FASTQ file.
@@ -145,7 +151,11 @@ class BuiltinGenerator(ReadGenerator):
         return True
 
     def generate_reads(
-        self, genome: GenomeInput, output_dir: Path, file_index: int
+        self,
+        genome: GenomeInput,
+        output_dir: Path,
+        file_index: int,
+        num_reads: Optional[int] = None,
     ) -> Path:
         sequences = parse_fasta(genome.fasta_path)
         if not sequences:
@@ -160,12 +170,15 @@ class BuiltinGenerator(ReadGenerator):
         filename = self._output_filename(genome, file_index)
         output_path = output_dir / filename
 
-        reads = self._sample_reads(full_seq, genome)
+        actual_reads = num_reads if num_reads is not None else self.config.reads_per_file
+        reads = self._sample_reads(full_seq, genome, actual_reads)
         self._write_fastq(reads, output_path)
 
         return output_path
 
-    def _sample_reads(self, genome_seq: str, genome: GenomeInput) -> List[tuple]:
+    def _sample_reads(
+        self, genome_seq: str, genome: GenomeInput, num_reads: int
+    ) -> List[tuple]:
         """Sample reads from the genome sequence.
 
         Returns list of (read_id, sequence, quality_string) tuples.
@@ -184,7 +197,7 @@ class BuiltinGenerator(ReadGenerator):
             mu = math.log(mean_len)
             sigma = 0.0
 
-        for i in range(self.config.reads_per_file):
+        for i in range(num_reads):
             # Sample read length from log-normal distribution
             if sigma > 0:
                 read_len = int(random.lognormvariate(mu, sigma))
@@ -245,11 +258,20 @@ class BadreadGenerator(ReadGenerator):
         return shutil.which("badread") is not None
 
     def generate_reads(
-        self, genome: GenomeInput, output_dir: Path, file_index: int
+        self,
+        genome: GenomeInput,
+        output_dir: Path,
+        file_index: int,
+        num_reads: Optional[int] = None,
     ) -> Path:
         output_dir.mkdir(parents=True, exist_ok=True)
         filename = self._output_filename(genome, file_index)
         output_path = output_dir / filename
+
+        actual_reads = num_reads if num_reads is not None else self.config.reads_per_file
+        # Calculate total bases needed: badread --quantity accepts total bases
+        # or coverage (Nx). Using total bases gives precise read count control.
+        total_bases = actual_reads * self.config.mean_read_length
 
         # badread outputs to stdout
         cmd = [
@@ -258,7 +280,7 @@ class BadreadGenerator(ReadGenerator):
             "--reference",
             str(genome.fasta_path),
             "--quantity",
-            f"{self.config.reads_per_file}x",
+            str(total_bases),
             "--length",
             f"{self.config.mean_read_length},{self.config.std_read_length}",
         ]
@@ -297,12 +319,17 @@ class NanoSimGenerator(ReadGenerator):
         return "simulator.py"
 
     def generate_reads(
-        self, genome: GenomeInput, output_dir: Path, file_index: int
+        self,
+        genome: GenomeInput,
+        output_dir: Path,
+        file_index: int,
+        num_reads: Optional[int] = None,
     ) -> Path:
         output_dir.mkdir(parents=True, exist_ok=True)
         filename = self._output_filename(genome, file_index)
         output_path = output_dir / filename
 
+        actual_reads = num_reads if num_reads is not None else self.config.reads_per_file
         prefix = output_dir / f"nanosim_temp_{file_index}"
 
         cmd = [
@@ -312,7 +339,7 @@ class NanoSimGenerator(ReadGenerator):
             "-r",
             str(genome.fasta_path),
             "-n",
-            str(self.config.reads_per_file),
+            str(actual_reads),
             "-o",
             str(prefix),
         ]
