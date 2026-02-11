@@ -370,6 +370,49 @@ class TestAbundanceWeightedGeneration:
         assert len(fq_files) == 10
 
 
+class TestAbundanceFallback:
+    """Verify that config.abundances is used when _resolved_abundances is absent.
+
+    The download command resolves species externally and passes abundances
+    directly via SimulationConfig.abundances rather than through species
+    resolution. The manifest must honour those abundances.
+    """
+
+    def test_config_abundances_used_without_resolved(self, tmp_path):
+        """abundances on config should be used when _resolved_abundances is not set."""
+        genomes = []
+        for i in range(2):
+            g = tmp_path / f"genome_{i}.fa"
+            g.write_text(f">chr{i}\n" + "ATCGATCG" * 50 + "\n")
+            genomes.append(g)
+
+        target = tmp_path / "output"
+        config = SimulationConfig(
+            target_dir=target,
+            operation="generate",
+            genome_inputs=genomes,
+            read_count=200,
+            reads_per_file=10,
+            mean_read_length=20,
+            std_read_length=5,
+            min_read_length=10,
+            output_format="fastq",
+            interval=0.0,
+            timing_model="uniform",
+            abundances=[0.9, 0.1],
+        )
+        # Do NOT set _resolved_abundances — mirrors the download command path
+        sim = NanoporeSimulator(config, enable_monitoring=False)
+        sim.run_simulation()
+
+        b1_files = list((target / "barcode01").glob("*.fastq"))
+        b2_files = list((target / "barcode02").glob("*.fastq"))
+        # 90% of 200 = 180 reads -> ceil(180/10) = 18 files
+        # 10% of 200 = 20 reads -> ceil(20/10) = 2 files
+        assert len(b1_files) == 18
+        assert len(b2_files) == 2
+
+
 class TestExpandGenomePaths:
     """Tests for _expand_genome_paths: directory expansion and extension support."""
 

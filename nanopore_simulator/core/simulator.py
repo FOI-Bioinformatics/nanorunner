@@ -284,7 +284,12 @@ class NanoporeSimulator:
         self._prepare_target_directory()
 
         if self.config.operation == "generate":
-            structure = self.config.force_structure or "multiplex"
+            if self.config.force_structure:
+                structure = self.config.force_structure
+            elif self.config.mix_reads:
+                structure = "singleplex"
+            else:
+                structure = "multiplex"
             file_manifest = self._create_generate_manifest(structure)
         else:
             # Detect or use forced structure
@@ -435,7 +440,12 @@ class NanoporeSimulator:
         n_genomes = len(genome_inputs)
 
         # Determine per-genome read counts from abundances
+        # _resolved_abundances is set by _resolve_species_inputs(); fall back
+        # to config.abundances for callers that resolve genomes externally
+        # (e.g. the download command).
         abundances = getattr(self.config, "_resolved_abundances", None)
+        if not abundances:
+            abundances = self.config.abundances
         if abundances and len(abundances) == n_genomes:
             per_genome_reads = _distribute_reads(total_reads, abundances)
         else:
