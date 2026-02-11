@@ -745,6 +745,11 @@ def replay(
         1, help="Number of files to process per interval.",
         rich_help_panel="Simulation Configuration",
     ),
+    no_wait: bool = typer.Option(
+        False,
+        help="Skip timing delays between batches. Files are processed as fast as possible.",
+        rich_help_panel="Simulation Configuration",
+    ),
     reads_per_file: Optional[int] = typer.Option(
         None,
         help=(
@@ -809,6 +814,9 @@ def replay(
     ),
 ) -> None:
     """Replay existing FASTQ/POD5 files with configurable timing."""
+    if no_wait:
+        interval = 0.0
+
     _validate_timing_params(
         burst_probability, burst_rate_multiplier, random_factor,
         adaptation_rate, history_size,
@@ -934,6 +942,11 @@ def generate(
         1, help="Number of files to process per interval.",
         rich_help_panel="Simulation Configuration",
     ),
+    no_wait: bool = typer.Option(
+        False,
+        help="Skip timing delays between batches. Files are processed as fast as possible.",
+        rich_help_panel="Simulation Configuration",
+    ),
     # Timing Models
     timing_model: Optional[TimingModelChoice] = typer.Option(
         None, help="Timing model (overrides profile setting).",
@@ -988,6 +1001,9 @@ def generate(
     ),
 ) -> None:
     """Generate simulated nanopore reads from genome FASTA files."""
+    if no_wait:
+        interval = 0.0
+
     # Mutual exclusivity validation
     sources = sum([
         genomes is not None,
@@ -1063,8 +1079,14 @@ def _download_genomes(
     species: Optional[List[str]],
     mock_name: Optional[str],
     taxid: Optional[List[int]],
+    parallel: bool = False,
+    worker_count: int = 4,
 ) -> tuple:
-    """Resolve and download genomes. Returns (successful_downloads, mock_community)."""
+    """Resolve and download genomes. Returns (successful_downloads, mock_community).
+
+    When *parallel* is ``True``, up to *worker_count* genomes are downloaded
+    concurrently using a thread pool.
+    """
     resolver = SpeciesResolver()
     genomes_to_download: List[tuple] = []
     mock_community = None
@@ -1117,13 +1139,36 @@ def _download_genomes(
 
     print(f"Downloading {len(genomes_to_download)} genome(s)...")
     successful: List[tuple] = []
-    for name, ref in genomes_to_download:
-        try:
+
+    if parallel and len(genomes_to_download) > 1:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def _do_download(item):
+            name, ref = item
             path = download_genome(ref, resolver.cache)
-            print(f"  Downloaded: {name} -> {path}")
-            successful.append((name, ref, path))
-        except Exception as e:
-            print(f"  Failed: {name} - {e}")
+            return name, ref, path
+
+        with ThreadPoolExecutor(max_workers=worker_count) as pool:
+            futures = {
+                pool.submit(_do_download, item): item
+                for item in genomes_to_download
+            }
+            for future in as_completed(futures):
+                name = futures[future][0]
+                try:
+                    name, ref, path = future.result()
+                    print(f"  Downloaded: {name} -> {path}")
+                    successful.append((name, ref, path))
+                except Exception as e:
+                    print(f"  Failed: {name} - {e}")
+    else:
+        for name, ref in genomes_to_download:
+            try:
+                path = download_genome(ref, resolver.cache)
+                print(f"  Downloaded: {name} -> {path}")
+                successful.append((name, ref, path))
+            except Exception as e:
+                print(f"  Failed: {name} - {e}")
 
     print("Download complete")
     return successful, mock_community
@@ -1194,13 +1239,32 @@ def download(
         False, help="Mix reads from all genomes into shared files.",
         rich_help_panel="Generation Options",
     ),
+    no_wait: bool = typer.Option(
+        False,
+        help="Skip timing delays during read generation.",
+        rich_help_panel="Generation Options",
+    ),
+    # Parallel Processing
+    parallel: bool = typer.Option(
+        False, help="Download genomes in parallel.",
+        rich_help_panel="Parallel Processing",
+    ),
+    worker_count: int = typer.Option(
+        4, help="Number of concurrent downloads (or generation workers).",
+        rich_help_panel="Parallel Processing",
+    ),
 ) -> None:
     """Download genomes for offline use, optionally generating reads."""
+    if no_wait:
+        interval = 0.0
+
     if not (species or mock or taxid):
         print("Error: Must specify --species, --mock, or --taxid")
         raise typer.Exit(code=1)
 
-    successful_downloads, mock_community = _download_genomes(species, mock, taxid)
+    successful_downloads, mock_community = _download_genomes(
+        species, mock, taxid, parallel=parallel, worker_count=worker_count,
+    )
 
     if target is not None:
         if not successful_downloads:
@@ -1239,6 +1303,8 @@ def download(
                 mix_reads=mix_reads,
                 interval=interval,
                 batch_size=batch_size,
+                parallel_processing=parallel,
+                worker_count=worker_count,
                 sample_type=st,
                 abundances=abundances_list,
             )
