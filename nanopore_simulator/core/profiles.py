@@ -7,9 +7,26 @@ from pathlib import Path
 from .config import SimulationConfig
 
 
+# Generate-mode field names emitted by ProfileDefinition.to_config_params()
+_GENERATE_FIELDS = (
+    "read_count",
+    "mean_read_length",
+    "mean_quality",
+    "reads_per_file",
+    "output_format",
+    "generator_backend",
+)
+
+
 @dataclass
 class ProfileDefinition:
-    """Definition of a configuration profile"""
+    """Definition of a configuration profile.
+
+    Core timing and processing fields are always emitted by
+    ``to_config_params()``.  Optional generate-mode fields are only
+    included when explicitly set (non-None), so replay profiles do not
+    inject unexpected generation defaults into SimulationConfig.
+    """
 
     name: str
     description: str
@@ -20,9 +37,21 @@ class ProfileDefinition:
     worker_count: int = 4
     operation: str = "copy"
 
+    # Optional generate-mode defaults (emitted only when set)
+    read_count: Optional[int] = None
+    mean_read_length: Optional[int] = None
+    mean_quality: Optional[float] = None
+    reads_per_file: Optional[int] = None
+    output_format: Optional[str] = None
+    generator_backend: Optional[str] = None
+
     def to_config_params(self) -> Dict[str, Any]:
-        """Convert profile to config parameters"""
-        return {
+        """Convert profile to config parameters.
+
+        Always includes timing and processing fields.  Generate-mode
+        fields are included only when they have been explicitly set.
+        """
+        params: Dict[str, Any] = {
             "timing_model": self.timing_model,
             "timing_model_params": self.timing_model_params,
             "batch_size": self.batch_size,
@@ -31,44 +60,47 @@ class ProfileDefinition:
             "operation": self.operation,
         }
 
+        # Conditionally include generate-mode fields
+        for field_name in _GENERATE_FIELDS:
+            value = getattr(self, field_name)
+            if value is not None:
+                params[field_name] = value
 
-# Built-in profiles for common sequencing scenarios
+        return params
+
+
+# Built-in profiles for common sequencing scenarios.
+#
+# Replay profiles (5) cover the four timing models with distinct use
+# cases.  Generate profiles (2) additionally set read-generation
+# parameters via the optional generate-mode fields.
 BUILTIN_PROFILES = {
-    "rapid_sequencing": ProfileDefinition(
-        name="rapid_sequencing",
-        description="High-throughput rapid sequencing with frequent bursts",
-        timing_model="poisson",
-        timing_model_params={"burst_probability": 0.15, "burst_rate_multiplier": 8.0},
-        batch_size=5,
-        parallel_processing=True,
-        worker_count=6,
-        operation="copy",
-    ),
-    "accurate_mode": ProfileDefinition(
-        name="accurate_mode",
-        description="Steady, accurate sequencing with minimal variation",
-        timing_model="poisson",
-        timing_model_params={"burst_probability": 0.02, "burst_rate_multiplier": 2.0},
-        batch_size=1,
-        parallel_processing=False,
-        worker_count=2,
-        operation="copy",
-    ),
-    "development_testing": ProfileDefinition(
-        name="development_testing",
-        description="Fast testing profile for development workflows",
+    # -- Replay profiles ------------------------------------------------
+    "development": ProfileDefinition(
+        name="development",
+        description="Fast iteration with deterministic uniform timing",
         timing_model="uniform",
         timing_model_params={},
         batch_size=10,
         parallel_processing=True,
         worker_count=8,
-        operation="link",  # Faster for testing
+        operation="link",
     ),
-    "long_read_nanopore": ProfileDefinition(
-        name="long_read_nanopore",
-        description="Typical Oxford Nanopore long-read sequencing pattern",
+    "steady": ProfileDefinition(
+        name="steady",
+        description="Low-variation random timing for controlled testing",
+        timing_model="random",
+        timing_model_params={"random_factor": 0.15},
+        batch_size=1,
+        parallel_processing=False,
+        worker_count=4,
+        operation="copy",
+    ),
+    "bursty": ProfileDefinition(
+        name="bursty",
+        description="Intermittent burst pattern for pipeline robustness testing",
         timing_model="poisson",
-        timing_model_params={"burst_probability": 0.08, "burst_rate_multiplier": 4.0},
+        timing_model_params={"burst_probability": 0.12, "burst_rate_multiplier": 6.0},
         batch_size=3,
         parallel_processing=True,
         worker_count=4,
@@ -76,17 +108,17 @@ BUILTIN_PROFILES = {
     ),
     "high_throughput": ProfileDefinition(
         name="high_throughput",
-        description="Maximum throughput simulation for stress testing",
+        description="High file volume with burst timing for stress testing",
         timing_model="poisson",
-        timing_model_params={"burst_probability": 0.25, "burst_rate_multiplier": 10.0},
-        batch_size=20,
+        timing_model_params={"burst_probability": 0.20, "burst_rate_multiplier": 8.0},
+        batch_size=15,
         parallel_processing=True,
         worker_count=12,
         operation="link",
     ),
-    "smoothed_timing": ProfileDefinition(
-        name="smoothed_timing",
-        description="Smoothly varying timing patterns using exponential moving average",
+    "gradual_drift": ProfileDefinition(
+        name="gradual_drift",
+        description="Slowly varying intervals via exponential moving average",
         timing_model="adaptive",
         timing_model_params={"adaptation_rate": 0.15, "history_size": 15},
         batch_size=2,
@@ -94,55 +126,32 @@ BUILTIN_PROFILES = {
         worker_count=4,
         operation="copy",
     ),
-    "legacy_random": ProfileDefinition(
-        name="legacy_random",
-        description="Legacy random interval mode for backward compatibility",
-        timing_model="random",
-        timing_model_params={"random_factor": 0.3},
-        batch_size=1,
-        parallel_processing=False,
-        worker_count=4,
-        operation="copy",
-    ),
-    "minion_simulation": ProfileDefinition(
-        name="minion_simulation",
-        description="Timing pattern configured for MinION-scale throughput",
-        timing_model="poisson",
-        timing_model_params={"burst_probability": 0.12, "burst_rate_multiplier": 6.0},
-        batch_size=2,
-        parallel_processing=True,
-        worker_count=3,
-        operation="copy",
-    ),
-    "generate_quick_test": ProfileDefinition(
-        name="generate_quick_test",
-        description="Quick read generation for testing (100 reads, builtin backend)",
+    # -- Generate profiles ----------------------------------------------
+    "generate_test": ProfileDefinition(
+        name="generate_test",
+        description="Quick smoke test for read generation (100 reads, builtin)",
         timing_model="uniform",
         timing_model_params={},
         batch_size=5,
         parallel_processing=False,
         worker_count=2,
         operation="copy",
+        read_count=100,
+        reads_per_file=50,
+        generator_backend="builtin",
     ),
-    "generate_realistic": ProfileDefinition(
-        name="generate_realistic",
-        description="Read generation with Poisson-based timing (10000 reads, auto backend)",
+    "generate_standard": ProfileDefinition(
+        name="generate_standard",
+        description="Standard read generation run (5000 reads, auto backend)",
         timing_model="poisson",
-        timing_model_params={"burst_probability": 0.1, "burst_rate_multiplier": 4.0},
+        timing_model_params={"burst_probability": 0.10, "burst_rate_multiplier": 4.0},
         batch_size=3,
         parallel_processing=True,
         worker_count=4,
         operation="copy",
-    ),
-    "promethion_simulation": ProfileDefinition(
-        name="promethion_simulation",
-        description="Timing pattern configured for PromethION-scale throughput",
-        timing_model="poisson",
-        timing_model_params={"burst_probability": 0.18, "burst_rate_multiplier": 12.0},
-        batch_size=15,
-        parallel_processing=True,
-        worker_count=16,
-        operation="copy",
+        read_count=5000,
+        reads_per_file=100,
+        generator_backend="auto",
     ),
 }
 
@@ -221,7 +230,7 @@ class ProfileManager:
 
         profiles_data = {}
         for name, profile in self.custom_profiles.items():
-            profiles_data[name] = {
+            data: Dict[str, Any] = {
                 "name": profile.name,
                 "description": profile.description,
                 "timing_model": profile.timing_model,
@@ -231,6 +240,12 @@ class ProfileManager:
                 "worker_count": profile.worker_count,
                 "operation": profile.operation,
             }
+            # Include non-None generate fields
+            for field_name in _GENERATE_FIELDS:
+                value = getattr(profile, field_name)
+                if value is not None:
+                    data[field_name] = value
+            profiles_data[name] = data
 
         with open(file_path, "w") as f:
             json.dump(profiles_data, f, indent=2)
@@ -252,29 +267,25 @@ class ProfileManager:
     def get_profile_recommendations(
         self, file_count: int, use_case: str = "general"
     ) -> list[str]:
-        """Get profile recommendations based on context"""
+        """Get profile recommendations based on file count and use case"""
         recommendations = []
 
         if use_case.lower() == "development":
-            recommendations.append("development_testing")
+            recommendations.append("development")
         elif use_case.lower() == "stress":
             recommendations.append("high_throughput")
-        elif "minion" in use_case.lower():
-            recommendations.append("minion_simulation")
-        elif "promethion" in use_case.lower():
-            recommendations.append("promethion_simulation")
 
         # Recommendations based on file count
         if file_count < 50:
-            recommendations.extend(["accurate_mode", "long_read_nanopore"])
+            recommendations.extend(["steady", "bursty"])
         elif file_count < 500:
-            recommendations.extend(["rapid_sequencing", "minion_simulation"])
+            recommendations.extend(["bursty", "gradual_drift"])
         else:
-            recommendations.extend(["high_throughput", "promethion_simulation"])
+            recommendations.extend(["high_throughput", "bursty"])
 
-        # Always include smoothed timing as an option
-        if "smoothed_timing" not in recommendations:
-            recommendations.append("smoothed_timing")
+        # Always include development as a fallback
+        if "development" not in recommendations:
+            recommendations.append("development")
 
         # Remove duplicates while preserving order
         seen = set()
@@ -284,7 +295,7 @@ class ProfileManager:
                 unique_recommendations.append(rec)
                 seen.add(rec)
 
-        return unique_recommendations[:5]  # Limit to top 5 recommendations
+        return unique_recommendations[:5]
 
 
 # Global profile manager instance

@@ -5,6 +5,26 @@ All notable changes to NanoRunner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **Breaking: Configuration Profiles**: Consolidated 11 built-in profiles into 7
+  with clearer names and distinct timing behaviors.
+  - `development_testing` -> `development`
+  - `accurate_mode` / `legacy_random` -> `steady` (random timing, low variation)
+  - `rapid_sequencing` / `long_read_nanopore` / `minion_simulation` -> `bursty` (Poisson burst pattern)
+  - `high_throughput` -> `high_throughput` (parameters adjusted: bp=0.20, brm=8.0, batch=15)
+  - `smoothed_timing` -> `gradual_drift` (adaptive EMA timing)
+  - `promethion_simulation` removed (no empirical basis; `high_throughput` serves the same role)
+  - `generate_quick_test` -> `generate_test`
+  - `generate_realistic` -> `generate_standard`
+- **ProfileDefinition**: Extended with optional generate-mode fields (`read_count`,
+  `mean_read_length`, `mean_quality`, `reads_per_file`, `output_format`,
+  `generator_backend`). Generate profiles now set these parameters directly
+  instead of only describing them in the description string.
+- **Profile Recommendations**: Simplified recommendation engine to use new names
+  and removed device-specific use cases (minion/promethion) that had no empirical basis.
+
 ## [2.0.2] - 2025-10-27
 
 ### Fixed

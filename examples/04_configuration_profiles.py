@@ -40,7 +40,7 @@ def list_all_profiles():
 
     profiles = get_available_profiles()
     for name, description in profiles.items():
-        print(f"  • {name}")
+        print(f"  - {name}")
         print(f"    {description}")
         print()
 
@@ -78,7 +78,7 @@ def run_with_profile(profile_name, description):
     simulator = NanoporeSimulator(config, enable_monitoring=True)
     simulator.run_simulation()
 
-    print(f"\n✓ Output: {target_dir}\n")
+    print(f"\nOutput: {target_dir}\n")
 
 
 def demonstrate_profile_override():
@@ -86,7 +86,7 @@ def demonstrate_profile_override():
     print("\n" + "=" * 60)
     print("Profile Override Example")
     print("=" * 60)
-    print("Customizing 'rapid_sequencing' profile")
+    print("Customizing 'bursty' profile")
     print()
 
     source_dir = Path("examples/sample_data/multiplex")
@@ -95,9 +95,9 @@ def demonstrate_profile_override():
     if target_dir.exists():
         shutil.rmtree(target_dir)
 
-    # Start with rapid_sequencing profile but customize it
+    # Start with bursty profile but customize it
     config = create_config_from_profile(
-        profile_name="rapid_sequencing",
+        profile_name="bursty",
         source_dir=source_dir,
         target_dir=target_dir,
         interval=0.5,  # Override: faster intervals
@@ -116,7 +116,7 @@ def demonstrate_profile_override():
     simulator = NanoporeSimulator(config, enable_monitoring=True)
     simulator.run_simulation()
 
-    print(f"\n✓ Custom output: {target_dir}\n")
+    print(f"\nCustom output: {target_dir}\n")
 
 
 def main():
@@ -130,18 +130,18 @@ def main():
 
     # Demonstrate different profiles
     run_with_profile(
-        profile_name="development_testing",
+        profile_name="development",
         description="Fast profile for development and testing",
     )
 
     run_with_profile(
-        profile_name="accurate_mode",
-        description="Steady, accurate sequencing with minimal variation",
+        profile_name="steady",
+        description="Low-variation random timing for controlled testing",
     )
 
     run_with_profile(
-        profile_name="rapid_sequencing",
-        description="High-throughput with burst behavior",
+        profile_name="bursty",
+        description="Intermittent burst pattern for pipeline robustness testing",
     )
 
     # Show profile customization
@@ -153,21 +153,22 @@ def main():
     print("=" * 60)
     print()
     print("Profiles provide optimized parameter sets for:")
-    print("  • Development/testing workflows")
-    print("  • Realistic sequencing simulation")
-    print("  • High-throughput scenarios")
-    print("  • Device-specific patterns (MinION, PromethION)")
+    print("  - Development/testing workflows")
+    print("  - Controlled low-variation testing")
+    print("  - Burst-pattern robustness testing")
+    print("  - High-throughput stress testing")
+    print("  - Gradually drifting timing patterns")
     print()
     print("Benefits:")
-    print("  ✓ Quick start with sensible defaults")
-    print("  ✓ Consistent configuration across runs")
-    print("  ✓ Easy to customize with overrides")
-    print("  ✓ Optimized for specific use cases")
+    print("  - Quick start with sensible defaults")
+    print("  - Consistent configuration across runs")
+    print("  - Easy to customize with overrides")
+    print("  - Each profile covers a distinct timing model")
     print()
 
     print("CLI usage:")
-    print("  nanorunner /source /target --profile rapid_sequencing")
-    print("  nanorunner /source /target --profile accurate_mode --interval 3")
+    print("  nanorunner /source /target --profile bursty")
+    print("  nanorunner /source /target --profile steady --interval 3")
     print()
 
     # Cleanup

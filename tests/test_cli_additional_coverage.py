@@ -121,7 +121,7 @@ class TestCLIAdditionalCoverage:
                         "replay",
                         "--source", str(self.source_dir),
                         "--target", str(self.target_dir),
-                        "--profile", "rapid_sequencing",
+                        "--profile", "bursty",
                         "--timing-model", "random",
                         "--random-factor", "0.3",
                         "--operation", "link",
@@ -347,7 +347,7 @@ class TestCLIArgumentCombinations:
                         "replay",
                         "--source", str(self.source_dir),
                         "--target", str(self.target_dir),
-                        "--profile", "rapid_sequencing",
+                        "--profile", "bursty",
                         "--burst-probability", "0.3",
                     ])
 

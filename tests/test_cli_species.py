@@ -173,7 +173,7 @@ class TestCLISpeciesArgs:
             result = runner.invoke(app, [
                 "generate", "--target", str(tmp_path),
                 "--species", "E. coli",
-                "--profile", "generate_quick_test",
+                "--profile", "generate_test",
             ])
             assert result.exit_code == 0, result.output
             config = mock_sim.call_args[0][0]

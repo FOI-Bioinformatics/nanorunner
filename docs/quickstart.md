@@ -116,7 +116,7 @@ nanorunner --genomes genome.fa /watch/output \
 nanorunner --genomes genome.fa /watch/output --generator-backend builtin
 
 # Use a generation profile
-nanorunner --genomes genome.fa /watch/output --profile generate_realistic
+nanorunner --genomes genome.fa /watch/output --profile generate_standard
 ```
 
 ### Output Structure
@@ -243,28 +243,28 @@ nanorunner --list-profiles
 ```
 
 **Built-in profiles:**
-- `development_testing` - Fast intervals, symlinks, for development
-- `rapid_sequencing` - High-throughput with bursts
-- `accurate_mode` - Steady, minimal variation
-- `minion_simulation` - MinION device pattern
-- `promethion_simulation` - PromethION device pattern
-- `generate_quick_test` - Quick read generation (100 reads, builtin)
-- `generate_realistic` - Realistic read generation with Poisson timing
+- `development` - Fast iteration with deterministic uniform timing
+- `steady` - Low-variation random timing for controlled testing
+- `bursty` - Intermittent burst pattern for pipeline robustness testing
+- `high_throughput` - High file volume with burst timing for stress testing
+- `gradual_drift` - Slowly varying intervals via exponential moving average
+- `generate_test` - Quick smoke test for read generation (100 reads, builtin)
+- `generate_standard` - Standard read generation run (5000 reads, auto backend)
 
 ### Use a Profile
 
 ```bash
 # Use profile as-is
-nanorunner /data/source /watch/output --profile rapid_sequencing
+nanorunner /data/source /watch/output --profile bursty
 
 # Override profile parameters
 nanorunner /data/source /watch/output \
-  --profile rapid_sequencing \
+  --profile bursty \
   --interval 3 \
   --worker-count 8
 
 # Combine a profile with generate mode
-nanorunner --genomes genome.fa /watch/output --profile generate_realistic
+nanorunner --genomes genome.fa /watch/output --profile generate_standard
 ```
 
 ---

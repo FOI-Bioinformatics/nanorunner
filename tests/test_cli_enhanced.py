@@ -166,7 +166,7 @@ class TestCLIEnhancedMonitoring:
                     "replay",
                     "--source", str(self.source_dir),
                     "--target", str(self.target_dir),
-                    "--profile", "rapid_sequencing",
+                    "--profile", "bursty",
                     "--monitor", "enhanced",
                 ],
             )
@@ -177,7 +177,7 @@ class TestCLIEnhancedMonitoring:
             monitor_type = args[2]
 
             assert monitor_type == "enhanced"
-            # rapid_sequencing profile uses poisson timing
+            # bursty profile uses poisson timing
             assert config.timing_model == "poisson"
 
     def test_cli_interactive_instructions_printed(self):

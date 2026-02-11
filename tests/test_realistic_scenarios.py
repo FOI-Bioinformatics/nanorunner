@@ -174,7 +174,7 @@ class TestRealisticSequencingScenarios:
 
         # Configure for nanometanf real-time processing
         config = create_config_from_profile(
-            "rapid_sequencing",
+            "bursty",
             source_dir=run_data["run_dir"],
             target_dir=target_dir,
             interval=3.0,  # 3 second intervals for real-time simulation

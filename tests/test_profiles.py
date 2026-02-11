@@ -55,6 +55,46 @@ class TestProfileDefinition:
         assert params["worker_count"] == 8
         assert params["operation"] == "copy"  # Default
 
+    def test_to_config_params_excludes_none_generate_fields(self):
+        """Test that to_config_params omits None generate-mode fields"""
+        profile = ProfileDefinition(
+            name="replay_only",
+            description="No generate fields set",
+            timing_model="uniform",
+            timing_model_params={},
+        )
+
+        params = profile.to_config_params()
+
+        assert "read_count" not in params
+        assert "mean_read_length" not in params
+        assert "mean_quality" not in params
+        assert "reads_per_file" not in params
+        assert "output_format" not in params
+        assert "generator_backend" not in params
+
+    def test_to_config_params_includes_set_generate_fields(self):
+        """Test that to_config_params includes non-None generate-mode fields"""
+        profile = ProfileDefinition(
+            name="gen",
+            description="With generate fields",
+            timing_model="uniform",
+            timing_model_params={},
+            read_count=100,
+            reads_per_file=50,
+            generator_backend="builtin",
+        )
+
+        params = profile.to_config_params()
+
+        assert params["read_count"] == 100
+        assert params["reads_per_file"] == 50
+        assert params["generator_backend"] == "builtin"
+        # Fields left as None should still be absent
+        assert "mean_read_length" not in params
+        assert "mean_quality" not in params
+        assert "output_format" not in params
+
 
 class TestBuiltinProfiles:
     """Test built-in profiles"""
@@ -62,59 +102,99 @@ class TestBuiltinProfiles:
     def test_builtin_profiles_exist(self):
         """Test that expected built-in profiles exist"""
         expected_profiles = [
-            "rapid_sequencing",
-            "accurate_mode",
-            "development_testing",
-            "long_read_nanopore",
+            "development",
+            "steady",
+            "bursty",
             "high_throughput",
-            "smoothed_timing",
-            "legacy_random",
-            "minion_simulation",
-            "promethion_simulation",
+            "gradual_drift",
+            "generate_test",
+            "generate_standard",
         ]
 
         for profile_name in expected_profiles:
             assert profile_name in BUILTIN_PROFILES
 
-    def test_rapid_sequencing_profile(self):
-        """Test rapid sequencing profile configuration"""
-        profile = BUILTIN_PROFILES["rapid_sequencing"]
+    def test_profile_count(self):
+        """Test that exactly 7 built-in profiles are defined"""
+        assert len(BUILTIN_PROFILES) == 7
 
-        assert profile.timing_model == "poisson"
-        assert profile.timing_model_params["burst_probability"] == 0.15
-        assert profile.timing_model_params["burst_rate_multiplier"] == 8.0
-        assert profile.batch_size == 5
-        assert profile.parallel_processing is True
-        assert profile.worker_count == 6
-
-    def test_accurate_mode_profile(self):
-        """Test accurate mode profile configuration"""
-        profile = BUILTIN_PROFILES["accurate_mode"]
-
-        assert profile.timing_model == "poisson"
-        assert profile.timing_model_params["burst_probability"] == 0.02
-        assert profile.timing_model_params["burst_rate_multiplier"] == 2.0
-        assert profile.batch_size == 1
-        assert profile.parallel_processing is False
-
-    def test_development_testing_profile(self):
-        """Test development testing profile"""
-        profile = BUILTIN_PROFILES["development_testing"]
+    def test_development_profile(self):
+        """Test development profile configuration"""
+        profile = BUILTIN_PROFILES["development"]
 
         assert profile.timing_model == "uniform"
         assert profile.batch_size == 10
         assert profile.parallel_processing is True
-        assert profile.operation == "link"  # Faster for testing
+        assert profile.worker_count == 8
+        assert profile.operation == "link"
+
+    def test_steady_profile(self):
+        """Test steady profile configuration"""
+        profile = BUILTIN_PROFILES["steady"]
+
+        assert profile.timing_model == "random"
+        assert profile.timing_model_params["random_factor"] == 0.15
+        assert profile.batch_size == 1
+        assert profile.parallel_processing is False
+
+    def test_bursty_profile(self):
+        """Test bursty profile configuration"""
+        profile = BUILTIN_PROFILES["bursty"]
+
+        assert profile.timing_model == "poisson"
+        assert profile.timing_model_params["burst_probability"] == 0.12
+        assert profile.timing_model_params["burst_rate_multiplier"] == 6.0
+        assert profile.batch_size == 3
+        assert profile.parallel_processing is True
+        assert profile.worker_count == 4
 
     def test_high_throughput_profile(self):
         """Test high throughput profile"""
         profile = BUILTIN_PROFILES["high_throughput"]
 
         assert profile.timing_model == "poisson"
-        assert profile.timing_model_params["burst_probability"] == 0.25
-        assert profile.batch_size == 20
+        assert profile.timing_model_params["burst_probability"] == 0.20
+        assert profile.timing_model_params["burst_rate_multiplier"] == 8.0
+        assert profile.batch_size == 15
         assert profile.worker_count == 12
         assert profile.operation == "link"
+
+    def test_gradual_drift_profile(self):
+        """Test gradual_drift profile configuration"""
+        profile = BUILTIN_PROFILES["gradual_drift"]
+
+        assert profile.timing_model == "adaptive"
+        assert profile.timing_model_params["adaptation_rate"] == 0.15
+        assert profile.timing_model_params["history_size"] == 15
+        assert profile.batch_size == 2
+        assert profile.parallel_processing is True
+
+    def test_generate_test_profile(self):
+        """Test generate_test profile sets generation parameters"""
+        profile = BUILTIN_PROFILES["generate_test"]
+
+        assert profile.timing_model == "uniform"
+        assert profile.read_count == 100
+        assert profile.reads_per_file == 50
+        assert profile.generator_backend == "builtin"
+
+        params = profile.to_config_params()
+        assert params["read_count"] == 100
+        assert params["reads_per_file"] == 50
+        assert params["generator_backend"] == "builtin"
+
+    def test_generate_standard_profile(self):
+        """Test generate_standard profile sets generation parameters"""
+        profile = BUILTIN_PROFILES["generate_standard"]
+
+        assert profile.timing_model == "poisson"
+        assert profile.read_count == 5000
+        assert profile.reads_per_file == 100
+        assert profile.generator_backend == "auto"
+
+        params = profile.to_config_params()
+        assert params["read_count"] == 5000
+        assert params["generator_backend"] == "auto"
 
 
 class TestProfileManager:
@@ -126,23 +206,23 @@ class TestProfileManager:
 
         assert len(manager.builtin_profiles) > 0
         assert len(manager.custom_profiles) == 0
-        assert "rapid_sequencing" in manager.builtin_profiles
+        assert "development" in manager.builtin_profiles
 
     def test_list_profiles(self):
         """Test listing all profiles"""
         manager = ProfileManager()
         profiles = manager.list_profiles()
 
-        assert "rapid_sequencing" in profiles
-        assert "[Built-in]" in profiles["rapid_sequencing"]
+        assert "development" in profiles
+        assert "[Built-in]" in profiles["development"]
 
     def test_get_builtin_profile(self):
         """Test getting a built-in profile"""
         manager = ProfileManager()
-        profile = manager.get_profile("rapid_sequencing")
+        profile = manager.get_profile("bursty")
 
         assert profile is not None
-        assert profile.name == "rapid_sequencing"
+        assert profile.name == "bursty"
         assert profile.timing_model == "poisson"
 
     def test_get_nonexistent_profile(self):
@@ -198,7 +278,7 @@ class TestProfileManager:
         manager = ProfileManager()
 
         config = manager.create_config_from_profile(
-            "rapid_sequencing", source_dir, target_dir, interval=3.0
+            "bursty", source_dir, target_dir, interval=3.0
         )
 
         assert isinstance(config, SimulationConfig)
@@ -206,7 +286,7 @@ class TestProfileManager:
         assert config.target_dir == target_dir
         assert config.interval == 3.0
         assert config.timing_model == "poisson"
-        assert config.batch_size == 5
+        assert config.batch_size == 3
         assert config.parallel_processing is True
 
     def test_create_config_with_overrides(self, temp_dirs):
@@ -215,7 +295,7 @@ class TestProfileManager:
         manager = ProfileManager()
 
         config = manager.create_config_from_profile(
-            "accurate_mode",
+            "steady",
             source_dir,
             target_dir,
             interval=2.0,
@@ -225,7 +305,7 @@ class TestProfileManager:
 
         assert config.batch_size == 10  # Overridden
         assert config.operation == "link"  # Overridden
-        assert config.timing_model == "poisson"  # From profile
+        assert config.timing_model == "random"  # From profile
         assert config.parallel_processing is False  # From profile
 
     def test_create_config_unknown_profile(self, temp_dirs):
@@ -244,25 +324,31 @@ class TestProfileRecommendations:
         """Test recommendations for small datasets"""
         recommendations = get_profile_recommendations(10, "general")
 
-        assert "accurate_mode" in recommendations
-        assert "long_read_nanopore" in recommendations
+        assert "steady" in recommendations
+        assert "bursty" in recommendations
+        assert len(recommendations) <= 5
+
+    def test_recommendations_for_medium_dataset(self):
+        """Test recommendations for medium datasets"""
+        recommendations = get_profile_recommendations(200, "general")
+
+        assert "bursty" in recommendations
+        assert "gradual_drift" in recommendations
         assert len(recommendations) <= 5
 
     def test_recommendations_for_large_dataset(self):
         """Test recommendations for large datasets"""
         recommendations = get_profile_recommendations(1000, "general")
 
-        assert (
-            "high_throughput" in recommendations
-            or "promethion_simulation" in recommendations
-        )
+        assert "high_throughput" in recommendations
+        assert "bursty" in recommendations
         assert len(recommendations) <= 5
 
     def test_recommendations_for_development(self):
         """Test recommendations for development use case"""
         recommendations = get_profile_recommendations(50, "development")
 
-        assert "development_testing" in recommendations
+        assert "development" in recommendations
 
     def test_recommendations_for_stress_testing(self):
         """Test recommendations for stress testing"""
@@ -270,17 +356,11 @@ class TestProfileRecommendations:
 
         assert "high_throughput" in recommendations
 
-    def test_recommendations_for_minion(self):
-        """Test recommendations for MinION device"""
-        recommendations = get_profile_recommendations(100, "minion")
+    def test_recommendations_always_include_development_fallback(self):
+        """Test that development is included as a fallback"""
+        recommendations = get_profile_recommendations(200, "general")
 
-        assert "minion_simulation" in recommendations
-
-    def test_recommendations_for_promethion(self):
-        """Test recommendations for PromethION device"""
-        recommendations = get_profile_recommendations(2000, "promethion")
-
-        assert "promethion_simulation" in recommendations
+        assert "development" in recommendations
 
 
 class TestProfileIntegration:
@@ -289,9 +369,9 @@ class TestProfileIntegration:
     def test_global_functions(self):
         """Test global convenience functions"""
         profiles = get_available_profiles()
-        assert "rapid_sequencing" in profiles
+        assert "development" in profiles
 
-        assert validate_profile_name("rapid_sequencing") is True
+        assert validate_profile_name("development") is True
         assert validate_profile_name("nonexistent") is False
 
     def test_create_config_from_profile_global(self, temp_dirs):
@@ -299,7 +379,7 @@ class TestProfileIntegration:
         source_dir, target_dir = temp_dirs
 
         config = create_config_from_profile(
-            "development_testing", source_dir, target_dir, interval=1.0
+            "development", source_dir, target_dir, interval=1.0
         )
 
         assert isinstance(config, SimulationConfig)
@@ -320,14 +400,14 @@ class TestProfileIntegration:
             assert config.source_dir == source_dir
             assert config.target_dir == target_dir
 
-    def test_legacy_compatibility(self, temp_dirs):
-        """Test that legacy_random profile maintains compatibility"""
+    def test_steady_profile_uses_random_model(self, temp_dirs):
+        """Test that the steady profile uses the random timing model"""
         source_dir, target_dir = temp_dirs
 
-        config = create_config_from_profile("legacy_random", source_dir, target_dir)
+        config = create_config_from_profile("steady", source_dir, target_dir)
 
         assert config.timing_model == "random"
-        assert config.timing_model_params["random_factor"] == 0.3
+        assert config.timing_model_params["random_factor"] == 0.15
         assert config.parallel_processing is False
 
 
@@ -385,6 +465,37 @@ class TestProfileSerialization:
 
         finally:
             # Clean up
+            if temp_file.exists():
+                temp_file.unlink()
+
+    def test_save_and_load_custom_profile_with_generate_fields(self):
+        """Test round-tripping a custom profile that has generate-mode fields"""
+        manager = ProfileManager()
+
+        gen_profile = ProfileDefinition(
+            name="custom_gen",
+            description="Custom generate profile",
+            timing_model="uniform",
+            timing_model_params={},
+            read_count=500,
+            generator_backend="builtin",
+        )
+        manager.add_custom_profile(gen_profile)
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            temp_file = Path(f.name)
+
+        try:
+            manager.save_custom_profiles(temp_file)
+
+            new_manager = ProfileManager()
+            new_manager.load_custom_profiles(temp_file)
+
+            loaded = new_manager.get_profile("custom_gen")
+            assert loaded is not None
+            assert loaded.read_count == 500
+            assert loaded.generator_backend == "builtin"
+        finally:
             if temp_file.exists():
                 temp_file.unlink()
 

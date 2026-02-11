@@ -36,8 +36,8 @@ class TestCLICommandFunctions:
             "nanopore_simulator.cli.main.get_available_profiles"
         ) as mock_profiles:
             mock_profiles.return_value = {
-                "rapid_sequencing": "Fast sequencing with short intervals",
-                "development_testing": "Testing profile with rapid intervals",
+                "bursty": "Intermittent burst pattern for pipeline robustness testing",
+                "development": "Fast iteration with deterministic uniform timing",
             }
 
             result = list_profiles_command()
@@ -45,9 +45,9 @@ class TestCLICommandFunctions:
             captured = capsys.readouterr()
             assert result == 0
             assert "Available Configuration Profiles:" in captured.out
-            assert "rapid_sequencing" in captured.out
-            assert "development_testing" in captured.out
-            assert "Fast sequencing with short intervals" in captured.out
+            assert "bursty" in captured.out
+            assert "development" in captured.out
+            assert "Intermittent burst pattern for pipeline robustness testing" in captured.out
 
     def test_list_adapters_command(self, capsys):
         """Test the list adapters command function."""
@@ -85,12 +85,12 @@ class TestCLICommandFunctions:
                     "nanopore_simulator.cli.main.get_available_profiles"
                 ) as mock_profiles:
                     mock_rec.return_value = [
-                        "rapid_sequencing",
-                        "development_testing",
+                        "bursty",
+                        "development",
                     ]
                     mock_profiles.return_value = {
-                        "rapid_sequencing": "Fast sequencing",
-                        "development_testing": "Testing profile",
+                        "bursty": "Intermittent burst pattern",
+                        "development": "Fast iteration",
                     }
 
                     result = recommend_profiles_command(source_dir)
@@ -101,7 +101,7 @@ class TestCLICommandFunctions:
                     assert "Found 2 sequencing files" in captured.out
                     assert "Detected structure:" in captured.out
                     assert "Recommended profiles for 2 files:" in captured.out
-                    assert "rapid_sequencing" in captured.out
+                    assert "bursty" in captured.out
 
     def test_recommend_profiles_command_nonexistent_dir(self, capsys):
         """Test recommend profiles command with nonexistent directory."""
@@ -209,12 +209,12 @@ class TestCLISpecialOptions:
             "nanopore_simulator.cli.main.get_available_profiles"
         ) as mock_profiles:
             mock_profiles.return_value = {
-                "rapid_sequencing": "Fast sequencing with short intervals",
+                "bursty": "Intermittent burst pattern for pipeline robustness testing",
             }
             result = runner.invoke(app, ["list-profiles"])
             assert result.exit_code == 0
             assert "Available Configuration Profiles:" in result.output
-            assert "rapid_sequencing" in result.output
+            assert "bursty" in result.output
 
     def test_cli_list_adapters(self):
         """Test list-adapters subcommand."""
@@ -257,9 +257,9 @@ class TestCLISpecialOptions:
                 with patch(
                     "nanopore_simulator.cli.main.get_available_profiles"
                 ) as mock_profiles:
-                    mock_rec.return_value = ["rapid_sequencing"]
+                    mock_rec.return_value = ["bursty"]
                     mock_profiles.return_value = {
-                        "rapid_sequencing": "Fast sequencing",
+                        "bursty": "Intermittent burst pattern",
                     }
 
                     result = runner.invoke(

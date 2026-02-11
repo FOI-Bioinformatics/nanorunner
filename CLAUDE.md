@@ -126,7 +126,7 @@ nanorunner --list-profiles
 nanorunner --list-adapters
 nanorunner --list-generators
 nanorunner --list-mocks
-nanorunner /source /target --profile rapid_sequencing --monitor enhanced
+nanorunner /source /target --profile bursty --monitor enhanced
 nanorunner --genomes genome.fa /target --interval 2
 nanorunner --mock zymo_d6300 /target --read-count 1000 --interval 1
 nanorunner --genomes genome.fa /target --mean-quality 25 --std-quality 3
@@ -207,7 +207,7 @@ nanorunner --genomes genome.fa /target --mean-quality 25 --std-quality 3
 - Performance warning detection (high CPU/memory usage, low throughput)
 
 **Configuration Profile System:**
-- Built-in profiles: `rapid_sequencing`, `accurate_mode`, `development_testing`, `high_throughput`, `smoothed_timing`, `generate_quick_test`, `generate_realistic`, etc.
+- Built-in profiles: `development`, `steady`, `bursty`, `high_throughput`, `gradual_drift`, `generate_test`, `generate_standard`
 - Profile recommendations based on file count and use case
 - Override capability for profile-based configurations
 

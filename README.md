@@ -99,7 +99,7 @@ nanorunner /data/source /watch/output --timing-model poisson --burst-probability
 nanorunner /data/source /watch/output --timing-model adaptive
 
 # Use a configuration profile
-nanorunner /data/source /watch/output --profile rapid_sequencing
+nanorunner /data/source /watch/output --profile bursty
 
 # High-throughput with parallel processing
 nanorunner /data/source /watch/output --profile high_throughput --parallel
@@ -138,7 +138,7 @@ nanorunner --genomes genome.fa /watch/output \
 nanorunner --genomes genome.fa /watch/output --generator-backend builtin
 
 # Use a generation profile with Poisson timing
-nanorunner --genomes genome.fa /watch/output --profile generate_realistic
+nanorunner --genomes genome.fa /watch/output --profile generate_standard
 
 # List available backends
 nanorunner --list-generators
@@ -248,7 +248,7 @@ nanorunner --list-profiles
 nanorunner --recommend /path/to/data
 ```
 
-Built-in profiles include: `rapid_sequencing`, `accurate_mode`, `development_testing`, `high_throughput`, `long_read_nanopore`, `smoothed_timing`, `minion_simulation`, `promethion_simulation`, `legacy_random`, `generate_quick_test`, `generate_realistic`.
+Built-in profiles include: `development`, `steady`, `bursty`, `high_throughput`, `gradual_drift`, `generate_test`, `generate_standard`.
 
 ## Configuration Parameters
 

@@ -95,7 +95,7 @@ def profile_configs(tmp_path):
     }
 
     return {
-        "rapid_sequencing": SimulationConfig(
+        "bursty": SimulationConfig(
             **base_params,
             interval=2.0,
             batch_size=1,
@@ -114,14 +114,14 @@ def profile_configs(tmp_path):
                 "burst_rate_multiplier": 3.0,
             },
         ),
-        "development_testing": SimulationConfig(
+        "development": SimulationConfig(
             **base_params,
             interval=0.5,
             batch_size=2,
             timing_model="random",
             timing_model_params={"random_factor": 0.3},
         ),
-        "long_running": SimulationConfig(
+        "gradual_drift": SimulationConfig(
             **base_params,
             interval=10.0,
             batch_size=1,

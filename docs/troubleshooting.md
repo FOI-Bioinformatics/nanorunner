@@ -374,8 +374,8 @@ top  # or htop
 nanorunner --list-profiles
 
 # Check spelling (case-sensitive)
-nanorunner /source /target --profile rapid_sequencing  # correct
-nanorunner /source /target --profile Rapid_Sequencing  # incorrect
+nanorunner /source /target --profile bursty  # correct
+nanorunner /source /target --profile Bursty  # incorrect
 ```
 
 ### Profile Overrides Not Working
@@ -385,7 +385,7 @@ nanorunner /source /target --profile Rapid_Sequencing  # incorrect
 **Example**:
 ```bash
 # This works correctly:
-nanorunner /source /target --profile rapid_sequencing --interval 10
+nanorunner /source /target --profile bursty --interval 10
 
 # Profile is applied first, then interval override is applied
 ```

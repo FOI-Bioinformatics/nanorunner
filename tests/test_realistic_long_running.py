@@ -35,7 +35,7 @@ class TestRealisticLongRunningSimulations:
 
         # Configure for realistic but accelerated long run
         config = create_config_from_profile(
-            "accurate_mode",
+            "steady",
             source_dir=run_data["run_dir"],
             target_dir=target_dir,
             interval=0.01,  # Very fast for testing
