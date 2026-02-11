@@ -128,9 +128,25 @@ class TestGenerateSingleplex:
         sim = NanoporeSimulator(config, enable_monitoring=False)
         sim.run_simulation()
 
-        fq_files = list(target.glob("*.fastq"))
+        fq_files = sorted(target.glob("*.fastq"))
         # 20 total reads, ceil(20/10) = 2 total mixed files
         assert len(fq_files) == 2
+
+        # Files should use generic naming (reads_NNNN), not genome-specific
+        for fq in fq_files:
+            assert fq.name.startswith("reads_")
+
+        # Each file should contain reads from BOTH genomes
+        for fq in fq_files:
+            content = fq.read_text()
+            headers = [
+                line for line in content.strip().split("\n") if line.startswith("@")
+            ]
+            stems = {h.split("_read_")[0].lstrip("@") for h in headers}
+            assert len(stems) == 2, (
+                f"Expected reads from 2 genomes in {fq.name}, "
+                f"found stems: {stems}"
+            )
 
 
 class TestGenerateWithTiming:
@@ -344,7 +360,7 @@ class TestAbundanceWeightedGeneration:
         assert len(b2_files) == 5
 
     def test_singleplex_mixed_weighted_selection(self, genome_files, tmp_path):
-        """Singleplex mixed mode should use weighted genome selection."""
+        """Singleplex mixed mode should distribute reads by abundance within each file."""
         target = tmp_path / "output"
         config = SimulationConfig(
             target_dir=target,
@@ -368,6 +384,35 @@ class TestAbundanceWeightedGeneration:
         fq_files = list(target.glob("*.fastq"))
         # ceil(100/10) = 10 total mixed files
         assert len(fq_files) == 10
+
+        # Each file should contain reads from both genomes
+        for fq in fq_files:
+            content = fq.read_text()
+            headers = [
+                line for line in content.strip().split("\n") if line.startswith("@")
+            ]
+            stems = {h.split("_read_")[0].lstrip("@") for h in headers}
+            assert len(stems) == 2, (
+                f"Expected reads from 2 genomes in {fq.name}, "
+                f"found stems: {stems}"
+            )
+
+        # Verify abundance proportions across all files
+        all_genome1 = 0
+        all_genome2 = 0
+        for fq in fq_files:
+            content = fq.read_text()
+            headers = [
+                line for line in content.strip().split("\n") if line.startswith("@")
+            ]
+            for h in headers:
+                stem = h.split("_read_")[0].lstrip("@")
+                if stem == "genome1":
+                    all_genome1 += 1
+                else:
+                    all_genome2 += 1
+        assert all_genome1 == 90
+        assert all_genome2 == 10
 
 
 class TestAbundanceFallback:

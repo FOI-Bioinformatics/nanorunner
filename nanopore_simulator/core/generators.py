@@ -6,10 +6,11 @@ import math
 import random
 import shutil
 import subprocess
+import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +118,33 @@ class ReadGenerator(ABC):
     def is_available(cls) -> bool:
         """Check if this backend is available in the current environment."""
 
+    def generate_reads_in_memory(
+        self,
+        genome: GenomeInput,
+        num_reads: int,
+    ) -> List[Tuple[str, str, str, str]]:
+        """Generate reads and return them as in-memory FASTQ 4-tuples.
+
+        Each tuple is (header, sequence, separator, quality) with the header
+        including the leading ``@``.  The default implementation writes to a
+        temporary file, then parses it back.  Subclasses may override this
+        for a more efficient path.
+
+        Args:
+            genome: Input genome specification.
+            num_reads: Number of reads to generate.
+
+        Returns:
+            List of 4-tuples suitable for :func:`write_fastq_reads`.
+        """
+        from .fastq import iter_fastq_reads
+
+        with tempfile.TemporaryDirectory() as td:
+            output_path = self.generate_reads(
+                genome, Path(td), file_index=0, num_reads=num_reads
+            )
+            return list(iter_fastq_reads(output_path))
+
     def _output_filename(self, genome: GenomeInput, file_index: int) -> str:
         """Generate output filename based on genome and index."""
         stem = genome.fasta_path.stem
@@ -175,6 +203,26 @@ class BuiltinGenerator(ReadGenerator):
         self._write_fastq(reads, output_path)
 
         return output_path
+
+    def generate_reads_in_memory(
+        self,
+        genome: GenomeInput,
+        num_reads: int,
+    ) -> List[Tuple[str, str, str, str]]:
+        """Return reads as FASTQ 4-tuples without writing to disk."""
+        sequences = parse_fasta(genome.fasta_path)
+        if not sequences:
+            raise ValueError(f"No sequences found in {genome.fasta_path}")
+
+        full_seq = "".join(seq for _, seq in sequences)
+        if len(full_seq) == 0:
+            raise ValueError(f"Empty genome sequence in {genome.fasta_path}")
+
+        raw_reads = self._sample_reads(full_seq, genome, num_reads)
+        return [
+            (f"@{read_id}", seq, "+", quals)
+            for read_id, seq, quals in raw_reads
+        ]
 
     def _sample_reads(
         self, genome_seq: str, genome: GenomeInput, num_reads: int

@@ -482,7 +482,8 @@ class NanoporeSimulator:
                         }
                     )
         elif self.config.mix_reads:
-            # Singleplex mixed: pool reads from all genomes into shared files
+            # Singleplex mixed: each file contains reads from ALL genomes,
+            # distributed proportionally according to abundances.
             total_files = max(1, math.ceil(total_reads / rpf))
             genomes = [GenomeInput(fasta_path=gp) for gp in genome_inputs]
             weights = abundances if abundances else [1.0 / n_genomes] * n_genomes
@@ -490,10 +491,15 @@ class NanoporeSimulator:
             for fi in range(total_files):
                 chunk = min(rpf, remaining)
                 remaining -= chunk
-                genome = random.choices(genomes, weights=weights, k=1)[0]
+                # Distribute this file's reads across genomes by abundance
+                per_genome = _distribute_reads(chunk, weights)
+                genome_reads = [
+                    (g, n) for g, n in zip(genomes, per_genome) if n > 0
+                ]
                 manifest.append(
                     {
-                        "genome": genome,
+                        "mixed": True,
+                        "genome_reads": genome_reads,
                         "target": self.config.target_dir,
                         "file_index": fi,
                         "barcode": None,
@@ -915,6 +921,9 @@ class NanoporeSimulator:
         self, file_info: Dict[str, Any], operation_start: float
     ) -> None:
         """Process a generate operation for a single manifest entry."""
+        if file_info.get("mixed", False):
+            return self._process_generate_mixed(file_info, operation_start)
+
         genome = file_info["genome"]
         output_dir = file_info["target"]
         file_index = file_info["file_index"]
@@ -948,6 +957,53 @@ class NanoporeSimulator:
                 self.logger.info(
                     f"Generated: {output_path.name} ({total_duration:.3f}s)"
                 )
+
+    def _process_generate_mixed(
+        self, file_info: Dict[str, Any], operation_start: float
+    ) -> None:
+        """Process a mixed-reads generate operation.
+
+        Generates reads from multiple genomes, shuffles them together, and
+        writes a single output file with generic naming (``reads_NNNN``).
+        """
+        genome_reads_spec = file_info["genome_reads"]
+        output_dir = Path(file_info["target"])
+        file_index = file_info["file_index"]
+
+        dir_start = time.time()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        dir_duration = time.time() - dir_start
+
+        if self.progress_monitor:
+            self.progress_monitor.record_timing("directory_creation", dir_duration)
+
+        file_op_start = time.time()
+
+        # Collect reads from each genome
+        all_reads = []
+        for genome, count in genome_reads_spec:
+            reads = self.read_generator.generate_reads_in_memory(genome, count)
+            all_reads.extend(reads)
+
+        # Shuffle to interleave reads from different genomes
+        random.shuffle(all_reads)
+
+        # Write output with generic naming
+        ext = ".fastq.gz" if self.config.output_format == "fastq.gz" else ".fastq"
+        output_path = output_dir / f"reads_{file_index:04d}{ext}"
+        write_fastq_reads(all_reads, output_path)
+
+        file_op_duration = time.time() - file_op_start
+        total_duration = time.time() - operation_start
+
+        if self.progress_monitor:
+            self.progress_monitor.record_file_processed(output_path, total_duration)
+            self.progress_monitor.record_timing("file_operations", file_op_duration)
+
+        if self.monitor_type == "detailed":
+            self.logger.info(
+                f"Generated mixed: {output_path.name} ({total_duration:.3f}s)"
+            )
 
     def _process_copy_or_link(
         self, file_info: Dict[str, Any], operation_start: float

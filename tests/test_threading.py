@@ -349,6 +349,45 @@ class TestParallelGenerate:
         fastq_files = list(target.rglob("*.fastq*"))
         assert len(fastq_files) > 0
 
+    def test_parallel_mixed_reads_contain_multiple_genomes(self, tmp_path):
+        """--mix-reads with --parallel should produce files with reads from multiple genomes."""
+        g1 = _make_genome_file(tmp_path, "genomeA.fa")
+        g2 = tmp_path / "genomeB.fa"
+        g2.write_text(">chrB\nTTAACCGGTTAACCGGTTAACCGGTTAACCGG\n")
+        target = tmp_path / "target"
+
+        result = runner.invoke(app, [
+            "generate",
+            "--genomes", str(g1),
+            "--genomes", str(g2),
+            "--target", str(target),
+            "--no-wait",
+            "--parallel",
+            "--mix-reads",
+            "--read-count", "20",
+            "--reads-per-file", "10",
+            "--output-format", "fastq",
+        ])
+
+        assert result.exit_code == 0
+        fastq_files = sorted(target.glob("*.fastq*"))
+        assert len(fastq_files) == 2
+
+        # Each file should have generic naming
+        for fq in fastq_files:
+            assert fq.name.startswith("reads_")
+
+        # Each file should contain reads from both genomes
+        for fq in fastq_files:
+            content = fq.read_text()
+            headers = [
+                line for line in content.strip().split("\n") if line.startswith("@")
+            ]
+            stems = {h.split("_read_")[0].lstrip("@") for h in headers}
+            assert len(stems) == 2, (
+                f"Expected reads from 2 genomes, found stems: {stems}"
+            )
+
 
 # ---------------------------------------------------------------------------
 # _download_genomes unit tests
