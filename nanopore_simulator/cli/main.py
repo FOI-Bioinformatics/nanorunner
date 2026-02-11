@@ -5,6 +5,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import click
 import typer
 
 from .. import __version__
@@ -1154,6 +1155,12 @@ def main() -> int:
         return 0
     except SystemExit as e:
         return e.code if isinstance(e.code, int) else 0
+    except click.exceptions.ClickException:
+        # click 8.3+ raises NoArgsIsHelpError (a ClickException subclass)
+        # instead of Exit when no_args_is_help=True and no args are given.
+        # With standalone_mode=False the exception propagates after help
+        # has already been displayed.
+        return 0
 
 
 if __name__ == "__main__":
