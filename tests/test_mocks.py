@@ -108,10 +108,10 @@ class TestBuiltinMocks:
         assert len(mock.organisms) == 10
 
     def test_zymo_d6300_has_fungi(self):
-        """Test that Zymo D6300 has fungi using NCBI resolver."""
+        """Test that Zymo D6300 has fungi with eukaryota domain."""
         mock = BUILTIN_MOCKS["zymo_d6300"]
-        ncbi_orgs = [o for o in mock.organisms if o.resolver == "ncbi"]
-        assert len(ncbi_orgs) == 2  # Two yeasts
+        fungi = [o for o in mock.organisms if o.domain == "eukaryota"]
+        assert len(fungi) == 2  # Two yeasts
 
     def test_quick_3species_exists(self):
         """Test that quick_3species mock exists."""
@@ -228,11 +228,11 @@ class TestATCCMSA1002:
         for org in mock.organisms:
             assert org.abundance == 0.05
 
-    def test_atcc_msa1002_all_gtdb_resolver(self):
-        """MSA-1002 organisms should use GTDB resolver."""
+    def test_atcc_msa1002_all_have_accessions(self):
+        """MSA-1002 organisms should all have explicit accessions."""
         mock = get_mock_community("atcc_msa1002")
         for org in mock.organisms:
-            assert org.resolver == "gtdb"
+            assert org.accession is not None, f"{org.name} missing accession"
 
 
 class TestATCCMSA1003:

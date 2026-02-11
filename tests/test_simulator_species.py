@@ -48,7 +48,7 @@ class TestSimulatorSpeciesResolution:
                 mock_resolver.resolve.assert_called_with("Escherichia coli")
 
     def test_mock_community_resolution(self, tmp_path):
-        """Test that mock communities resolve all their organisms."""
+        """Test that mock communities use explicit accessions for download."""
         config = SimulationConfig(
             target_dir=tmp_path / "output",
             operation="generate",
@@ -64,19 +64,18 @@ class TestSimulatorSpeciesResolution:
             mock_resolver = MagicMock()
             mock_resolver_cls.return_value = mock_resolver
 
-            mock_ref = GenomeRef("E. coli", "GCF_000005845.2", "gtdb", "bacteria")
-            mock_resolver.resolve.return_value = mock_ref
-
             genome_path = tmp_path / "genome.fa"
             genome_path.write_text(">chr1\nATCGATCGATCG\n")
 
             with patch(
                 "nanopore_simulator.core.simulator.download_genome",
                 return_value=genome_path,
-            ):
+            ) as mock_download:
                 sim = NanoporeSimulator(config, enable_monitoring=False)
-                # Should have resolved 3 species
-                assert mock_resolver.resolve.call_count == 3
+                # All organisms have explicit accessions, so resolve is not called
+                assert mock_resolver.resolve.call_count == 0
+                # But download_genome should be called 3 times
+                assert mock_download.call_count == 3
 
     def test_species_resolution_failure_raises(self, tmp_path):
         """Test that unresolvable species raises ValueError."""
@@ -180,7 +179,7 @@ class TestSimulatorSpeciesResolution:
         config = SimulationConfig(
             target_dir=tmp_path / "output",
             operation="generate",
-            mock_name="zymo_d6300",  # Has organisms with accessions
+            mock_name="zymo_d6300",  # All organisms have explicit accessions
             sample_type="mixed",
             read_count=10,
             reads_per_file=10,
@@ -192,21 +191,18 @@ class TestSimulatorSpeciesResolution:
             mock_resolver = MagicMock()
             mock_resolver_cls.return_value = mock_resolver
 
-            # Mock resolver for organisms without accessions
-            mock_ref = GenomeRef("Test", "GCF_000000000.1", "gtdb", "bacteria")
-            mock_resolver.resolve.return_value = mock_ref
-
             genome_path = tmp_path / "genome.fa"
             genome_path.write_text(">chr1\nATCGATCGATCG\n")
 
             with patch(
                 "nanopore_simulator.core.simulator.download_genome",
                 return_value=genome_path,
-            ):
+            ) as mock_download:
                 sim = NanoporeSimulator(config, enable_monitoring=False)
-                # Organisms with accessions (2 fungi) should not call resolve
-                # 8 bacteria should call resolve
-                assert mock_resolver.resolve.call_count == 8
+                # All 10 organisms have explicit accessions, no resolution needed
+                assert mock_resolver.resolve.call_count == 0
+                # All 10 genomes should be downloaded
+                assert mock_download.call_count == 10
 
     def test_abundances_from_mock_community(self, tmp_path):
         """Test that abundances are extracted from mock community."""
