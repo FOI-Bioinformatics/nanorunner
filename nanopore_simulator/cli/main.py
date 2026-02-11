@@ -173,6 +173,7 @@ def _build_config(
     operation: OperationChoice = OperationChoice.copy,
     force_structure: Optional[ForceStructure] = None,
     batch_size: int = 1,
+    reads_per_output_file: Optional[int] = None,
     timing_model: Optional[TimingModelChoice] = None,
     burst_probability: Optional[float] = None,
     burst_rate_multiplier: Optional[float] = None,
@@ -228,6 +229,8 @@ def _build_config(
             overrides["worker_count"] = worker_count
         if fs_str:
             overrides["force_structure"] = fs_str
+        if reads_per_output_file is not None:
+            overrides["reads_per_output_file"] = reads_per_output_file
 
         if is_generate:
             overrides["operation"] = "generate"
@@ -271,6 +274,8 @@ def _build_config(
         "parallel_processing": parallel,
         "worker_count": worker_count,
     }
+    if reads_per_output_file is not None:
+        config_kwargs["reads_per_output_file"] = reads_per_output_file
 
     if is_generate:
         config_kwargs["operation"] = "generate"
@@ -740,6 +745,16 @@ def replay(
         1, help="Number of files to process per interval.",
         rich_help_panel="Simulation Configuration",
     ),
+    reads_per_file: Optional[int] = typer.Option(
+        None,
+        help=(
+            "Rechunk FASTQ files into output files of N reads each. "
+            "Large files are split; small files within the same barcode "
+            "group are merged. POD5 files pass through unchanged. "
+            "Incompatible with --operation link."
+        ),
+        rich_help_panel="Simulation Configuration",
+    ),
     # Timing Models
     timing_model: Optional[TimingModelChoice] = typer.Option(
         None, help="Timing model (overrides profile setting).",
@@ -799,6 +814,13 @@ def replay(
         adaptation_rate, history_size,
     )
 
+    if reads_per_file is not None and operation == OperationChoice.link:
+        typer.echo(
+            "Error: --reads-per-file is incompatible with --operation link",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
     config = _build_config(
         target_dir=target,
         source_dir=source,
@@ -808,6 +830,7 @@ def replay(
         operation=operation,
         force_structure=force_structure,
         batch_size=batch_size,
+        reads_per_output_file=reads_per_file,
         timing_model=timing_model,
         burst_probability=burst_probability,
         burst_rate_multiplier=burst_rate_multiplier,

@@ -1,6 +1,7 @@
 """Main simulator class for nanopore sequencing run simulation"""
 
 import logging
+import math
 import random
 import shutil
 import time
@@ -10,6 +11,7 @@ from typing import List, Dict, Union, Optional, Any
 
 from .config import SimulationConfig
 from .detector import FileStructureDetector
+from .fastq import count_fastq_reads, iter_fastq_reads, write_fastq_reads
 from .generators import (
     ReadGeneratorConfig,
     GenomeInput,
@@ -21,6 +23,34 @@ from .timing import create_timing_model, TimingModel
 from .monitoring import ProgressMonitor, create_progress_monitor
 from .species import SpeciesResolver, download_genome, GenomeRef
 from .mocks import get_mock_community
+
+
+_FASTQ_EXTENSIONS = {".fastq", ".fq", ".fastq.gz", ".fq.gz"}
+
+
+def _is_fastq_file(path: Path) -> bool:
+    """Check whether *path* has a FASTQ extension."""
+    name = path.name.lower()
+    return any(name.endswith(ext) for ext in _FASTQ_EXTENSIONS)
+
+
+def _get_fastq_extension(path: Path) -> str:
+    """Return the canonical FASTQ extension for *path* (.fastq.gz or .fastq)."""
+    if path.name.lower().endswith(".gz"):
+        return ".fastq.gz"
+    return ".fastq"
+
+
+def _fastq_stem(path: Path) -> str:
+    """Return the filename stem with FASTQ extensions removed.
+
+    Handles double extensions such as ``.fastq.gz``.
+    """
+    name = path.name
+    for ext in (".fastq.gz", ".fq.gz", ".fastq", ".fq"):
+        if name.lower().endswith(ext):
+            return name[: len(name) - len(ext)]
+    return path.stem
 
 
 def _distribute_reads(total_reads: int, abundances: List[float]) -> List[int]:
@@ -267,6 +297,28 @@ class NanoporeSimulator:
                 )
                 self.logger.info(f"Detected structure: {structure}")
 
+            # Rechunk path: pre-count reads and stream output chunks
+            if self.config.reads_per_output_file is not None:
+                rechunk_plan = self._create_rechunk_plan(structure)
+                total_output = (
+                    rechunk_plan["total_output_files"]
+                    + rechunk_plan["total_pod5_files"]
+                )
+                self.logger.info(
+                    f"Rechunking into files of "
+                    f"{self.config.reads_per_output_file} reads each "
+                    f"({total_output} output files)"
+                )
+                self._init_monitoring(total_output)
+                try:
+                    self._execute_rechunk_simulation(rechunk_plan)
+                    self.logger.info("Simulation completed")
+                finally:
+                    if self.progress_monitor:
+                        self.progress_monitor.stop()
+                    self._cleanup()
+                return
+
             # Get file manifest
             if structure == "singleplex":
                 file_manifest = self._create_singleplex_manifest()
@@ -275,30 +327,7 @@ class NanoporeSimulator:
 
         self.logger.info(f"Found {len(file_manifest)} files to simulate")
 
-        # Initialize progress monitoring with enhanced features
-        if self.enable_monitoring:
-            # Use enhanced monitoring for detailed and parallel configurations
-            if self.monitor_type == "detailed" or self.config.parallel_processing:
-                monitor_kwargs = {
-                    "enable_resources": True,
-                    "enable_checkpoint": True,
-                    "update_interval": 0.5 if self.config.parallel_processing else 1.0,
-                }
-            else:
-                monitor_kwargs = {}
-
-            self.progress_monitor = create_progress_monitor(
-                len(file_manifest), monitor_type=self.monitor_type, **monitor_kwargs
-            )
-            total_batches = (
-                len(file_manifest) + self.config.batch_size - 1
-            ) // self.config.batch_size
-            self.progress_monitor.set_batch_count(total_batches)
-            self.progress_monitor.start()
-
-            self.logger.info(
-                f"Enhanced monitoring initialized: {self.monitor_type} mode"
-            )
+        self._init_monitoring(len(file_manifest))
 
         # Execute simulation
         try:
@@ -316,6 +345,31 @@ class NanoporeSimulator:
             self.logger.info("Shutting down thread pool executor")
             self.executor.shutdown(wait=True)
             self.executor = None
+
+    def _init_monitoring(self, total_files: int) -> None:
+        """Initialize progress monitoring for *total_files* output items."""
+        if not self.enable_monitoring:
+            return
+        if self.monitor_type == "detailed" or self.config.parallel_processing:
+            monitor_kwargs = {
+                "enable_resources": True,
+                "enable_checkpoint": True,
+                "update_interval": 0.5 if self.config.parallel_processing else 1.0,
+            }
+        else:
+            monitor_kwargs = {}
+
+        self.progress_monitor = create_progress_monitor(
+            total_files, monitor_type=self.monitor_type, **monitor_kwargs
+        )
+        total_batches = (
+            total_files + self.config.batch_size - 1
+        ) // self.config.batch_size
+        self.progress_monitor.set_batch_count(total_batches)
+        self.progress_monitor.start()
+        self.logger.info(
+            f"Enhanced monitoring initialized: {self.monitor_type} mode"
+        )
 
     def _prepare_target_directory(self) -> None:
         """Prepare the target directory for simulation"""
@@ -456,6 +510,201 @@ class NanoporeSimulator:
                     )
 
         return manifest
+
+    # ------------------------------------------------------------------
+    # Rechunk helpers
+    # ------------------------------------------------------------------
+
+    def _create_rechunk_plan(self, structure: str) -> Dict[str, Any]:
+        """Pre-count reads in source FASTQ files and build a rechunk plan.
+
+        Returns a dict with keys ``groups``, ``total_output_files``, and
+        ``total_pod5_files``.  Each group contains the barcode label, the
+        target directory, lists of FASTQ files with read counts, and any
+        POD5 files to copy as-is.
+        """
+        rpf = self.config.reads_per_output_file
+
+        # Build normal manifest to identify files and barcodes
+        if structure == "singleplex":
+            raw_manifest = self._create_singleplex_manifest()
+        else:
+            raw_manifest = self._create_multiplex_manifest()
+
+        # Group entries by barcode
+        barcode_order: List[Optional[str]] = []
+        barcode_groups: Dict[Optional[str], Dict[str, Any]] = {}
+        for entry in raw_manifest:
+            bc = entry["barcode"]
+            if bc not in barcode_groups:
+                barcode_order.append(bc)
+                target_dir = (
+                    entry["target"].parent
+                    if entry["target"].parent != self.config.target_dir
+                    else self.config.target_dir
+                )
+                barcode_groups[bc] = {
+                    "barcode": bc,
+                    "target_dir": target_dir,
+                    "fastq_files": [],
+                    "pod5_files": [],
+                }
+            source = entry["source"]
+            if _is_fastq_file(source):
+                count = count_fastq_reads(source)
+                barcode_groups[bc]["fastq_files"].append((source, count))
+            else:
+                barcode_groups[bc]["pod5_files"].append(source)
+
+        # Calculate output counts
+        total_output = 0
+        total_pod5 = 0
+        for bc in barcode_order:
+            grp = barcode_groups[bc]
+            total_reads = sum(c for _, c in grp["fastq_files"])
+            if total_reads > 0:
+                total_output += math.ceil(total_reads / rpf)
+            total_pod5 += len(grp["pod5_files"])
+
+        groups = [barcode_groups[bc] for bc in barcode_order]
+        return {
+            "groups": groups,
+            "total_output_files": total_output,
+            "total_pod5_files": total_pod5,
+        }
+
+    def _execute_rechunk_simulation(self, rechunk_plan: Dict[str, Any]) -> None:
+        """Stream reads from source files and write rechunked output files.
+
+        For each barcode group, FASTQ files are streamed in order.  Reads
+        accumulate across source-file boundaries until the buffer reaches
+        ``reads_per_output_file``.  Only the final chunk for a barcode
+        group may contain fewer reads.
+
+        POD5 files are copied as-is using the existing copy logic.
+        """
+        rpf = self.config.reads_per_output_file
+        files_processed = 0
+
+        for grp in rechunk_plan["groups"]:
+            barcode = grp["barcode"]
+            target_dir = grp["target_dir"]
+            target_dir = Path(target_dir)
+            target_dir.mkdir(parents=True, exist_ok=True)
+
+            # --- Copy POD5 files unchanged ---
+            for pod5_path in grp["pod5_files"]:
+                if self.progress_monitor and self.progress_monitor.should_stop():
+                    return
+                if self.progress_monitor and self.progress_monitor.is_paused():
+                    self.progress_monitor.wait_if_paused()
+                    if self.progress_monitor.should_stop():
+                        return
+
+                op_start = time.time()
+                dest = target_dir / pod5_path.name
+                shutil.copy2(pod5_path, dest)
+                duration = time.time() - op_start
+
+                if self.progress_monitor:
+                    self.progress_monitor.record_file_processed(dest, duration)
+                files_processed += 1
+
+                # Timing between POD5 copies
+                if files_processed % self.config.batch_size == 0:
+                    interval = self._calculate_interval()
+                    if self.monitor_type == "enhanced" and self.progress_monitor:
+                        self._interruptible_sleep(interval)
+                    else:
+                        time.sleep(interval)
+
+            # --- Stream FASTQ reads and write rechunked output ---
+            if not grp["fastq_files"]:
+                continue
+
+            buffer: List[tuple] = []
+            chunk_index = 0
+            # Track which source file contributed the first read of the chunk
+            first_source: Optional[Path] = None
+
+            for source_path, _ in grp["fastq_files"]:
+                for read in iter_fastq_reads(source_path):
+                    if self.progress_monitor and self.progress_monitor.should_stop():
+                        # Flush remaining buffer before stopping
+                        if buffer:
+                            self._write_rechunk_chunk(
+                                buffer, first_source, chunk_index,
+                                target_dir, barcode,
+                            )
+                        return
+
+                    if not buffer:
+                        first_source = source_path
+                    buffer.append(read)
+
+                    if len(buffer) >= rpf:
+                        if self.progress_monitor and self.progress_monitor.is_paused():
+                            self.progress_monitor.wait_if_paused()
+                            if self.progress_monitor.should_stop():
+                                return
+
+                        self._write_rechunk_chunk(
+                            buffer, first_source, chunk_index,
+                            target_dir, barcode,
+                        )
+                        buffer = []
+                        first_source = None
+                        chunk_index += 1
+                        files_processed += 1
+
+                        # Timing between output files
+                        if files_processed % self.config.batch_size == 0:
+                            interval = self._calculate_interval()
+                            if self.progress_monitor:
+                                self.progress_monitor.add_wait_time(interval)
+                            if (
+                                self.monitor_type == "enhanced"
+                                and self.progress_monitor
+                            ):
+                                self._interruptible_sleep(interval)
+                            else:
+                                time.sleep(interval)
+
+            # Write remaining reads for this barcode group
+            if buffer:
+                self._write_rechunk_chunk(
+                    buffer, first_source, chunk_index,
+                    target_dir, barcode,
+                )
+                files_processed += 1
+
+    def _write_rechunk_chunk(
+        self,
+        reads: List[tuple],
+        first_source: Optional[Path],
+        chunk_index: int,
+        target_dir: Path,
+        barcode: Optional[str],
+    ) -> None:
+        """Write a single rechunked output file and record progress."""
+        ext = _get_fastq_extension(first_source) if first_source else ".fastq"
+        stem = _fastq_stem(first_source) if first_source else "reads"
+        filename = f"{stem}_chunk_{chunk_index:04d}{ext}"
+        output_path = target_dir / filename
+
+        op_start = time.time()
+        write_fastq_reads(reads, output_path)
+        duration = time.time() - op_start
+
+        if self.progress_monitor:
+            self.progress_monitor.record_file_processed(output_path, duration)
+
+        if self.monitor_type == "detailed":
+            prefix = f"{barcode}/" if barcode else ""
+            self.logger.info(
+                f"Rechunked: {prefix}{filename} "
+                f"({len(reads)} reads, {duration:.3f}s)"
+            )
 
     def _execute_simulation(self, file_manifest: List[Dict], structure: str) -> None:
         """Execute the file simulation with timing and optional parallel processing"""

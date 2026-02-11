@@ -16,6 +16,7 @@ class SimulationConfig:
     file_types: Optional[List[str]] = None
     force_structure: Optional[str] = None  # "singleplex" or "multiplex"
     batch_size: int = 1  # files to process per interval
+    reads_per_output_file: Optional[int] = None  # rechunk FASTQ files (replay mode)
 
     # Legacy parameters removed - use timing_model="random" with timing_model_params instead
 
@@ -115,6 +116,20 @@ class SimulationConfig:
         # Validate operation
         if self.operation not in {"copy", "link", "generate"}:
             raise ValueError("operation must be 'copy', 'link', or 'generate'")
+
+        # Validate rechunk parameter
+        if self.reads_per_output_file is not None:
+            if self.reads_per_output_file < 1:
+                raise ValueError("reads_per_output_file must be at least 1")
+            if self.operation == "link":
+                raise ValueError(
+                    "reads_per_output_file is incompatible with operation='link' "
+                    "because rechunking requires reading and rewriting file contents"
+                )
+            if self.operation == "generate":
+                raise ValueError(
+                    "reads_per_output_file is only applicable to replay mode"
+                )
 
         # Validate generate-specific parameters
         if self.operation == "generate":
