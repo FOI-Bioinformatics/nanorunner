@@ -194,10 +194,16 @@ nanorunner --genomes genome.fa /target --mean-quality 25 --std-quality 3
 - Available mocks (`--list-mocks` to see all):
   - `zymo_d6300`: Zymo D6300 Standard - 10 species, even distribution
   - `zymo_d6310`: Zymo D6310 Log Distribution - 10 species, 7 orders of magnitude
-  - `zymo_d6331`: Zymo D6331 Gut Microbiome - 17 species (bacteria, archaea, fungi)
+  - `zymo_d6331`: Zymo D6331 Gut Microbiome - 21 strains, 17 species (bacteria, archaea, fungi)
   - `atcc_msa1002`: ATCC MSA-1002 - 20 strains, 5% each
   - `atcc_msa1003`: ATCC MSA-1003 - 20 strains, staggered (0.02%-18%)
-  - `quick_3species`, `quick_gut5`, `quick_pathogens`: Fast testing mocks
+  - `cdc_select_agents`: CDC/USDA Tier 1 bacterial select agents - 6 species
+  - `eskape`: ESKAPE nosocomial pathogens - 6 species
+  - `respiratory`: Community-acquired respiratory pathogens - 6 species
+  - `who_critical`: WHO Critical Priority carbapenem-resistant pathogens - 5 species
+  - `bloodstream`: Bloodstream infection panel - 5 bacteria + 1 yeast
+  - `wastewater`: Wastewater surveillance indicators and pathogens - 6 species
+  - `quick_single`, `quick_3species`, `quick_gut5`, `quick_pathogens`: Fast testing mocks
 
 **Enhanced Monitoring System:**
 - Thread-safe `ProgressMonitor` with real-time resource tracking
