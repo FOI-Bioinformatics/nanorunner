@@ -26,12 +26,12 @@ brew install git
 **Solutions**:
 ```bash
 # Option 1: Install to user directory
-pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2
+pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git
 
 # Option 2: Use virtual environment (recommended)
 python -m venv nanorunner_env
 source nanorunner_env/bin/activate  # On Windows: nanorunner_env\Scripts\activate
-pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2
+pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git
 ```
 
 ### Python Version Mismatch
@@ -44,7 +44,7 @@ pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2
 python --version
 
 # Use specific Python version
-python3.11 -m pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2
+python3.11 -m pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git
 
 # Create alias (add to ~/.bashrc or ~/.zshrc)
 alias nanorunner='python3.11 -m nanopore_simulator.cli.main'
@@ -66,7 +66,7 @@ export PATH="$HOME/.local/bin:$PATH"
 python -m nanopore_simulator.cli.main --help
 
 # Or reinstall with user flag
-pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2
+pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git
 ```
 
 ---
@@ -86,7 +86,7 @@ ls -ld /path/to/target
 chmod 755 /path/to/target
 
 # Or use writable directory
-nanorunner /source ~/nanorunner_output
+nanorunner replay -s /source -t ~/nanorunner_output
 ```
 
 ### Source Directory Not Found
@@ -130,16 +130,16 @@ ls -la /source
 **Solutions**:
 ```bash
 # Reduce batch size
-nanorunner /source /target --batch-size 5
+nanorunner replay -s /source -t /target --batch-size 5
 
 # Disable parallel processing
-nanorunner /source /target  # (parallel is off by default)
+nanorunner replay -s /source -t /target  # (parallel is off by default)
 
 # Use symlinks instead of copying
-nanorunner /source /target --operation link
+nanorunner replay -s /source -t /target --operation link
 
 # Monitor memory usage
-nanorunner /source /target --monitor enhanced
+nanorunner replay -s /source -t /target --monitor enhanced
 ```
 
 ### Slow Performance
@@ -149,19 +149,19 @@ nanorunner /source /target --monitor enhanced
 **Solutions**:
 ```bash
 # Enable parallel processing
-nanorunner /source /target --parallel --worker-count 8
+nanorunner replay -s /source -t /target --parallel --worker-count 8
 
 # Reduce interval
-nanorunner /source /target --interval 0.5
+nanorunner replay -s /source -t /target --interval 0.5
 
 # Use uniform timing (fastest)
-nanorunner /source /target --timing-model uniform
+nanorunner replay -s /source -t /target --timing-model uniform
 
 # Use symlinks for faster operations
-nanorunner /source /target --operation link
+nanorunner replay -s /source -t /target --operation link
 
 # Use optimized profile
-nanorunner /source /target --profile high_throughput
+nanorunner replay -s /source -t /target --profile high_throughput
 ```
 
 ---
@@ -178,7 +178,7 @@ nanorunner /source /target --profile high_throughput
 pip install psutil
 
 # Or install with enhanced extras
-pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2"
+pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@main"
 
 # Verify psutil
 python -c "import psutil; print('OK')"
@@ -194,10 +194,10 @@ python -c "import psutil; print('OK')"
 echo -e "\033[32mGreen\033[0m"
 
 # Disable monitoring if needed
-nanorunner /source /target --monitor none
+nanorunner replay -s /source -t /target --monitor none
 
 # Use detailed monitoring for logging
-nanorunner /source /target --monitor detailed 2>&1 | tee simulation.log
+nanorunner replay -s /source -t /target --monitor detailed 2>&1 | tee simulation.log
 ```
 
 ---
@@ -211,7 +211,7 @@ nanorunner /source /target --monitor detailed 2>&1 | tee simulation.log
 **Diagnosis**:
 ```bash
 # Check what pipelines are compatible
-nanorunner --validate-pipeline nanometa /target
+nanorunner validate --pipeline nanometa --target /target
 
 # Check output structure
 ls -R /target
@@ -231,7 +231,7 @@ find /target -name "*.fastq*"
 **Solution**:
 ```bash
 # List available adapters
-nanorunner --list-adapters
+nanorunner list-adapters
 
 # Use generic adapter for custom pipelines
 # (requires Python API, not CLI)
@@ -248,7 +248,7 @@ nanorunner --list-adapters
 **Solutions**:
 ```bash
 # On Windows: Run as Administrator or use copy mode
-nanorunner /source /target --operation copy
+nanorunner replay -s /source -t /target --operation copy
 
 # Or enable Developer Mode (Windows 10+)
 # Settings → Update & Security → For Developers → Developer Mode
@@ -264,10 +264,10 @@ nanorunner /source /target --operation copy
 df -h /target
 
 # Use symlinks to save space
-nanorunner /source /target --operation link
+nanorunner replay -s /source -t /target --operation link
 
 # Use smaller batch size to process incrementally
-nanorunner /source /target --batch-size 10
+nanorunner replay -s /source -t /target --batch-size 10
 
 # Cleanup previous runs
 rm -rf /tmp/nanorunner_*
@@ -280,7 +280,7 @@ rm -rf /tmp/nanorunner_*
 **Solution**:
 ```bash
 # Use copy mode for cross-filesystem operations
-nanorunner /mnt/source /home/user/target --operation copy
+nanorunner replay -s /mnt/source -t /home/user/target --operation copy
 
 # Ensure source and target are on same filesystem for symlinks
 ```
@@ -298,7 +298,7 @@ nanorunner /mnt/source /home/user/target --operation copy
 **Solution**:
 ```bash
 # Increase history size and adaptation rate
-nanorunner /source /target \
+nanorunner replay -s /source -t /target \
   --timing-model adaptive \
   --adaptation-rate 0.3 \
   --history-size 20
@@ -311,12 +311,12 @@ nanorunner /source /target \
 **Solution**:
 ```bash
 # Reduce burst probability
-nanorunner /source /target \
+nanorunner replay -s /source -t /target \
   --timing-model poisson \
   --burst-probability 0.05
 
 # Or use random model for controlled variation
-nanorunner /source /target \
+nanorunner replay -s /source -t /target \
   --timing-model random \
   --random-factor 0.2
 ```
@@ -332,10 +332,10 @@ nanorunner /source /target \
 **Solution**:
 ```bash
 # Reduce worker count
-nanorunner /source /target --parallel --worker-count 2
+nanorunner replay -s /source -t /target --parallel --worker-count 2
 
 # Or disable parallel processing
-nanorunner /source /target  # (default is sequential)
+nanorunner replay -s /source -t /target  # (default is sequential)
 
 # Report bug with details:
 # https://github.com/FOI-Bioinformatics/nanorunner/issues
@@ -348,7 +348,7 @@ nanorunner /source /target  # (default is sequential)
 **Diagnosis**:
 ```bash
 # Check batch size (must be > 1 for parallel benefit)
-nanorunner /source /target --parallel --batch-size 10 --worker-count 4
+nanorunner replay -s /source -t /target --parallel --batch-size 10 --worker-count 4
 
 # Monitor CPU usage
 top  # or htop
@@ -370,11 +370,11 @@ top  # or htop
 **Solution**:
 ```bash
 # List available profiles
-nanorunner --list-profiles
+nanorunner list-profiles
 
 # Check spelling (case-sensitive)
-nanorunner /source /target --profile bursty  # correct
-nanorunner /source /target --profile Bursty  # incorrect
+nanorunner replay -s /source -t /target --profile bursty  # correct
+nanorunner replay -s /source -t /target --profile Bursty  # incorrect
 ```
 
 ### Profile Overrides Not Working
@@ -384,7 +384,7 @@ nanorunner /source /target --profile Bursty  # incorrect
 **Example**:
 ```bash
 # This works correctly:
-nanorunner /source /target --profile bursty --interval 10
+nanorunner replay -s /source -t /target --profile bursty --interval 10
 
 # Profile is applied first, then interval override is applied
 ```
@@ -400,10 +400,10 @@ nanorunner /source /target --profile bursty --interval 10
 ```bash
 # Set Python logging level
 export PYTHONLOGLEVEL=DEBUG
-nanorunner /source /target
+nanorunner replay -s /source -t /target
 
 # Or redirect all output
-nanorunner /source /target 2>&1 | tee debug.log
+nanorunner replay -s /source -t /target 2>&1 | tee debug.log
 ```
 
 ### Run Test Suite
@@ -437,8 +437,8 @@ python -c "from nanopore_simulator import SimulationConfig; print('OK')"
 
 # List available options
 nanorunner --help
-nanorunner --list-profiles
-nanorunner --list-adapters
+nanorunner list-profiles
+nanorunner list-adapters
 ```
 
 ---
@@ -455,7 +455,7 @@ nanorunner --list-adapters
 # System Preferences → Security & Privacy → Privacy → Full Disk Access
 
 # Or use accessible directory
-nanorunner /source ~/Documents/nanorunner_output
+nanorunner replay -s /source -t ~/Documents/nanorunner_output
 ```
 
 ### Windows: Path Issues
@@ -522,7 +522,7 @@ Include:
 
 **A**: Yes, with enhanced monitoring:
 ```bash
-nanorunner /source /target --monitor enhanced
+nanorunner replay -s /source -t /target --monitor enhanced
 # Press Ctrl+C for graceful shutdown
 # Progress is automatically checkpointed every 10 files
 ```
@@ -532,15 +532,15 @@ nanorunner /source /target --monitor enhanced
 **A**:
 ```bash
 # Use fractional intervals
-nanorunner /source /target --interval 0.1  # 100ms
-nanorunner /source /target --interval 0.01  # 10ms
+nanorunner replay -s /source -t /target --interval 0.1  # 100ms
+nanorunner replay -s /source -t /target --interval 0.01  # 10ms
 ```
 
 ### Q: Can I use NanoRunner in CI/CD?
 
 **A**: Yes, disable monitoring for automated runs:
 ```bash
-nanorunner /source /target --monitor none --quiet
+nanorunner replay -s /source -t /target --monitor none --quiet
 ```
 
 ### Q: Does NanoRunner modify source files?

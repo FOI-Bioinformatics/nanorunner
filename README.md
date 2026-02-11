@@ -68,9 +68,10 @@ pip install -e .[enhanced,dev]
 
 ```bash
 nanorunner --version  # Should output: nanorunner 2.0.2
-nanorunner --help     # Display all available options
-nanorunner --list-profiles    # Show built-in configuration profiles
-nanorunner --list-generators  # Show available read generation backends
+nanorunner --help     # Display all available subcommands
+nanorunner list-profiles    # Show built-in configuration profiles
+nanorunner list-generators  # Show available read generation backends
+nanorunner list-mocks       # Show available mock communities
 ```
 
 ## Usage
@@ -80,29 +81,29 @@ nanorunner --list-generators  # Show available read generation backends
 Transfer existing sequencing files with configurable timing:
 
 ```bash
-nanorunner <source_dir> <target_dir> [options]
+nanorunner replay --source <source_dir> --target <target_dir> [options]
 ```
 
 #### Examples
 
 ```bash
 # Uniform intervals for deterministic testing
-nanorunner /data/source /watch/output --timing-model uniform --interval 5
+nanorunner replay -s /data/source -t /watch/output --timing-model uniform --interval 5
 
 # Random intervals with controlled variation
-nanorunner /data/source /watch/output --timing-model random --random-factor 0.3
+nanorunner replay -s /data/source -t /watch/output --timing-model random --random-factor 0.3
 
 # Poisson process for irregular timing with burst clusters
-nanorunner /data/source /watch/output --timing-model poisson --burst-probability 0.15
+nanorunner replay -s /data/source -t /watch/output --timing-model poisson --burst-probability 0.15
 
 # Adaptive timing with smoothly varying intervals
-nanorunner /data/source /watch/output --timing-model adaptive
+nanorunner replay -s /data/source -t /watch/output --timing-model adaptive
 
 # Use a configuration profile
-nanorunner /data/source /watch/output --profile bursty
+nanorunner replay -s /data/source -t /watch/output --profile bursty
 
 # High-throughput with parallel processing
-nanorunner /data/source /watch/output --profile high_throughput --parallel
+nanorunner replay -s /data/source -t /watch/output --profile high_throughput --parallel
 ```
 
 ### Generate Mode
@@ -110,38 +111,36 @@ nanorunner /data/source /watch/output --profile high_throughput --parallel
 Produce simulated reads from genome FASTA files:
 
 ```bash
-nanorunner --genomes <fasta_files...> <target_dir> [options]
+nanorunner generate --genomes <fasta_files...> --target <target_dir> [options]
 ```
-
-When `--genomes` is provided, the tool enters generate mode automatically. No source directory is needed.
 
 #### Examples
 
 ```bash
 # Generate reads from two genomes (multiplex: each genome gets a barcode directory)
-nanorunner --genomes genome1.fa genome2.fa /watch/output --interval 5
+nanorunner generate --genomes genome1.fa genome2.fa -t /watch/output --interval 5
 
 # Singleplex output (flat directory)
-nanorunner --genomes genome.fa /watch/output --force-structure singleplex
+nanorunner generate --genomes genome.fa -t /watch/output --force-structure singleplex
 
 # Mix reads from multiple genomes into shared files
-nanorunner --genomes g1.fa g2.fa /watch/output --force-structure singleplex --mix-reads
+nanorunner generate --genomes g1.fa g2.fa -t /watch/output --force-structure singleplex --mix-reads
 
 # Specify generation parameters
-nanorunner --genomes genome.fa /watch/output \
+nanorunner generate --genomes genome.fa -t /watch/output \
     --read-count 5000 \
     --mean-read-length 8000 \
     --reads-per-file 200 \
     --output-format fastq.gz
 
 # Use a specific backend
-nanorunner --genomes genome.fa /watch/output --generator-backend builtin
+nanorunner generate --genomes genome.fa -t /watch/output --generator-backend builtin
 
 # Use a generation profile with Poisson timing
-nanorunner --genomes genome.fa /watch/output --profile generate_standard
+nanorunner generate --genomes genome.fa -t /watch/output --profile generate_standard
 
 # List available backends
-nanorunner --list-generators
+nanorunner list-generators
 ```
 
 #### Generate Mode Output Structure
@@ -181,19 +180,19 @@ Generate reads from species names or preset mock communities without providing g
 
 ```bash
 # Generate from species names (resolves via GTDB/NCBI)
-nanorunner --species "Escherichia coli" "Staphylococcus aureus" /output
+nanorunner generate --species "Escherichia coli" "Staphylococcus aureus" -t /output
 
 # Use a preset mock community
-nanorunner --mock zymo_d6300 /output
+nanorunner generate --mock zymo_d6300 -t /output
 
 # Pure samples (each species in separate barcode)
-nanorunner --species "E. coli" "S. aureus" --sample-type pure /output
+nanorunner generate --species "E. coli" "S. aureus" --sample-type pure -t /output
 
 # Mixed samples with custom abundances
-nanorunner --species "E. coli" "S. aureus" --sample-type mixed --abundances 0.7 0.3 /output
+nanorunner generate --species "E. coli" "S. aureus" --sample-type mixed --abundances 0.7 0.3 -t /output
 
 # List available mock communities
-nanorunner --list-mocks
+nanorunner list-mocks
 
 # Pre-download genomes for offline use
 nanorunner download --mock zymo_d6300
@@ -201,51 +200,63 @@ nanorunner download --mock zymo_d6300
 
 #### Available Mock Communities
 
-| Mock ID | Description | Species Count |
-|---------|-------------|---------------|
-| `zymo_d6300` | ZymoBIOMICS Microbial Community Standard | 8 bacteria, 2 yeasts |
-| `zymo_d6310` | ZymoBIOMICS Gut Microbiome Standard | 21 strains |
-| `atcc_msa1000` | ATCC 10-strain Even Mix Genomic Material | 10 strains |
-| `atcc_msa1001` | ATCC 10-strain Staggered Mix Genomic Material | 10 strains |
-| `atcc_msa1002` | ATCC 20-strain Even Mix Genomic Material | 20 strains |
-| `quick_3species` | Quick test with 3 common species | 3 strains |
+| Mock ID | Description | Organisms |
+|---------|-------------|-----------|
+| `zymo_d6300` | Zymo D6300 Standard (even) | 8 bacteria + 2 yeasts |
+| `zymo_d6310` | Zymo D6310 Log Distribution (7 orders of magnitude) | 8 bacteria + 2 yeasts |
+| `zymo_d6331` | Zymo D6331 Gut Microbiome Standard | 21 strains, 17 species |
+| `atcc_msa1002` | ATCC MSA-1002 20-strain even mix (5% each) | 20 bacteria |
+| `atcc_msa1003` | ATCC MSA-1003 20-strain staggered mix (0.02%-18%) | 20 bacteria |
+| `cdc_select_agents` | CDC/USDA Tier 1 bacterial select agents | 6 species |
+| `eskape` | ESKAPE nosocomial pathogens | 6 species |
+| `respiratory` | Community-acquired respiratory pathogens | 6 species |
+| `who_critical` | WHO Critical Priority carbapenem-resistant pathogens | 5 species |
+| `bloodstream` | Bloodstream infection panel | 5 bacteria + 1 yeast |
+| `wastewater` | Wastewater surveillance indicators and pathogens | 6 species |
+| `quick_single` | Single species (E. coli) for minimal testing | 1 species |
+| `quick_3species` | Minimal 3-species test mock | 3 species |
+| `quick_gut5` | Simple 5-species gut microbiome mock | 5 species |
+| `quick_pathogens` | Clinically relevant nosocomial pathogens | 5 species |
 
-Use `nanorunner --list-mocks` to see detailed information about each community including species composition and default abundances.
+Use `nanorunner list-mocks` to see all communities, aliases, and descriptions.
 
 ### Enhanced Monitoring
 
 ```bash
 # Enable comprehensive monitoring with resource tracking
-nanorunner /data/source /watch/output --monitor enhanced
+nanorunner replay -s /data/source -t /watch/output --monitor enhanced
 
 # Detailed monitoring with verbose logging
-nanorunner /data/source /watch/output --monitor detailed
+nanorunner replay -s /data/source -t /watch/output --monitor detailed
 
 # Silent operation for automated testing
-nanorunner /data/source /watch/output --monitor none --quiet
+nanorunner replay -s /data/source -t /watch/output --monitor none --quiet
 ```
 
 ### Pipeline Validation
 
 ```bash
-# Validate output compatibility with specific pipeline
-nanorunner /data/source /watch/output --pipeline nanometa
+# Validate output compatibility with specific pipeline during replay
+nanorunner replay -s /data/source -t /watch/output --pipeline nanometa
 
 # List supported pipeline adapters
-nanorunner --list-adapters
+nanorunner list-adapters
 
 # Validate existing directory structure
-nanorunner --validate-pipeline kraken /path/to/output
+nanorunner validate --pipeline kraken --target /path/to/output
 ```
 
 ### Configuration Profiles
 
 ```bash
 # List all available profiles
-nanorunner --list-profiles
+nanorunner list-profiles
 
 # Get recommendations based on source data
-nanorunner --recommend /path/to/data
+nanorunner recommend --source /path/to/data
+
+# Get an overview of all profiles (no source needed)
+nanorunner recommend
 ```
 
 Built-in profiles include: `development`, `steady`, `bursty`, `high_throughput`, `gradual_drift`, `generate_test`, `generate_standard`.
@@ -290,7 +301,7 @@ Built-in profiles include: `development`, `steady`, `bursty`, `high_throughput`,
 Provides constant intervals for deterministic testing scenarios requiring precise temporal control.
 
 ```bash
-nanorunner /data /output --timing-model uniform --interval 10
+nanorunner replay -s /data -t /output --timing-model uniform --interval 10
 ```
 
 ### Random Model
@@ -298,7 +309,7 @@ Introduces symmetric stochastic variation around the base interval, suitable for
 
 ```bash
 # +/-30% variation around base interval
-nanorunner /data /output --timing-model random --interval 5 --random-factor 0.3
+nanorunner replay -s /data -t /output --timing-model random --interval 5 --random-factor 0.3
 ```
 
 ### Poisson Model
@@ -306,7 +317,7 @@ Generates intervals from a mixture of two exponential distributions (base rate a
 
 ```bash
 # 15% probability of burst events with 3x rate increase
-nanorunner /data /output --timing-model poisson --burst-probability 0.15 --burst-rate-multiplier 3.0
+nanorunner replay -s /data -t /output --timing-model poisson --burst-probability 0.15 --burst-rate-multiplier 3.0
 ```
 
 ### Adaptive Model
@@ -314,13 +325,13 @@ Generates exponentially distributed intervals with a rate parameter that drifts 
 
 ```bash
 # Default adaptive behavior
-nanorunner /data /output --timing-model adaptive
+nanorunner replay -s /data -t /output --timing-model adaptive
 
 # Fast adaptation for dynamic environments
-nanorunner /data /output --timing-model adaptive --adaptation-rate 0.5
+nanorunner replay -s /data -t /output --timing-model adaptive --adaptation-rate 0.5
 
 # Conservative adaptation with extended history
-nanorunner /data /output --timing-model adaptive --adaptation-rate 0.05 --history-size 30
+nanorunner replay -s /data -t /output --timing-model adaptive --adaptation-rate 0.05 --history-size 30
 ```
 
 ## Experimental Design Support
@@ -371,17 +382,7 @@ Supported naming conventions for automatic multiplex detection:
 ## Pipeline Integration
 
 ### Primary Integration: Nanometa Live
-Both replay and generate modes produce output compatible with Nanometa Live's real-time monitoring:
-
-```bash
-# Configure nanometa for simulated data consumption
-nextflow run nanometa_live \
-    --realtime_mode \
-    --nanopore_output_dir /watch/output \
-    --file_pattern "**/*.fastq{,.gz}" \
-    --batch_size 10 \
-    --batch_interval "5min"
-```
+Both replay and generate modes produce output compatible with Nanometa Live's real-time monitoring.
 
 ### Multi-Pipeline Support
 Built-in adapters provide validation for multiple bioinformatics workflows:
@@ -397,7 +398,7 @@ Built-in adapters provide validation for multiple bioinformatics workflows:
 - **Enhanced features**: Optional psutil dependency for resource monitoring
 - **Optional read generators**: badread and/or NanoSim for higher-fidelity read simulation
 - **Platform compatibility**: POSIX-compliant operating systems (Linux, macOS, Unix)
-- **Testing**: 524 tests across 31 test files
+- **Testing**: 730 tests across 37 test files
 
 ## Development and Contribution
 
@@ -422,6 +423,8 @@ pytest tests/test_cli.py                    # CLI interface tests
 pytest tests/test_timing_models.py          # Timing model validation
 pytest tests/test_generators.py             # Read generation backends
 pytest tests/test_generate_integration.py   # Generate mode end-to-end
+pytest tests/test_mocks.py                  # Mock community definitions
+pytest tests/test_species.py                # Species name resolution
 pytest tests/test_practical.py              # Practical tests with real NCBI genomes
 
 # Generate coverage report

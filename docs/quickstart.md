@@ -21,7 +21,7 @@ nanorunner --version
 # Output: nanorunner 2.0.2
 
 nanorunner --help
-# Shows all available options
+# Shows all available subcommands
 ```
 
 ---
@@ -34,10 +34,10 @@ Transfer existing FASTQ/POD5 files from a source directory to a target directory
 
 ```bash
 # Basic syntax
-nanorunner <source_directory> <target_directory> [options]
+nanorunner replay --source <source_directory> --target <target_directory> [options]
 
 # Example: Simulate with 5-second intervals
-nanorunner /data/nanopore_reads /watch/simulated_output --interval 5
+nanorunner replay -s /data/nanopore_reads -t /watch/simulated_output --interval 5
 ```
 
 ### What Happens
@@ -51,19 +51,19 @@ nanorunner /data/nanopore_reads /watch/simulated_output --interval 5
 
 ```bash
 # Fast testing with symlinks
-nanorunner /data/source /test/output \
+nanorunner replay -s /data/source -t /test/output \
   --interval 0.5 \
   --operation link \
   --timing-model uniform
 
 # Irregular timing with Poisson model
-nanorunner /data/source /watch/output \
+nanorunner replay -s /data/source -t /watch/output \
   --timing-model poisson \
   --burst-probability 0.15 \
   --interval 5
 
 # High-throughput parallel processing with monitoring
-nanorunner /data/source /watch/output \
+nanorunner replay -s /data/source -t /watch/output \
   --profile high_throughput \
   --monitor enhanced
 ```
@@ -77,11 +77,11 @@ Produce simulated nanopore FASTQ reads from genome FASTA files, delivered increm
 ### Your First Read Generation
 
 ```bash
-# Basic syntax (no source directory needed)
-nanorunner --genomes <fasta_files...> <target_directory> [options]
+# Basic syntax
+nanorunner generate --genomes <fasta_files...> --target <target_directory> [options]
 
 # Example: Generate reads from a genome with 5-second intervals
-nanorunner --genomes genome.fa /watch/output --interval 5
+nanorunner generate --genomes genome.fa -t /watch/output --interval 5
 ```
 
 ### What Happens
@@ -95,28 +95,28 @@ nanorunner --genomes genome.fa /watch/output --interval 5
 
 ```bash
 # Multiple genomes in multiplex mode (each genome gets a barcode directory)
-nanorunner --genomes genome1.fa genome2.fa /watch/output --interval 5
+nanorunner generate --genomes genome1.fa genome2.fa -t /watch/output --interval 5
 
 # Singleplex output (all files in target root)
-nanorunner --genomes genome.fa /watch/output --force-structure singleplex
+nanorunner generate --genomes genome.fa -t /watch/output --force-structure singleplex
 
 # Mix reads from multiple genomes into shared files
-nanorunner --genomes g1.fa g2.fa /watch/output \
+nanorunner generate --genomes g1.fa g2.fa -t /watch/output \
   --force-structure singleplex \
   --mix-reads
 
 # Custom generation parameters
-nanorunner --genomes genome.fa /watch/output \
+nanorunner generate --genomes genome.fa -t /watch/output \
   --read-count 5000 \
   --mean-read-length 8000 \
   --reads-per-file 200 \
   --output-format fastq.gz
 
 # Use a specific backend
-nanorunner --genomes genome.fa /watch/output --generator-backend builtin
+nanorunner generate --genomes genome.fa -t /watch/output --generator-backend builtin
 
 # Use a generation profile
-nanorunner --genomes genome.fa /watch/output --profile generate_standard
+nanorunner generate --genomes genome.fa -t /watch/output --profile generate_standard
 ```
 
 ### Output Structure
@@ -146,7 +146,7 @@ target_dir/
 Check which backends are available on your system:
 
 ```bash
-nanorunner --list-generators
+nanorunner list-generators
 ```
 
 | Backend | Dependencies | Description |
@@ -168,10 +168,10 @@ Generate reads without providing genome files by specifying species names or usi
 
 ```bash
 # Generate reads for two species (downloads genomes automatically)
-nanorunner --species "Escherichia coli" "Staphylococcus aureus" /watch/output
+nanorunner generate --species "Escherichia coli" "Staphylococcus aureus" -t /watch/output
 
 # Abbreviated names also work
-nanorunner --species "E. coli" "S. aureus" /watch/output
+nanorunner generate --species "E. coli" "S. aureus" -t /watch/output
 ```
 
 ### Use a Mock Community
@@ -180,10 +180,10 @@ Mock communities are predefined sets of species with established abundances, com
 
 ```bash
 # Generate reads from a standard mock community
-nanorunner --mock zymo_d6300 /watch/output
+nanorunner generate --mock zymo_d6300 -t /watch/output
 
 # List available mock communities
-nanorunner --list-mocks
+nanorunner list-mocks
 ```
 
 ### Sample Types
@@ -192,10 +192,10 @@ Control how species are organized in the output:
 
 ```bash
 # Pure samples: each species in its own barcode directory (default)
-nanorunner --species "E. coli" "S. aureus" --sample-type pure /watch/output
+nanorunner generate --species "E. coli" "S. aureus" --sample-type pure -t /watch/output
 
 # Mixed samples: all species combined according to abundances
-nanorunner --species "E. coli" "S. aureus" --sample-type mixed /watch/output
+nanorunner generate --species "E. coli" "S. aureus" --sample-type mixed -t /watch/output
 ```
 
 ### Custom Abundances
@@ -204,7 +204,7 @@ For mixed samples, specify relative abundances (must sum to 1.0):
 
 ```bash
 # 70% E. coli, 30% S. aureus
-nanorunner --species "E. coli" "S. aureus" --sample-type mixed --abundances 0.7 0.3 /watch/output
+nanorunner generate --species "E. coli" "S. aureus" --sample-type mixed --abundances 0.7 0.3 -t /watch/output
 ```
 
 ### Pre-download Genomes
@@ -223,12 +223,16 @@ nanorunner download --species "E. coli" "S. aureus"
 
 | Mock ID | Description |
 |---------|-------------|
-| `zymo_d6300` | ZymoBIOMICS Microbial Community Standard (10 strains) |
-| `zymo_d6310` | ZymoBIOMICS Gut Microbiome Standard (21 strains) |
-| `atcc_msa1000` | ATCC 10-strain Even Mix |
-| `quick_3species` | Quick test community (3 common species) |
+| `zymo_d6300` | Zymo D6300 Standard (even) - 8 bacteria + 2 yeasts |
+| `zymo_d6310` | Zymo D6310 Log Distribution - 8 bacteria + 2 yeasts |
+| `zymo_d6331` | Zymo D6331 Gut Microbiome Standard - 21 strains, 17 species |
+| `atcc_msa1002` | ATCC MSA-1002 20-strain even mix (5% each) |
+| `atcc_msa1003` | ATCC MSA-1003 20-strain staggered mix (0.02%-18%) |
+| `cdc_select_agents` | CDC/USDA Tier 1 bacterial select agents - 6 species |
+| `eskape` | ESKAPE nosocomial pathogens - 6 species |
+| `quick_3species` | Minimal 3-species test mock |
 
-Use `nanorunner --list-mocks` for complete details on each community.
+Use `nanorunner list-mocks` for complete details on all 15 communities and aliases.
 
 ---
 
@@ -239,7 +243,7 @@ Profiles provide optimized parameter sets for common scenarios.
 ### List Available Profiles
 
 ```bash
-nanorunner --list-profiles
+nanorunner list-profiles
 ```
 
 **Built-in profiles:**
@@ -255,16 +259,16 @@ nanorunner --list-profiles
 
 ```bash
 # Use profile as-is
-nanorunner /data/source /watch/output --profile bursty
+nanorunner replay -s /data/source -t /watch/output --profile bursty
 
 # Override profile parameters
-nanorunner /data/source /watch/output \
+nanorunner replay -s /data/source -t /watch/output \
   --profile bursty \
   --interval 3 \
   --worker-count 8
 
 # Combine a profile with generate mode
-nanorunner --genomes genome.fa /watch/output --profile generate_standard
+nanorunner generate --genomes genome.fa -t /watch/output --profile generate_standard
 ```
 
 ---
@@ -290,7 +294,7 @@ With resource tracking (requires psutil):
 Enable with:
 
 ```bash
-nanorunner /data/source /watch/output --monitor enhanced
+nanorunner replay -s /data/source -t /watch/output --monitor enhanced
 ```
 
 ### Interactive Controls
@@ -307,16 +311,16 @@ nanorunner /data/source /watch/output --monitor enhanced
 
 ```bash
 # Simulate with validation
-nanorunner /data/source /watch/output --pipeline nanometa
+nanorunner replay -s /data/source -t /watch/output --pipeline nanometa
 
 # Validate existing directory
-nanorunner --validate-pipeline kraken /path/to/output
+nanorunner validate --pipeline kraken --target /path/to/output
 ```
 
 ### List Supported Pipelines
 
 ```bash
-nanorunner --list-adapters
+nanorunner list-adapters
 ```
 
 **Built-in adapters:**
@@ -406,14 +410,14 @@ python examples/05_pipeline_integration.py
 **Problem**: `Command not found: nanorunner`
 ```bash
 # Solution: Ensure pip install location is in PATH
-pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2
+pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git
 # Add to PATH: export PATH="$HOME/.local/bin:$PATH"
 ```
 
 **Problem**: `Python version mismatch`
 ```bash
 # Solution: Use Python 3.9+
-python3.11 -m pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2
+python3.11 -m pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git
 ```
 
 ### Runtime Issues
@@ -455,39 +459,40 @@ Now that you are familiar with the basics:
 
 ```bash
 # Replay: basic simulation
-nanorunner /source /target
+nanorunner replay -s /source -t /target
 
 # Replay: fast testing with symlinks
-nanorunner /source /target --interval 0.5 --operation link
+nanorunner replay -s /source -t /target --interval 0.5 --operation link
 
 # Replay: realistic Poisson timing
-nanorunner /source /target --timing-model poisson
+nanorunner replay -s /source -t /target --timing-model poisson
 
 # Replay: high-throughput profile
-nanorunner /source /target --profile high_throughput
+nanorunner replay -s /source -t /target --profile high_throughput
 
 # Generate: reads from genome
-nanorunner --genomes genome.fa /target --interval 5
+nanorunner generate --genomes genome.fa -t /target --interval 5
 
 # Generate: multiplex from multiple genomes
-nanorunner --genomes g1.fa g2.fa /target
+nanorunner generate --genomes g1.fa g2.fa -t /target
 
 # Generate: singleplex with mixed reads
-nanorunner --genomes g1.fa g2.fa /target --force-structure singleplex --mix-reads
+nanorunner generate --genomes g1.fa g2.fa -t /target --force-structure singleplex --mix-reads
 
 # Species: generate from species names
-nanorunner --species "E. coli" "S. aureus" /target
+nanorunner generate --species "E. coli" "S. aureus" -t /target
 
 # Mock community: use a preset community
-nanorunner --mock zymo_d6300 /target
+nanorunner generate --mock zymo_d6300 -t /target
 
 # Replay with pipeline validation
-nanorunner /source /target --pipeline nanometa
+nanorunner replay -s /source -t /target --pipeline nanometa
 
 # List options
-nanorunner --list-profiles
-nanorunner --list-adapters
-nanorunner --list-generators
+nanorunner list-profiles
+nanorunner list-adapters
+nanorunner list-generators
+nanorunner list-mocks
 nanorunner --help
 ```
 

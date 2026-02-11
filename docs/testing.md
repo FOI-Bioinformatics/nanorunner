@@ -6,8 +6,8 @@ This document provides a comprehensive guide to NanoRunner's test suite, includi
 
 NanoRunner has a comprehensive test suite designed to validate both individual components and complete workflows:
 
-- **Total Tests**: 524 tests across 31 test files
-- **Runtime**: ~100 seconds for complete suite with coverage
+- **Total Tests**: 730 tests across 37 test files
+- **Runtime**: ~45 seconds for non-slow suite
 - **Coverage**: 97% on core components
 
 ## Test Categories
@@ -20,10 +20,14 @@ Test individual components in isolation with fast execution (<1 second per test)
 |-----------|-------------|
 | `test_unit_core_components.py` | Core component isolation tests |
 | `test_config.py` | Configuration validation and parameter handling |
+| `test_config_coverage.py` | Additional configuration coverage |
 | `test_detector.py` | File structure detection algorithms |
 | `test_timing_models.py` | Timing model implementations and edge cases |
 | `test_adapters.py` | Pipeline adapter functionality |
+| `test_adapters_coverage.py` | Additional adapter coverage |
 | `test_profiles.py` | Configuration profile system validation |
+| `test_mocks.py` | Mock community definitions, aliases, organism validation |
+| `test_species.py` | Species name resolution (GTDB/NCBI) |
 
 ### Integration Tests
 
@@ -33,11 +37,23 @@ Test component interactions and end-to-end workflows.
 |-----------|-------------|
 | `test_cli.py` | Core command-line interface functionality |
 | `test_cli_enhanced.py` | Enhanced CLI features and monitoring integration |
+| `test_cli_coverage.py` | CLI coverage (recommend, profiles) |
+| `test_cli_additional_coverage.py` | Additional CLI coverage |
+| `test_cli_species.py` | Species/mock CLI integration |
+| `test_cli_download.py` | Download subcommand tests |
 | `test_simulator.py` | Core simulation functionality and orchestration |
+| `test_simulator_coverage.py` | Additional simulator coverage |
+| `test_simulator_additional_coverage.py` | Extended simulator coverage |
+| `test_simulator_species.py` | Species resolution within simulation |
+| `test_species_integration.py` | Species resolution end-to-end |
 | `test_integration.py` | End-to-end workflow testing |
 | `test_timing_integration.py` | Timing model integration with simulation workflow |
 | `test_parallel_processing.py` | Parallel processing capabilities and thread safety |
 | `test_enhanced_monitoring.py` | Advanced monitoring features and resource tracking |
+| `test_monitoring.py` | Core monitoring tests |
+| `test_monitoring_coverage.py` | Monitoring coverage |
+| `test_monitoring_additional_coverage.py` | Extended monitoring coverage |
+| `test_monitoring_eta_and_detailed.py` | ETA calculation and detailed monitoring |
 
 ### Generate Mode Tests
 
@@ -69,15 +85,16 @@ Benchmarks and large dataset handling (marked as `slow`).
 |-----------|-------------|
 | `test_performance.py` | Large dataset handling and performance benchmarks |
 
-### Edge Case Tests
+### Edge Case and Scenario Tests
 
-Error handling, permissions, and boundary conditions.
+Error handling, permissions, boundary conditions, and realistic scenarios.
 
 | Test File | Description |
 |-----------|-------------|
 | `test_edge_cases.py` | Error handling, permissions, boundary conditions |
 | `test_realistic_edge_cases.py` | Mixed file types, permissions, symlinks |
 | `test_realistic_long_running.py` | Extended runs, checkpoint/resume, recovery |
+| `test_realistic_scenarios.py` | Realistic multi-step scenarios |
 
 ## Running Tests
 
@@ -159,6 +176,10 @@ tests/
 ├── conftest.py                      # Shared fixtures
 ├── test_cli.py                      # CLI interface tests
 ├── test_cli_enhanced.py             # Enhanced CLI tests
+├── test_cli_coverage.py             # CLI coverage (recommend, profiles)
+├── test_cli_additional_coverage.py  # Additional CLI coverage
+├── test_cli_species.py              # Species/mock CLI integration
+├── test_cli_download.py             # Download subcommand
 ├── test_config.py                   # Configuration tests
 ├── test_detector.py                 # File detection tests
 ├── test_simulator.py                # Core simulation tests
@@ -169,12 +190,14 @@ tests/
 ├── test_adapters.py                 # Pipeline adapter tests
 ├── test_generators.py               # Read generator tests
 ├── test_generate_integration.py     # Generate mode integration
+├── test_mocks.py                    # Mock community definitions
+├── test_species.py                  # Species name resolution
 ├── test_practical.py                # Real genome tests
 ├── test_integration.py              # End-to-end tests
 ├── test_timing_integration.py       # Timing integration tests
 ├── test_edge_cases.py               # Edge case tests
 ├── test_performance.py              # Performance benchmarks
-└── ...
+└── ...                              # Additional coverage files
 ```
 
 ### Naming Conventions

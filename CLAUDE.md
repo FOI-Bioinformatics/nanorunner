@@ -122,14 +122,14 @@ python -m build
 
 # Test console script functionality
 nanorunner --help
-nanorunner --list-profiles
-nanorunner --list-adapters
-nanorunner --list-generators
-nanorunner --list-mocks
-nanorunner /source /target --profile bursty --monitor enhanced
-nanorunner --genomes genome.fa /target --interval 2
-nanorunner --mock zymo_d6300 /target --read-count 1000 --interval 1
-nanorunner --genomes genome.fa /target --mean-quality 25 --std-quality 3
+nanorunner list-profiles
+nanorunner list-adapters
+nanorunner list-generators
+nanorunner list-mocks
+nanorunner replay --source /source --target /target --profile bursty --monitor enhanced
+nanorunner generate --genomes genome.fa --target /target --interval 2
+nanorunner generate --mock zymo_d6300 --target /target --read-count 1000 --interval 1
+nanorunner generate --genomes genome.fa --target /target --mean-quality 25 --std-quality 3
 ```
 
 ## Architecture
@@ -142,12 +142,14 @@ nanorunner --genomes genome.fa /target --mean-quality 25 --std-quality 3
 - `simulator.py`: NanoporeSimulator orchestration class handling both replay (copy/link) and generate operations
 - `timing.py`: Timing model implementations (UniformTimingModel, RandomTimingModel, PoissonTimingModel, AdaptiveTimingModel)
 - `generators.py`: Read generation backends (BuiltinGenerator, BadreadGenerator, NanoSimGenerator) with ABC, factory, and FASTA parsing
+- `species.py`: Species name resolution via GTDB REST API (bacteria/archaea) and NCBI datasets CLI (eukaryotes), with local caching
+- `mocks.py`: Mock community definitions (MockOrganism, MockCommunity), built-in communities, aliases, and lookup functions
 - `profiles.py`: Configuration profile system with built-in profiles for sequencing and generation scenarios
 - `adapters.py`: Pipeline adapter framework with data-driven BUILTIN_ADAPTER_CONFIGS (nanometa, kraken), GenericAdapter, and backward-compatible aliases
 - `monitoring.py`: Enhanced progress monitoring with resource tracking, predictive ETA, and interactive controls
 
 **nanopore_simulator/cli/**
-- `main.py`: Command-line interface with profile support, timing model selection, monitoring options, and read generation arguments
+- `main.py`: Typer-based CLI with subcommands (`replay`, `generate`, `download`, `list-profiles`, `list-adapters`, `list-generators`, `list-mocks`, `recommend`, `validate`)
 
 ### Key Design Patterns
 
@@ -238,23 +240,27 @@ nanorunner --genomes genome.fa /target --mean-quality 25 --std-quality 3
 ## Testing Architecture
 
 **Test Categories:**
-- `test_cli.py`: Core command-line interface functionality
-- `test_cli_enhanced.py`: Enhanced CLI features and monitoring integration
-- `test_config.py`: Configuration validation and parameter handling
+- `test_cli.py`, `test_cli_enhanced.py`, `test_cli_coverage.py`, `test_cli_additional_coverage.py`: CLI interface, enhanced features, coverage
+- `test_cli_species.py`, `test_cli_download.py`: Species/mock CLI and download subcommand
+- `test_config.py`, `test_config_coverage.py`: Configuration validation and parameter handling
 - `test_detector.py`: File structure detection algorithms
-- `test_simulator.py`: Core simulation functionality and orchestration
+- `test_simulator.py`, `test_simulator_coverage.py`, `test_simulator_additional_coverage.py`: Core simulation
+- `test_simulator_species.py`: Species resolution within simulation workflow
 - `test_timing_models.py`: Timing model implementations and edge cases
+- `test_timing_integration.py`: Timing model integration with simulation workflow
 - `test_parallel_processing.py`: Parallel processing capabilities and thread safety
-- `test_enhanced_monitoring.py`: Advanced monitoring features and resource tracking
+- `test_enhanced_monitoring.py`, `test_monitoring.py`, `test_monitoring_coverage.py`, `test_monitoring_additional_coverage.py`, `test_monitoring_eta_and_detailed.py`: Monitoring and resource tracking
 - `test_profiles.py`: Configuration profile system validation
-- `test_adapters.py`: Pipeline adapter functionality and validation
+- `test_adapters.py`, `test_adapters_coverage.py`: Pipeline adapter functionality
 - `test_generators.py`: Read generation backends, FASTA parsing, factory, config validation
 - `test_generate_integration.py`: End-to-end generate mode with multiplex, singleplex, mixed, and timing
-- `test_mocks.py`: Mock community definitions, aliases, and species resolution
+- `test_species.py`, `test_species_integration.py`: Species name resolution and GTDB/NCBI integration
+- `test_mocks.py`: Mock community definitions, aliases, organism validation
 - `test_practical.py`: Practical tests using real NCBI genomes (Lambda, S. aureus, E. coli); requires datasets CLI
 - `test_integration.py`: End-to-end workflow testing with various configurations
-- `test_timing_integration.py`: Timing model integration with simulation workflow
-- `test_edge_cases.py`: Error handling, permissions, and boundary conditions
+- `test_edge_cases.py`, `test_realistic_edge_cases.py`: Error handling, permissions, boundary conditions
+- `test_realistic_scenarios.py`, `test_realistic_long_running.py`: Extended runs, checkpoint/resume
+- `test_unit_core_components.py`: Core component isolation tests
 - `test_performance.py`: Large dataset handling and performance benchmarks (marked as `slow`)
 
 **Cross-Platform Considerations:**
@@ -264,7 +270,7 @@ nanorunner --genomes genome.fa /target --mean-quality 25 --std-quality 3
 
 **Coverage Standards:**
 - Minimum coverage threshold: 90%
-- 524 tests across 31 test files
+- 730 tests across 37 test files
 - Comprehensive integration testing with multiple timing models and configurations
 
 ## Integration Context
