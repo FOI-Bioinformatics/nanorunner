@@ -1004,9 +1004,10 @@ class NanoporeSimulator:
                 future = self.executor.submit(self._process_file, file_info)
                 futures.append((future, file_info))
 
-        # Wait for all files to complete and handle any exceptions
+        # Collect results as they complete for timely monitoring updates
+        future_to_info = {f: fi for f, fi in futures}
         exceptions = []
-        for future, file_info in futures:
+        for future in as_completed(future_to_info):
             try:
                 result = future.result()
                 # For process pool results, update monitoring from main process

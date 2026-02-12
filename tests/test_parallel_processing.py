@@ -429,6 +429,102 @@ class TestParallelIntegration:
                 assert target_file.read_text() == source_file.read_text()
 
 
+class TestParallelGenerateIntegration:
+    """Integration tests for parallel generate mode with ProcessPoolExecutor"""
+
+    def test_parallel_generate_produces_correct_output(self, temp_dirs):
+        """Generate mode with ProcessPoolExecutor should produce valid FASTQ files."""
+        source_dir, target_dir = temp_dirs
+        fasta = source_dir / "genome.fa"
+        fasta.write_text(
+            ">chr1\nATCGATCGATCGATCGATCGATCGATCGATCG\n"
+            ">chr2\nGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTA\n"
+        )
+        config = SimulationConfig(
+            target_dir=target_dir,
+            operation="generate",
+            genome_inputs=[fasta],
+            read_count=20,
+            reads_per_file=10,
+            mean_read_length=15,
+            std_read_length=3,
+            min_read_length=5,
+            output_format="fastq",
+            interval=0.0,
+            timing_model="uniform",
+            generator_backend="builtin",
+            parallel_processing=True,
+            worker_count=2,
+            batch_size=2,
+        )
+        simulator = NanoporeSimulator(config, enable_monitoring=False)
+        assert isinstance(simulator.executor, ProcessPoolExecutor)
+
+        simulator.run_simulation()
+
+        # Should produce 2 output files (20 reads / 10 per file)
+        fastq_files = list(target_dir.rglob("*.fastq"))
+        assert len(fastq_files) == 2
+
+        # Each file should have valid FASTQ content
+        total_reads = 0
+        for fq in fastq_files:
+            lines = fq.read_text().strip().split("\n")
+            assert len(lines) % 4 == 0, f"Malformed FASTQ: {fq.name}"
+            n_reads = len(lines) // 4
+            assert n_reads == 10
+            total_reads += n_reads
+            # First line of each record should be a header
+            for i in range(0, len(lines), 4):
+                assert lines[i].startswith("@")
+                # Sequence and quality should match length
+                assert len(lines[i + 1]) == len(lines[i + 3])
+        assert total_reads == 20
+
+    def test_parallel_generate_mixed_mode(self, temp_dirs):
+        """Mixed-read generate mode should work through ProcessPoolExecutor."""
+        source_dir, target_dir = temp_dirs
+        g1 = source_dir / "genome1.fa"
+        g1.write_text(">chr1\nATCGATCGATCGATCGATCGATCGATCGATCG\n")
+        g2 = source_dir / "genome2.fa"
+        g2.write_text(">chrA\nGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTA\n")
+
+        config = SimulationConfig(
+            target_dir=target_dir,
+            operation="generate",
+            genome_inputs=[g1, g2],
+            force_structure="singleplex",
+            read_count=20,
+            reads_per_file=10,
+            mean_read_length=15,
+            std_read_length=3,
+            min_read_length=5,
+            output_format="fastq",
+            mix_reads=True,
+            interval=0.0,
+            timing_model="uniform",
+            generator_backend="builtin",
+            parallel_processing=True,
+            worker_count=2,
+            batch_size=2,
+        )
+        object.__setattr__(config, "_resolved_abundances", [0.5, 0.5])
+        simulator = NanoporeSimulator(config, enable_monitoring=False)
+        assert isinstance(simulator.executor, ProcessPoolExecutor)
+
+        simulator.run_simulation()
+
+        fastq_files = list(target_dir.glob("reads_*.fastq"))
+        assert len(fastq_files) == 2
+
+        # Each mixed file should contain reads from both genomes
+        for fq in fastq_files:
+            lines = fq.read_text().strip().split("\n")
+            headers = [lines[i] for i in range(0, len(lines), 4)]
+            stems = {h.split("_read_")[0].lstrip("@") for h in headers}
+            assert len(stems) == 2, f"Expected 2 genome stems, got {stems}"
+
+
 @pytest.fixture
 def temp_dirs():
     """Create temporary directories for testing"""

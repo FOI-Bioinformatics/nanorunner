@@ -379,10 +379,8 @@ class TestParallelGenerate:
 
         # Each file should contain reads from both genomes
         for fq in fastq_files:
-            content = fq.read_text()
-            headers = [
-                line for line in content.strip().split("\n") if line.startswith("@")
-            ]
+            lines = fq.read_text().strip().split("\n")
+            headers = [lines[i] for i in range(0, len(lines), 4)]
             stems = {h.split("_read_")[0].lstrip("@") for h in headers}
             assert len(stems) == 2, (
                 f"Expected reads from 2 genomes, found stems: {stems}"
