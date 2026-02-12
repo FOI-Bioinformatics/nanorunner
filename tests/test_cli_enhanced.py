@@ -151,9 +151,8 @@ class TestCLIEnhancedMonitoring:
         assert "enhanced" in normalised
         assert "resource monitoring" in normalised
         assert "interactive controls" in normalised
-        # Rich markup mode consumes "[enhanced]" as a tag, so check the
-        # surrounding text that does render.
-        assert "pip install nanorunner" in normalised
+        # Check that psutil install instruction is present
+        assert "conda install" in normalised
 
     def test_cli_enhanced_monitoring_with_profile(self):
         """Test enhanced monitoring with configuration profiles."""

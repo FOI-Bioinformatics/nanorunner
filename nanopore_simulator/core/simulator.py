@@ -246,10 +246,12 @@ class NanoporeSimulator:
                 config.generator_backend, gen_config
             )
             if isinstance(self.read_generator, BuiltinGenerator):
+                from .deps import get_install_hint
+
                 self.logger.warning(
                     "Using builtin generator: reads are error-free subsequences "
                     "without realistic error profiles. For reads with sequencing "
-                    "errors, install badread (pip install badread)."
+                    f"errors, install badread ({get_install_hint('badread')})."
                 )
 
         # Create ProcessPoolExecutor for generate mode after species

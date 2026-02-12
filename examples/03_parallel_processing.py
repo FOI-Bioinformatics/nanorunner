@@ -106,10 +106,12 @@ def main():
     # Check for psutil
     try:
         import psutil
-        print("✓ psutil installed - Enhanced monitoring available")
+        print("psutil installed - Enhanced monitoring available")
     except ImportError:
-        print("⚠ psutil not installed - Basic monitoring only")
-        print("  Install with: pip install psutil")
+        from nanopore_simulator.core.deps import get_install_hint
+
+        print("psutil not installed - Basic monitoring only")
+        print(f"  Install with: {get_install_hint('psutil')}")
     print()
 
     # Run both simulations

@@ -1,9 +1,10 @@
 """Tests for read generation backends"""
 
 import gzip
+import subprocess
 import pytest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from nanopore_simulator.core.config import SimulationConfig
 from nanopore_simulator.core.simulator import NanoporeSimulator
@@ -369,3 +370,108 @@ class TestQualityDefaults:
             genome_inputs=[simple_fasta],
         )
         assert config.std_quality == 4.0
+
+
+class TestSubprocessErrorWrapping:
+    """Tests for subprocess error wrapping with install hints."""
+
+    def test_badread_subprocess_error_includes_hint(self, simple_fasta, tmp_path):
+        """BadreadGenerator should wrap CalledProcessError with install hint."""
+        config = ReadGeneratorConfig(
+            reads_per_file=5,
+            mean_read_length=10,
+            output_format="fastq",
+        )
+        gen = BadreadGenerator(config)
+        genome = GenomeInput(fasta_path=simple_fasta)
+
+        error = subprocess.CalledProcessError(
+            1, "badread", stderr="reference file not found"
+        )
+        with patch("subprocess.run", side_effect=error):
+            with pytest.raises(RuntimeError, match="badread exited with status 1"):
+                gen.generate_reads(genome, tmp_path / "out", 0)
+
+    def test_badread_error_contains_install_hint(self, simple_fasta, tmp_path):
+        """Error message should include conda install instructions."""
+        config = ReadGeneratorConfig(
+            reads_per_file=5,
+            mean_read_length=10,
+            output_format="fastq",
+        )
+        gen = BadreadGenerator(config)
+        genome = GenomeInput(fasta_path=simple_fasta)
+
+        error = subprocess.CalledProcessError(1, "badread", stderr="error msg")
+        with patch("subprocess.run", side_effect=error):
+            with pytest.raises(RuntimeError, match="conda install.*badread"):
+                gen.generate_reads(genome, tmp_path / "out", 0)
+
+    def test_badread_in_memory_error_wrapping(self, simple_fasta):
+        """BadreadGenerator.generate_reads_in_memory should also wrap errors."""
+        config = ReadGeneratorConfig(
+            reads_per_file=5,
+            mean_read_length=10,
+            output_format="fastq",
+        )
+        gen = BadreadGenerator(config)
+        genome = GenomeInput(fasta_path=simple_fasta)
+
+        error = subprocess.CalledProcessError(1, "badread", stderr="boom")
+        with patch("subprocess.run", side_effect=error):
+            with pytest.raises(RuntimeError, match="badread exited with status 1"):
+                gen.generate_reads_in_memory(genome, 5)
+
+    def test_nanosim_subprocess_error_includes_hint(self, simple_fasta, tmp_path):
+        """NanoSimGenerator should wrap CalledProcessError with install hint."""
+        config = ReadGeneratorConfig(
+            reads_per_file=5,
+            mean_read_length=10,
+            output_format="fastq",
+        )
+        gen = NanoSimGenerator(config)
+        genome = GenomeInput(fasta_path=simple_fasta)
+
+        error = subprocess.CalledProcessError(
+            1, "nanosim", stderr="model not found"
+        )
+        with patch("subprocess.run", side_effect=error):
+            with patch.object(
+                NanoSimGenerator, "_get_command", return_value="nanosim"
+            ):
+                with pytest.raises(RuntimeError, match="nanosim exited with status 1"):
+                    gen.generate_reads(genome, tmp_path / "out", 0)
+
+    def test_badread_error_includes_stderr(self, simple_fasta, tmp_path):
+        """Wrapped error should include the original stderr content."""
+        config = ReadGeneratorConfig(
+            reads_per_file=5,
+            mean_read_length=10,
+            output_format="fastq",
+        )
+        gen = BadreadGenerator(config)
+        genome = GenomeInput(fasta_path=simple_fasta)
+
+        error = subprocess.CalledProcessError(
+            1, "badread", stderr="specific error details"
+        )
+        with patch("subprocess.run", side_effect=error):
+            with pytest.raises(RuntimeError, match="specific error details"):
+                gen.generate_reads(genome, tmp_path / "out", 0)
+
+
+class TestFactoryInstallHints:
+    """Tests for install hints in the factory function."""
+
+    def test_unavailable_backend_includes_install_hint(self):
+        """Factory should include install hint for unavailable backends."""
+        config = ReadGeneratorConfig()
+        with patch.object(BadreadGenerator, "is_available", return_value=False):
+            with pytest.raises(ValueError, match="Install with:.*conda"):
+                create_read_generator("badread", config)
+
+    def test_unavailable_nanosim_includes_install_hint(self):
+        config = ReadGeneratorConfig()
+        with patch.object(NanoSimGenerator, "is_available", return_value=False):
+            with pytest.raises(ValueError, match="Install with:.*conda"):
+                create_read_generator("nanosim", config)

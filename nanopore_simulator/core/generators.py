@@ -447,7 +447,17 @@ class BadreadGenerator(ReadGenerator):
 
         logger.info(f"Running badread: {' '.join(cmd)}")
 
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError as exc:
+            from .deps import get_install_hint
+
+            stderr = (exc.stderr or "").strip()
+            msg = f"badread exited with status {exc.returncode}"
+            if stderr:
+                msg += f": {stderr}"
+            msg += f"\nVerify installation: {get_install_hint('badread')}"
+            raise RuntimeError(msg) from exc
 
         if output_path.suffix == ".gz":
             with gzip.open(output_path, "wt", compresslevel=1) as f:
@@ -477,7 +487,17 @@ class BadreadGenerator(ReadGenerator):
             f"{self.config.mean_read_length},{self.config.std_read_length}",
         ]
 
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError as exc:
+            from .deps import get_install_hint
+
+            stderr = (exc.stderr or "").strip()
+            msg = f"badread exited with status {exc.returncode}"
+            if stderr:
+                msg += f": {stderr}"
+            msg += f"\nVerify installation: {get_install_hint('badread')}"
+            raise RuntimeError(msg) from exc
 
         reads: List[Tuple[str, str, str, str]] = []
         lines = result.stdout.split("\n")
@@ -544,7 +564,17 @@ class NanoSimGenerator(ReadGenerator):
 
         logger.info(f"Running NanoSim: {' '.join(cmd)}")
 
-        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        try:
+            subprocess.run(cmd, capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError as exc:
+            from .deps import get_install_hint
+
+            stderr = (exc.stderr or "").strip()
+            msg = f"nanosim exited with status {exc.returncode}"
+            if stderr:
+                msg += f": {stderr}"
+            msg += f"\nVerify installation: {get_install_hint('nanosim')}"
+            raise RuntimeError(msg) from exc
 
         # NanoSim writes to prefix_aligned_reads.fasta and prefix_unaligned_reads.fasta
         # Collect outputs into a single FASTQ
@@ -639,8 +669,12 @@ def create_read_generator(backend: str, config: ReadGeneratorConfig) -> ReadGene
 
     cls = _BACKENDS[backend]
     if not cls.is_available():
+        from .deps import get_install_hint
+
+        hint = get_install_hint(backend)
         raise ValueError(
-            f"Backend '{backend}' is not available in the current environment"
+            f"Backend '{backend}' is not available. "
+            f"Install with: {hint}"
         )
 
     return cls(config)

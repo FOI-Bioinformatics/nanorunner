@@ -799,10 +799,12 @@ def download_genome(
 
     # Check that datasets CLI is available before attempting download
     if shutil.which("datasets") is None:
+        from .deps import get_install_hint
+
         raise RuntimeError(
             f"Cannot download genome {ref.accession}: "
             "the 'datasets' CLI (ncbi-datasets-cli) is not installed. "
-            "Install with: conda install -c conda-forge ncbi-datasets-cli"
+            f"Install with: {get_install_hint('datasets')}"
         )
 
     # Download via datasets CLI

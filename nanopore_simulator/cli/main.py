@@ -24,6 +24,7 @@ from ..core.adapters import (
 )
 from ..core.detector import FileStructureDetector
 from ..core.generators import detect_available_backends
+from ..core.deps import check_all_dependencies, check_preflight, get_install_hint
 from ..core.mocks import BUILTIN_MOCKS, MOCK_ALIASES, get_mock_community
 from ..core.species import SpeciesResolver, download_genome, GenomeRef
 
@@ -322,7 +323,7 @@ def _setup_monitoring(
         except ImportError:
             print(
                 "Warning: Enhanced monitoring requires psutil. "
-                "Install with: pip install nanorunner[enhanced]"
+                f"Install with: {get_install_hint('psutil')}"
             )
             print("Falling back to detailed monitoring mode.")
             monitor_type = "detailed"
@@ -338,6 +339,21 @@ def _run_simulation(
     pipeline: Optional[str] = None,
 ) -> None:
     """Create simulator, run, and handle post-run validation."""
+    # Pre-flight validation: check required dependencies before starting
+    needs_download = (
+        config.species_inputs or config.mock_name or config.taxid_inputs
+    ) and not config.offline_mode
+    preflight_errors = check_preflight(
+        operation=config.operation,
+        generator_backend=config.generator_backend if is_generate else "builtin",
+        needs_genome_download=bool(needs_download),
+        monitor_type=monitor_type,
+    )
+    if preflight_errors:
+        for err in preflight_errors:
+            print(f"Error: {err}")
+        raise typer.Exit(code=1)
+
     try:
         simulator = NanoporeSimulator(config, enable_monitoring, monitor_type)
 
@@ -348,7 +364,7 @@ def _run_simulation(
                 print(
                     "Note: Using builtin generator (error-free reads). "
                     "For realistic error profiles, install badread: "
-                    "pip install badread"
+                    f"{get_install_hint('badread')}"
                 )
 
         if monitor_type == "enhanced":
@@ -463,6 +479,53 @@ def list_generators_cmd() -> None:
 def list_mocks_cmd() -> None:
     """List available mock communities."""
     list_mocks_command()
+
+
+def check_deps_command() -> int:
+    """Check availability of all dependencies and report status."""
+    statuses = check_all_dependencies()
+
+    print("Nanorunner Dependency Status")
+    print("=" * 60)
+
+    categories = [
+        ("generator", "Read Generation Backends"),
+        ("tool", "External Tools"),
+        ("python", "Optional Python Packages"),
+    ]
+
+    missing_count = 0
+
+    for cat_key, cat_label in categories:
+        items = [s for s in statuses if s.category == cat_key]
+        if not items:
+            continue
+
+        print(f"\n{cat_label}:")
+        for dep in items:
+            status_str = "available" if dep.available else "not found"
+            print(f"  {dep.name:20} {status_str:14}{dep.description}")
+            if not dep.available:
+                missing_count += 1
+                print(f"  {'':20} Install: {dep.install_hint}")
+                print(f"  {'':20} Needed for: {dep.required_for}")
+
+    print()
+    if missing_count == 0:
+        print("All dependencies are available.")
+    else:
+        print(f"{missing_count} optional dependency(ies) not found.")
+        print(
+            "Core functionality (builtin generator, replay mode) "
+            "works without them."
+        )
+    return 0
+
+
+@app.command("check-deps")
+def check_deps_cmd() -> None:
+    """Check availability of external tools and optional dependencies."""
+    check_deps_command()
 
 
 # ---------------------------------------------------------------------------
@@ -800,7 +863,7 @@ def replay(
         help=(
             "Progress monitoring level: default (basic), detailed (verbose "
             "logging), enhanced (resource monitoring + interactive controls), "
-            "none (silent). Enhanced features require: pip install nanorunner[enhanced]"
+            "none (silent). Enhanced features require: conda install -c conda-forge psutil"
         ),
         rich_help_panel="Monitoring",
     ),
@@ -987,7 +1050,7 @@ def generate(
         help=(
             "Progress monitoring level: default (basic), detailed (verbose "
             "logging), enhanced (resource monitoring + interactive controls), "
-            "none (silent). Enhanced features require: pip install nanorunner[enhanced]"
+            "none (silent). Enhanced features require: conda install -c conda-forge psutil"
         ),
         rich_help_panel="Monitoring",
     ),
@@ -1260,6 +1323,16 @@ def download(
 
     if not (species or mock or taxid):
         print("Error: Must specify --species, --mock, or --taxid")
+        raise typer.Exit(code=1)
+
+    # Pre-flight: verify datasets CLI is installed for downloads
+    preflight_errors = check_preflight(
+        operation="copy",
+        needs_genome_download=True,
+    )
+    if preflight_errors:
+        for err in preflight_errors:
+            print(f"Error: {err}")
         raise typer.Exit(code=1)
 
     successful_downloads, mock_community = _download_genomes(

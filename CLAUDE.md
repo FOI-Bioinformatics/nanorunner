@@ -91,6 +91,7 @@ pytest tests/test_timing_models.py          # Timing model tests
 pytest tests/test_profiles.py               # Configuration profile tests
 pytest tests/test_adapters.py               # Pipeline adapter tests
 pytest tests/test_integration.py            # End-to-end integration tests
+pytest tests/test_deps.py                  # Dependency checking and pre-flight tests
 pytest tests/test_generators.py             # Read generation backend tests
 pytest tests/test_generate_integration.py   # Generate mode end-to-end tests
 pytest tests/test_practical.py -m practical # Practical tests with real NCBI genomes
@@ -126,6 +127,7 @@ nanorunner list-profiles
 nanorunner list-adapters
 nanorunner list-generators
 nanorunner list-mocks
+nanorunner check-deps
 nanorunner replay --source /source --target /target --profile bursty --monitor enhanced
 nanorunner generate --genomes genome.fa --target /target --interval 2
 nanorunner generate --mock zymo_d6300 --target /target --read-count 1000 --interval 1
@@ -138,6 +140,7 @@ nanorunner generate --genomes genome.fa --target /target --mean-quality 25 --std
 
 **nanopore_simulator/core/**
 - `config.py`: SimulationConfig dataclass with validation for all simulation parameters including generate mode fields
+- `deps.py`: Centralized dependency checking (DependencyStatus, check_all_dependencies, check_preflight, get_install_hint) with install hints and pre-flight validation
 - `detector.py`: FileStructureDetector for automatic singleplex/multiplex structure recognition
 - `simulator.py`: NanoporeSimulator orchestration class handling both replay (copy/link) and generate operations
 - `timing.py`: Timing model implementations (UniformTimingModel, RandomTimingModel, PoissonTimingModel, AdaptiveTimingModel)
@@ -252,7 +255,8 @@ nanorunner generate --genomes genome.fa --target /target --mean-quality 25 --std
 - `test_enhanced_monitoring.py`, `test_monitoring.py`, `test_monitoring_coverage.py`, `test_monitoring_additional_coverage.py`, `test_monitoring_eta_and_detailed.py`: Monitoring and resource tracking
 - `test_profiles.py`: Configuration profile system validation
 - `test_adapters.py`, `test_adapters_coverage.py`: Pipeline adapter functionality
-- `test_generators.py`: Read generation backends, FASTA parsing, factory, config validation
+- `test_deps.py`: Dependency checking, install hints, pre-flight validation
+- `test_generators.py`: Read generation backends, FASTA parsing, factory, config validation, subprocess error wrapping
 - `test_generate_integration.py`: End-to-end generate mode with multiplex, singleplex, mixed, and timing
 - `test_species.py`, `test_species_integration.py`: Species name resolution and GTDB/NCBI integration
 - `test_mocks.py`: Mock community definitions, aliases, organism validation
@@ -270,7 +274,7 @@ nanorunner generate --genomes genome.fa --target /target --mean-quality 25 --std
 
 **Coverage Standards:**
 - Minimum coverage threshold: 90%
-- 730 tests across 37 test files
+- 898 tests across 40 test files
 - Comprehensive integration testing with multiple timing models and configurations
 
 ## Integration Context

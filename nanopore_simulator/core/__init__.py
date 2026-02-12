@@ -1,6 +1,12 @@
 """Core modules for nanopore simulator"""
 
 from .config import SimulationConfig
+from .deps import (
+    DependencyStatus,
+    check_all_dependencies,
+    check_preflight,
+    get_install_hint,
+)
 from .detector import FileStructureDetector
 from .fastq import count_fastq_reads, iter_fastq_reads, write_fastq_reads
 from .generators import (
@@ -17,6 +23,10 @@ from .simulator import NanoporeSimulator
 
 __all__ = [
     "SimulationConfig",
+    "DependencyStatus",
+    "check_all_dependencies",
+    "check_preflight",
+    "get_install_hint",
     "FileStructureDetector",
     "NanoporeSimulator",
     "ReadGeneratorConfig",
