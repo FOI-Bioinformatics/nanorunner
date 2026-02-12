@@ -21,6 +21,22 @@ except ImportError:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
+# Module-level genome cache for ProcessPoolExecutor workers.
+# Populated by _init_worker_genomes() which is passed as the
+# ``initializer`` argument when the pool is created, so each worker
+# process receives pre-parsed genome data without redundant I/O.
+_WORKER_GENOME_CACHE: Dict[str, str] = {}
+
+
+def _init_worker_genomes(genome_data: Dict[str, str]) -> None:
+    """Initializer for ProcessPoolExecutor workers.
+
+    Pre-populates the module-level genome cache so that workers can
+    skip redundant FASTA parsing.
+    """
+    global _WORKER_GENOME_CACHE
+    _WORKER_GENOME_CACHE = genome_data
+
 
 def _generate_quality_string_numpy(
     rng: "np.random.Generator", mean: float, std: float, length: int

@@ -350,15 +350,39 @@ class ResourceMonitor:
                 self._baseline_io = None
 
     def get_current_metrics(self) -> ResourceMetrics:
-        """Get current system resource metrics"""
+        """Get current system resource metrics.
+
+        Aggregates CPU and memory usage across the main process and all
+        child processes (e.g. ProcessPoolExecutor workers) so that
+        parallel workloads are reflected accurately.
+        """
         if not HAS_PSUTIL or not self.process:
             return ResourceMetrics()
 
         try:
-            # CPU and memory
-            cpu_percent = self.process.cpu_percent()
-            memory_info = self.process.memory_info()
-            memory_percent = self.process.memory_percent()
+            # Collect from main process + all children (ProcessPoolExecutor
+            # workers, and any subprocesses they spawn such as badread).
+            try:
+                children = self.process.children(recursive=True)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                children = []
+            procs = [self.process] + children
+
+            # CPU: sum per-process cpu_percent (non-blocking; returns usage
+            # since the previous call, which is already satisfied by the
+            # periodic update loop).
+            cpu_percent = 0.0
+            memory_rss = 0
+            for p in procs:
+                try:
+                    cpu_percent += p.cpu_percent()
+                    memory_rss += p.memory_info().rss
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+            total_mem = psutil.virtual_memory().total
+            memory_percent = (memory_rss / total_mem) * 100 if total_mem > 0 else 0.0
+            memory_used_mb = memory_rss / (1024 * 1024)
 
             # Disk I/O
             io_read_mb = 0.0
@@ -372,14 +396,16 @@ class ResourceMonitor:
                     io_write_mb = (
                         current_io.write_bytes - self._baseline_io.write_bytes
                     ) / (1024 * 1024)
-                except (psutil.AccessDenied, AttributeError):
+                except (psutil.AccessDenied, psutil.NoSuchProcess, AttributeError):
                     pass
 
             # Open files
-            try:
-                open_files = len(self.process.open_files())
-            except (psutil.AccessDenied, AttributeError):
-                open_files = 0
+            open_files = 0
+            for p in procs:
+                try:
+                    open_files += len(p.open_files())
+                except (psutil.AccessDenied, psutil.NoSuchProcess, AttributeError):
+                    pass
 
             # Disk usage of current working directory
             try:
@@ -391,7 +417,7 @@ class ResourceMonitor:
             return ResourceMetrics(
                 cpu_percent=cpu_percent,
                 memory_percent=memory_percent,
-                memory_used_mb=memory_info.rss / (1024 * 1024),
+                memory_used_mb=memory_used_mb,
                 disk_io_read_mb=io_read_mb,
                 disk_io_write_mb=io_write_mb,
                 disk_usage_percent=disk_usage_percent,

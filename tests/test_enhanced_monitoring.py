@@ -523,6 +523,8 @@ class TestIntegration:
     @patch("nanopore_simulator.core.monitoring.HAS_PSUTIL", True)
     def test_enhanced_monitoring_with_psutil_mock(self):
         """Test enhanced monitoring with mocked psutil"""
+        import psutil as _psutil
+
         # Mock psutil process
         mock_process = MagicMock()
         mock_process.cpu_percent.return_value = 25.0
@@ -530,6 +532,9 @@ class TestIntegration:
         mock_process.memory_info.return_value = MagicMock(
             rss=1024 * 1024 * 100
         )  # 100MB
+        mock_process.children.return_value = []  # No child processes
+
+        total_mem = _psutil.virtual_memory().total
 
         with patch(
             "nanopore_simulator.core.monitoring.psutil.Process",
@@ -555,7 +560,87 @@ class TestIntegration:
                 # Should have resource metrics
                 assert metrics.resource_metrics is not None
                 assert metrics.resource_metrics.cpu_percent == 25.0
-                assert metrics.resource_metrics.memory_percent == 50.0
+                # memory_percent is now computed from RSS / system total
+                expected_mem_pct = (1024 * 1024 * 100 / total_mem) * 100
+                assert abs(metrics.resource_metrics.memory_percent - expected_mem_pct) < 0.1
 
             finally:
                 monitor.stop()
+
+
+class TestResourceMonitorChildProcesses:
+    """Test that ResourceMonitor aggregates child process metrics."""
+
+    @pytest.mark.skipif(not HAS_PSUTIL, reason="psutil not available")
+    def test_children_included_in_metrics(self):
+        """Verify that child process CPU/memory is included in metrics."""
+        import psutil
+        import subprocess
+        import sys
+
+        monitor = ResourceMonitor()
+
+        # Spawn a child process that consumes CPU
+        child = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(5)"],
+        )
+        try:
+            # Allow child to start
+            time.sleep(0.3)
+
+            proc = psutil.Process()
+            children = proc.children(recursive=True)
+            assert len(children) >= 1, "Expected at least one child process"
+
+            # Warm up cpu_percent counters (first call returns 0)
+            monitor.get_current_metrics()
+            time.sleep(0.1)
+
+            metrics = monitor.get_current_metrics()
+            # The child should contribute to memory_used_mb (its RSS > 0)
+            assert metrics.memory_used_mb > 0
+            # memory_percent should reflect total RSS / system RAM
+            assert metrics.memory_percent > 0
+        finally:
+            child.terminate()
+            child.wait()
+
+    @pytest.mark.skipif(not HAS_PSUTIL, reason="psutil not available")
+    def test_nosuchprocess_handled_gracefully(self):
+        """Children that exit between enumeration and metric collection
+        should not cause errors."""
+        import psutil
+
+        monitor = ResourceMonitor()
+
+        # Mock children() to return a process that will raise NoSuchProcess
+        dead_proc = MagicMock()
+        dead_proc.cpu_percent.side_effect = psutil.NoSuchProcess(pid=99999)
+        dead_proc.memory_info.side_effect = psutil.NoSuchProcess(pid=99999)
+        dead_proc.open_files.side_effect = psutil.NoSuchProcess(pid=99999)
+
+        with patch.object(monitor.process, "children", return_value=[dead_proc]):
+            metrics = monitor.get_current_metrics()
+
+        # Should still return valid metrics (from main process at minimum)
+        assert isinstance(metrics, ResourceMetrics)
+
+    @pytest.mark.skipif(not HAS_PSUTIL, reason="psutil not available")
+    def test_open_files_aggregated_across_children(self):
+        """open_files count should include children."""
+        import psutil
+
+        monitor = ResourceMonitor()
+
+        child_proc = MagicMock()
+        child_proc.cpu_percent.return_value = 10.0
+        mem_info = MagicMock()
+        mem_info.rss = 50 * 1024 * 1024  # 50 MB
+        child_proc.memory_info.return_value = mem_info
+        child_proc.open_files.return_value = [MagicMock()] * 3  # 3 open files
+
+        with patch.object(monitor.process, "children", return_value=[child_proc]):
+            metrics = monitor.get_current_metrics()
+
+        # open_files should include the child's 3 files plus main process files
+        assert metrics.open_files >= 3

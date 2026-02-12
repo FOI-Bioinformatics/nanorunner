@@ -206,6 +206,7 @@ def mock_system_resources():
     mock_process.memory_percent.return_value = 60.0
     mock_process.memory_info.return_value = MagicMock(rss=1024 * 1024 * 100)  # 100MB
     mock_process.open_files.return_value = []
+    mock_process.children.return_value = []  # No child processes
 
     with (
         patch("psutil.Process", return_value=mock_process),

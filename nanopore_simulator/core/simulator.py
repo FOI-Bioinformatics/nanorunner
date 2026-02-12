@@ -18,6 +18,8 @@ from .generators import (
     ReadGenerator,
     BuiltinGenerator,
     create_read_generator,
+    parse_fasta,
+    _init_worker_genomes,
 )
 from .timing import create_timing_model, TimingModel
 from .monitoring import ProgressMonitor, create_progress_monitor
@@ -34,16 +36,29 @@ def _generate_file_worker(kwargs: Dict[str, Any]) -> Dict[str, Any]:
     Accepts a serializable dict of parameters, creates a local generator,
     and writes one output file. Returns a dict with output_path and
     duration.
+
+    If the worker process was started with ``_init_worker_genomes``,
+    pre-parsed genome sequences are injected into the generator's cache
+    so that redundant FASTA parsing is avoided.
     """
     from .generators import (
         ReadGeneratorConfig,
         GenomeInput,
+        BuiltinGenerator,
         create_read_generator,
+        _WORKER_GENOME_CACHE,
     )
     from .fastq import write_fastq_reads
 
     gen_config = ReadGeneratorConfig(**kwargs["gen_config"])
     generator = create_read_generator(kwargs["backend"], gen_config)
+
+    # Pre-populate the BuiltinGenerator genome cache from the worker-level
+    # cache that was set by the pool initializer, avoiding redundant parsing.
+    if isinstance(generator, BuiltinGenerator) and _WORKER_GENOME_CACHE:
+        generator._genome_cache = {
+            Path(k): v for k, v in _WORKER_GENOME_CACHE.items()
+        }
 
     start = time.time()
 
@@ -179,24 +194,32 @@ class NanoporeSimulator:
         # Initialize executor for parallel processing (if enabled).
         # Generate mode uses ProcessPoolExecutor for CPU-bound work;
         # replay mode uses ThreadPoolExecutor for I/O-bound operations.
+        # The generate-mode pool is created after species resolution so
+        # that pre-parsed genome data can be passed to the worker
+        # initializer.
         self.executor: Optional[Union[ThreadPoolExecutor, ProcessPoolExecutor]] = None
-        if config.parallel_processing:
-            if config.operation == "generate":
-                self.executor = ProcessPoolExecutor(
-                    max_workers=config.worker_count
-                )
-                self.logger.info(
-                    f"Parallel processing enabled with {config.worker_count} "
-                    f"worker processes (generate mode)"
-                )
-            else:
-                self.executor = ThreadPoolExecutor(
-                    max_workers=config.worker_count
-                )
-                self.logger.info(
-                    f"Parallel processing enabled with {config.worker_count} "
-                    f"worker threads"
-                )
+        if config.parallel_processing and config.operation != "generate":
+            self.executor = ThreadPoolExecutor(
+                max_workers=config.worker_count
+            )
+            self.logger.info(
+                f"Parallel processing enabled with {config.worker_count} "
+                f"worker threads"
+            )
+
+        # Auto-scale batch_size for parallel generate mode.  Only
+        # override the default value (1); an explicit user setting is
+        # preserved.
+        if (
+            config.parallel_processing
+            and config.operation == "generate"
+            and config.batch_size == 1
+        ):
+            self.config.batch_size = config.worker_count
+            self.logger.info(
+                f"Auto-scaled batch_size to {config.worker_count} "
+                f"to match worker_count"
+            )
 
         # Initialize progress monitoring
         self.enable_monitoring = enable_monitoring
@@ -228,6 +251,28 @@ class NanoporeSimulator:
                     "without realistic error profiles. For reads with sequencing "
                     "errors, install badread (pip install badread)."
                 )
+
+        # Create ProcessPoolExecutor for generate mode after species
+        # resolution, so workers can be pre-loaded with genome data.
+        if config.parallel_processing and config.operation == "generate":
+            genome_data: Dict[str, str] = {}
+            for genome_path in (config.genome_inputs or []):
+                resolved = str(genome_path.resolve())
+                seqs = parse_fasta(genome_path)
+                genome_data[resolved] = "".join(
+                    seq for _, seq in seqs
+                ).upper()
+
+            self.executor = ProcessPoolExecutor(
+                max_workers=config.worker_count,
+                initializer=_init_worker_genomes,
+                initargs=(genome_data,),
+            )
+            self.logger.info(
+                f"Parallel processing enabled with {config.worker_count} "
+                f"worker processes (generate mode, "
+                f"{len(genome_data)} genomes pre-loaded)"
+            )
 
         # Interactive control flags
         self._simulation_paused = False
@@ -790,12 +835,38 @@ class NanoporeSimulator:
             )
 
     def _execute_simulation(self, file_manifest: List[Dict], structure: str) -> None:
-        """Execute the file simulation with timing and optional parallel processing"""
+        """Execute the file simulation with timing and optional parallel processing.
+
+        When parallel generate mode is active and the timing interval is
+        non-zero, a prefetch pipeline is used: the current batch is
+        submitted to worker processes, then the main thread sleeps for
+        the timing interval while workers generate reads concurrently.
+        This overlaps CPU-bound generation with timing delays and
+        improves throughput.
+        """
         total_files = len(file_manifest)
         total_batches = (
             total_files + self.config.batch_size - 1
         ) // self.config.batch_size
 
+        # Decide whether to use the prefetch pipeline: parallel generate
+        # mode with a process pool and non-zero interval.
+        use_prefetch = (
+            self.config.parallel_processing
+            and self.config.operation == "generate"
+            and isinstance(self.executor, ProcessPoolExecutor)
+        )
+
+        if use_prefetch:
+            self._execute_prefetch_loop(file_manifest, total_batches)
+        else:
+            self._execute_standard_loop(file_manifest, total_batches)
+
+    def _execute_standard_loop(
+        self, file_manifest: List[Dict], total_batches: int
+    ) -> None:
+        """Standard batch loop: process -> wait -> next batch."""
+        total_files = len(file_manifest)
         for i, batch_start in enumerate(range(0, total_files, self.config.batch_size)):
             # Check for shutdown signal
             if self.progress_monitor and self.progress_monitor.should_stop():
@@ -880,6 +951,133 @@ class NanoporeSimulator:
                 else:
                     time.sleep(actual_interval)
 
+    def _execute_prefetch_loop(
+        self, file_manifest: List[Dict], total_batches: int
+    ) -> None:
+        """Prefetch batch loop for parallel generate mode.
+
+        Submits each batch to the process pool, then sleeps for the
+        timing interval while workers generate reads concurrently.
+        Results are collected after the sleep completes (or immediately
+        if workers finish first).  This overlaps generation with timing
+        delays so workers stay busy.
+        """
+        total_files = len(file_manifest)
+        pending_futures: Optional[List[tuple]] = None
+        pending_batch_start: Optional[float] = None
+        pending_batch_len = 0
+        pending_batch_num = 0
+
+        for i, batch_start in enumerate(range(0, total_files, self.config.batch_size)):
+            # Check for shutdown signal
+            if self.progress_monitor and self.progress_monitor.should_stop():
+                self.logger.info(
+                    "Shutdown signal received, stopping simulation gracefully"
+                )
+                break
+
+            # Handle pause/resume
+            if self.progress_monitor and self.progress_monitor.is_paused():
+                self.logger.info("Simulation paused, waiting for resume...")
+                self.progress_monitor.wait_if_paused()
+                if self.progress_monitor.should_stop():
+                    break
+
+            # Collect results from the previously submitted batch (if any)
+            if pending_futures is not None:
+                try:
+                    self._collect_parallel_results(pending_futures)
+                except (PermissionError, OSError, MemoryError) as e:
+                    self.logger.error(
+                        f"Critical error in batch {pending_batch_num}: {e}"
+                    )
+                    if self.progress_monitor:
+                        self.progress_monitor.record_error(
+                            f"critical_error: {type(e).__name__}"
+                        )
+                    raise
+                except Exception as e:
+                    self.logger.error(f"Error in batch {pending_batch_num}: {e}")
+                    if self.progress_monitor:
+                        self.progress_monitor.record_error(
+                            f"batch_processing: {type(e).__name__}"
+                        )
+
+                batch_duration = time.time() - pending_batch_start
+                throughput = (
+                    pending_batch_len / batch_duration if batch_duration > 0 else 0
+                )
+                if self.progress_monitor:
+                    self.progress_monitor.end_batch(pending_batch_start)
+                self.logger.info(
+                    f"Batch {pending_batch_num} completed in "
+                    f"{batch_duration:.2f}s ({throughput:.1f} files/sec)"
+                )
+
+            batch_end = min(batch_start + self.config.batch_size, total_files)
+            batch = file_manifest[batch_start:batch_end]
+            batch_num = i + 1
+
+            self.logger.info(
+                f"Processing batch {batch_num}/{total_batches} ({len(batch)} files)"
+            )
+
+            batch_start_time = (
+                self.progress_monitor.start_batch()
+                if self.progress_monitor
+                else time.time()
+            )
+
+            # Submit batch to workers (non-blocking)
+            pending_futures = self._submit_batch_parallel(batch)
+            pending_batch_start = batch_start_time
+            pending_batch_len = len(batch)
+            pending_batch_num = batch_num
+
+            # Sleep while workers process (overlapped with generation)
+            if batch_end < total_files:
+                actual_interval = self._calculate_interval()
+                self.logger.info(
+                    f"Waiting {actual_interval:.2f} seconds before next batch..."
+                )
+                if self.progress_monitor:
+                    self.progress_monitor.add_wait_time(actual_interval)
+                if self.monitor_type == "enhanced" and self.progress_monitor:
+                    self._interruptible_sleep(actual_interval)
+                else:
+                    time.sleep(actual_interval)
+
+        # Collect results from the final batch
+        if pending_futures is not None:
+            try:
+                self._collect_parallel_results(pending_futures)
+            except (PermissionError, OSError, MemoryError) as e:
+                self.logger.error(
+                    f"Critical error in batch {pending_batch_num}: {e}"
+                )
+                if self.progress_monitor:
+                    self.progress_monitor.record_error(
+                        f"critical_error: {type(e).__name__}"
+                    )
+                raise
+            except Exception as e:
+                self.logger.error(f"Error in batch {pending_batch_num}: {e}")
+                if self.progress_monitor:
+                    self.progress_monitor.record_error(
+                        f"batch_processing: {type(e).__name__}"
+                    )
+
+            batch_duration = time.time() - pending_batch_start
+            throughput = (
+                pending_batch_len / batch_duration if batch_duration > 0 else 0
+            )
+            if self.progress_monitor:
+                self.progress_monitor.end_batch(pending_batch_start)
+            self.logger.info(
+                f"Batch {pending_batch_num} completed in "
+                f"{batch_duration:.2f}s ({throughput:.1f} files/sec)"
+            )
+
     def _calculate_interval(self) -> float:
         """Calculate the next interval using the configured timing model"""
         return self.timing_model.next_interval()
@@ -932,27 +1130,22 @@ class NanoporeSimulator:
         for file_info in batch:
             self._process_file(file_info)
 
-    def _process_batch_parallel(self, batch: List[Dict]) -> None:
-        """Process a batch of files in parallel.
+    def _submit_batch_parallel(self, batch: List[Dict]) -> List[tuple]:
+        """Submit a batch to the executor without waiting for results.
 
-        Uses ProcessPoolExecutor for generate mode (CPU-bound) and
-        ThreadPoolExecutor for replay mode (I/O-bound).
+        Returns a list of ``(future, file_info)`` tuples.  Used by the
+        prefetch pipeline in generate mode to overlap I/O with timing
+        delays.
         """
-        if not batch:
-            return
+        if not batch or self.executor is None:
+            return []
 
-        if self.executor is None:
-            self._process_batch_sequential(batch)
-            return
-
-        # For generate mode with ProcessPoolExecutor, serialize work into
-        # picklable dicts and use the module-level worker function.
         use_process_pool = (
             self.config.operation == "generate"
             and isinstance(self.executor, ProcessPoolExecutor)
         )
 
-        futures = []
+        futures: List[tuple] = []
         if use_process_pool:
             gen_config_dict = {
                 "num_reads": self.read_generator.config.num_reads,
@@ -1004,7 +1197,22 @@ class NanoporeSimulator:
                 future = self.executor.submit(self._process_file, file_info)
                 futures.append((future, file_info))
 
-        # Collect results as they complete for timely monitoring updates
+        return futures
+
+    def _collect_parallel_results(self, futures: List[tuple]) -> None:
+        """Wait for submitted futures and record results.
+
+        Raises the first exception encountered, after collecting all
+        completed futures for monitoring.
+        """
+        if not futures:
+            return
+
+        use_process_pool = (
+            self.config.operation == "generate"
+            and isinstance(self.executor, ProcessPoolExecutor)
+        )
+
         future_to_info = {f: fi for f, fi in futures}
         exceptions = []
         for future in as_completed(future_to_info):
@@ -1022,6 +1230,22 @@ class NanoporeSimulator:
 
         if exceptions:
             raise exceptions[0]
+
+    def _process_batch_parallel(self, batch: List[Dict]) -> None:
+        """Process a batch of files in parallel.
+
+        Uses ProcessPoolExecutor for generate mode (CPU-bound) and
+        ThreadPoolExecutor for replay mode (I/O-bound).
+        """
+        if not batch:
+            return
+
+        if self.executor is None:
+            self._process_batch_sequential(batch)
+            return
+
+        futures = self._submit_batch_parallel(batch)
+        self._collect_parallel_results(futures)
 
     def _process_file(self, file_info: Dict[str, Any]) -> None:
         """Process a single file (copy, link, or generate)"""

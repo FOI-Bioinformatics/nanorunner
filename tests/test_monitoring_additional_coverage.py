@@ -277,9 +277,12 @@ class TestResourceMonitorEdgeCases:
         mock_process.cpu_percent.return_value = 10.0
         mock_process.memory_info.return_value = MagicMock(rss=1024 * 1024)
         mock_process.memory_percent.return_value = 5.0
+        mock_process.children.return_value = []
         mock_process.open_files.side_effect = psutil.AccessDenied("No access")
         mock_psutil.Process.return_value = mock_process
         mock_psutil.AccessDenied = psutil.AccessDenied
+        mock_psutil.NoSuchProcess = psutil.NoSuchProcess
+        mock_psutil.virtual_memory.return_value = MagicMock(total=8 * 1024**3)
 
         with patch("nanopore_simulator.core.monitoring.os.getcwd", return_value="/tmp"):
             mock_psutil.disk_usage.return_value = MagicMock(total=100, used=50, free=50)
@@ -296,14 +299,19 @@ class TestResourceMonitorEdgeCases:
     @patch("nanopore_simulator.core.monitoring.psutil")
     def test_resource_monitor_disk_usage_error(self, mock_psutil):
         """Test when disk_usage() raises OSError"""
+        import psutil as _psutil
+
         mock_process = MagicMock()
         mock_process.cpu_percent.return_value = 10.0
         mock_process.memory_info.return_value = MagicMock(rss=1024 * 1024)
         mock_process.memory_percent.return_value = 5.0
+        mock_process.children.return_value = []
         mock_process.open_files.return_value = []
         mock_psutil.Process.return_value = mock_process
         mock_psutil.disk_usage.side_effect = OSError("Disk error")
-        mock_psutil.AccessDenied = Exception  # Dummy
+        mock_psutil.AccessDenied = _psutil.AccessDenied
+        mock_psutil.NoSuchProcess = _psutil.NoSuchProcess
+        mock_psutil.virtual_memory.return_value = MagicMock(total=8 * 1024**3)
 
         monitor = ResourceMonitor()
         monitor.process = mock_process

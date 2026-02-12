@@ -525,6 +525,270 @@ class TestParallelGenerateIntegration:
             assert len(stems) == 2, f"Expected 2 genome stems, got {stems}"
 
 
+class TestBatchSizeAutoScaling:
+    """Tests for auto-scaling batch_size in parallel generate mode."""
+
+    def test_batch_size_auto_scaled_to_worker_count(self, temp_dirs):
+        """Default batch_size=1 should be auto-scaled to worker_count."""
+        source_dir, target_dir = temp_dirs
+        fasta = source_dir / "genome.fa"
+        fasta.write_text(">chr1\nATCGATCGATCGATCGATCG\n")
+        config = SimulationConfig(
+            target_dir=target_dir,
+            operation="generate",
+            genome_inputs=[fasta],
+            read_count=10,
+            reads_per_file=10,
+            mean_read_length=10,
+            std_read_length=3,
+            min_read_length=5,
+            output_format="fastq",
+            interval=0.0,
+            timing_model="uniform",
+            generator_backend="builtin",
+            parallel_processing=True,
+            worker_count=4,
+            # batch_size defaults to 1
+        )
+        simulator = NanoporeSimulator(config, enable_monitoring=False)
+        assert simulator.config.batch_size == 4
+        simulator._cleanup()
+
+    def test_explicit_batch_size_preserved(self, temp_dirs):
+        """Explicit batch_size != 1 should not be overridden."""
+        source_dir, target_dir = temp_dirs
+        fasta = source_dir / "genome.fa"
+        fasta.write_text(">chr1\nATCGATCGATCGATCGATCG\n")
+        config = SimulationConfig(
+            target_dir=target_dir,
+            operation="generate",
+            genome_inputs=[fasta],
+            read_count=10,
+            reads_per_file=10,
+            mean_read_length=10,
+            std_read_length=3,
+            min_read_length=5,
+            output_format="fastq",
+            interval=0.0,
+            timing_model="uniform",
+            generator_backend="builtin",
+            parallel_processing=True,
+            worker_count=4,
+            batch_size=2,
+        )
+        simulator = NanoporeSimulator(config, enable_monitoring=False)
+        assert simulator.config.batch_size == 2
+        simulator._cleanup()
+
+    def test_replay_mode_not_auto_scaled(self, temp_dirs):
+        """Replay mode batch_size should not be auto-scaled."""
+        source_dir, target_dir = temp_dirs
+        config = SimulationConfig(
+            source_dir=source_dir,
+            target_dir=target_dir,
+            parallel_processing=True,
+            worker_count=4,
+        )
+        simulator = NanoporeSimulator(config, enable_monitoring=False)
+        assert simulator.config.batch_size == 1
+        simulator._cleanup()
+
+
+class TestGenomePreloading:
+    """Tests for genome pre-loading via ProcessPoolExecutor initializer."""
+
+    def test_worker_genome_cache_initialized(self, temp_dirs):
+        """ProcessPoolExecutor should use _init_worker_genomes initializer."""
+        source_dir, target_dir = temp_dirs
+        fasta = source_dir / "genome.fa"
+        fasta.write_text(">chr1\nATCGATCGATCGATCGATCG\n")
+        config = SimulationConfig(
+            target_dir=target_dir,
+            operation="generate",
+            genome_inputs=[fasta],
+            read_count=10,
+            reads_per_file=10,
+            mean_read_length=10,
+            std_read_length=3,
+            min_read_length=5,
+            output_format="fastq",
+            interval=0.0,
+            timing_model="uniform",
+            generator_backend="builtin",
+            parallel_processing=True,
+            worker_count=2,
+        )
+        simulator = NanoporeSimulator(config, enable_monitoring=False)
+        assert isinstance(simulator.executor, ProcessPoolExecutor)
+
+        # Verify the pool works correctly with pre-loaded genomes
+        simulator.run_simulation()
+        fastq_files = list(target_dir.rglob("*.fastq"))
+        assert len(fastq_files) >= 1
+        # Verify content is valid FASTQ
+        for fq in fastq_files:
+            lines = fq.read_text().strip().split("\n")
+            assert len(lines) % 4 == 0
+
+    def test_multiple_genomes_preloaded(self, temp_dirs):
+        """All genome files should be pre-parsed and passed to workers."""
+        source_dir, target_dir = temp_dirs
+        g1 = source_dir / "genome1.fa"
+        g1.write_text(">chr1\nATCGATCGATCGATCGATCG\n")
+        g2 = source_dir / "genome2.fa"
+        g2.write_text(">chrA\nGCTAGCTAGCTAGCTAGCTA\n")
+        config = SimulationConfig(
+            target_dir=target_dir,
+            operation="generate",
+            genome_inputs=[g1, g2],
+            read_count=20,
+            reads_per_file=10,
+            mean_read_length=10,
+            std_read_length=3,
+            min_read_length=5,
+            output_format="fastq",
+            interval=0.0,
+            timing_model="uniform",
+            generator_backend="builtin",
+            parallel_processing=True,
+            worker_count=2,
+        )
+        simulator = NanoporeSimulator(config, enable_monitoring=False)
+        simulator.run_simulation()
+
+        # Should produce files for both genomes
+        fastq_files = list(target_dir.rglob("*.fastq"))
+        assert len(fastq_files) >= 2
+
+        total_reads = 0
+        for fq in fastq_files:
+            lines = fq.read_text().strip().split("\n")
+            total_reads += len(lines) // 4
+        assert total_reads == 20
+
+
+class TestPrefetchPipeline:
+    """Tests for the prefetch pipeline (overlapping generation with timing)."""
+
+    def test_prefetch_used_for_parallel_generate(self, temp_dirs):
+        """Parallel generate mode should use the prefetch pipeline."""
+        source_dir, target_dir = temp_dirs
+        fasta = source_dir / "genome.fa"
+        fasta.write_text(">chr1\nATCGATCGATCGATCGATCGATCGATCGATCG\n")
+        config = SimulationConfig(
+            target_dir=target_dir,
+            operation="generate",
+            genome_inputs=[fasta],
+            read_count=20,
+            reads_per_file=5,
+            mean_read_length=15,
+            std_read_length=3,
+            min_read_length=5,
+            output_format="fastq",
+            interval=0.1,
+            timing_model="uniform",
+            generator_backend="builtin",
+            parallel_processing=True,
+            worker_count=2,
+        )
+        simulator = NanoporeSimulator(config, enable_monitoring=False)
+
+        start = time.time()
+        simulator.run_simulation()
+        elapsed = time.time() - start
+
+        fastq_files = list(target_dir.rglob("*.fastq"))
+        assert len(fastq_files) == 4  # 20 reads / 5 per file
+
+        total_reads = 0
+        for fq in fastq_files:
+            lines = fq.read_text().strip().split("\n")
+            assert len(lines) % 4 == 0
+            total_reads += len(lines) // 4
+        assert total_reads == 20
+
+    def test_standard_loop_for_sequential_generate(self, temp_dirs):
+        """Sequential generate mode should use the standard loop."""
+        source_dir, target_dir = temp_dirs
+        fasta = source_dir / "genome.fa"
+        fasta.write_text(">chr1\nATCGATCGATCGATCGATCGATCGATCGATCG\n")
+        config = SimulationConfig(
+            target_dir=target_dir,
+            operation="generate",
+            genome_inputs=[fasta],
+            read_count=10,
+            reads_per_file=5,
+            mean_read_length=15,
+            std_read_length=3,
+            min_read_length=5,
+            output_format="fastq",
+            interval=0.0,
+            timing_model="uniform",
+            generator_backend="builtin",
+            parallel_processing=False,
+        )
+        simulator = NanoporeSimulator(config, enable_monitoring=False)
+        simulator.run_simulation()
+
+        fastq_files = list(target_dir.rglob("*.fastq"))
+        assert len(fastq_files) == 2
+
+    def test_standard_loop_for_replay_mode(self, temp_dirs):
+        """Replay mode should always use the standard loop."""
+        source_dir, target_dir = temp_dirs
+        for i in range(4):
+            (source_dir / f"test_{i}.fastq").write_text(
+                f"@read{i}\nACGT\n+\nIIII\n"
+            )
+        config = SimulationConfig(
+            source_dir=source_dir,
+            target_dir=target_dir,
+            interval=0.0,
+            batch_size=2,
+            parallel_processing=True,
+            worker_count=2,
+            timing_model="uniform",
+        )
+        simulator = NanoporeSimulator(config, enable_monitoring=False)
+        simulator.run_simulation()
+
+        target_files = list(target_dir.glob("*.fastq"))
+        assert len(target_files) == 4
+
+    def test_prefetch_with_no_wait(self, temp_dirs):
+        """Prefetch with interval=0 (--no-wait) should still produce correct results."""
+        source_dir, target_dir = temp_dirs
+        fasta = source_dir / "genome.fa"
+        fasta.write_text(">chr1\nATCGATCGATCGATCGATCGATCGATCGATCG\n")
+        config = SimulationConfig(
+            target_dir=target_dir,
+            operation="generate",
+            genome_inputs=[fasta],
+            read_count=30,
+            reads_per_file=10,
+            mean_read_length=15,
+            std_read_length=3,
+            min_read_length=5,
+            output_format="fastq",
+            interval=0.0,
+            timing_model="uniform",
+            generator_backend="builtin",
+            parallel_processing=True,
+            worker_count=3,
+        )
+        simulator = NanoporeSimulator(config, enable_monitoring=False)
+        simulator.run_simulation()
+
+        fastq_files = list(target_dir.rglob("*.fastq"))
+        assert len(fastq_files) == 3  # 30 / 10
+
+        total_reads = 0
+        for fq in fastq_files:
+            lines = fq.read_text().strip().split("\n")
+            total_reads += len(lines) // 4
+        assert total_reads == 30
+
+
 @pytest.fixture
 def temp_dirs():
     """Create temporary directories for testing"""
