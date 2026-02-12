@@ -193,8 +193,22 @@ class TestBadreadGenerator:
             assert BadreadGenerator.is_available() is False
 
     def test_is_available_when_present(self):
+        mock_result = MagicMock(returncode=0)
         with patch("shutil.which", return_value="/usr/bin/badread"):
-            assert BadreadGenerator.is_available() is True
+            with patch("subprocess.run", return_value=mock_result):
+                assert BadreadGenerator.is_available() is True
+
+    def test_is_available_false_when_deps_broken(self):
+        """badread in PATH but fails to start (e.g. missing edlib)."""
+        mock_result = MagicMock(returncode=1)
+        with patch("shutil.which", return_value="/usr/bin/badread"):
+            with patch("subprocess.run", return_value=mock_result):
+                assert BadreadGenerator.is_available() is False
+
+    def test_is_available_false_on_timeout(self):
+        with patch("shutil.which", return_value="/usr/bin/badread"):
+            with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("badread", 10)):
+                assert BadreadGenerator.is_available() is False
 
 
 class TestNanoSimGenerator:
@@ -202,6 +216,19 @@ class TestNanoSimGenerator:
     def test_is_available_when_missing(self):
         with patch("shutil.which", return_value=None):
             assert NanoSimGenerator.is_available() is False
+
+    def test_is_available_when_present(self):
+        mock_result = MagicMock(returncode=0)
+        with patch("shutil.which", return_value="/usr/bin/nanosim"):
+            with patch("subprocess.run", return_value=mock_result):
+                assert NanoSimGenerator.is_available() is True
+
+    def test_is_available_false_when_deps_broken(self):
+        """nanosim in PATH but fails to start."""
+        mock_result = MagicMock(returncode=1)
+        with patch("shutil.which", return_value="/usr/bin/nanosim"):
+            with patch("subprocess.run", return_value=mock_result):
+                assert NanoSimGenerator.is_available() is False
 
 
 class TestFactory:

@@ -410,12 +410,24 @@ class BuiltinGenerator(ReadGenerator):
 class BadreadGenerator(ReadGenerator):
     """Read generator wrapping the badread simulate tool.
 
-    Requires badread to be installed and available in PATH.
+    Requires badread to be installed and available in PATH with all
+    its Python dependencies (including edlib).
     """
 
     @classmethod
     def is_available(cls) -> bool:
-        return shutil.which("badread") is not None
+        if shutil.which("badread") is None:
+            return False
+        # Verify badread can actually start (catches missing deps like edlib)
+        try:
+            result = subprocess.run(
+                ["badread", "--help"],
+                capture_output=True,
+                timeout=10,
+            )
+            return result.returncode == 0
+        except (subprocess.TimeoutExpired, OSError):
+            return False
 
     def generate_reads(
         self,
@@ -519,15 +531,29 @@ class BadreadGenerator(ReadGenerator):
 class NanoSimGenerator(ReadGenerator):
     """Read generator wrapping NanoSim.
 
-    Requires nanosim or simulator.py to be available in PATH.
+    Requires nanosim or simulator.py to be available in PATH with all
+    its Python dependencies.
     """
 
     @classmethod
     def is_available(cls) -> bool:
-        return (
-            shutil.which("nanosim") is not None
-            or shutil.which("simulator.py") is not None
-        )
+        cmd = None
+        if shutil.which("nanosim") is not None:
+            cmd = "nanosim"
+        elif shutil.which("simulator.py") is not None:
+            cmd = "simulator.py"
+        else:
+            return False
+        # Verify the tool can actually start
+        try:
+            result = subprocess.run(
+                [cmd, "--help"],
+                capture_output=True,
+                timeout=10,
+            )
+            return result.returncode == 0
+        except (subprocess.TimeoutExpired, OSError):
+            return False
 
     @classmethod
     def _get_command(cls) -> str:
