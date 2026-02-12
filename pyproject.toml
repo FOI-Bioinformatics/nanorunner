@@ -54,6 +54,7 @@ test = [
 ]
 enhanced = [
     "psutil>=5.8.0",  # For resource monitoring
+    "numpy>=1.24.0",  # For vectorized read generation
 ]
 
 [tool.setuptools]

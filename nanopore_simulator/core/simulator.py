@@ -5,7 +5,7 @@ import math
 import random
 import shutil
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import List, Dict, Union, Optional, Any
 
@@ -26,6 +26,59 @@ from .mocks import get_mock_community
 
 
 _FASTQ_EXTENSIONS = {".fastq", ".fq", ".fastq.gz", ".fq.gz"}
+
+
+def _generate_file_worker(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """Module-level worker for ProcessPoolExecutor generate tasks.
+
+    Accepts a serializable dict of parameters, creates a local generator,
+    and writes one output file. Returns a dict with output_path and
+    duration.
+    """
+    from .generators import (
+        ReadGeneratorConfig,
+        GenomeInput,
+        create_read_generator,
+    )
+    from .fastq import write_fastq_reads
+
+    gen_config = ReadGeneratorConfig(**kwargs["gen_config"])
+    generator = create_read_generator(kwargs["backend"], gen_config)
+
+    start = time.time()
+
+    if kwargs.get("mixed", False):
+        # Mixed-reads: generate from multiple genomes and shuffle
+        all_reads: list = []
+        for genome_dict, count in kwargs["genome_reads"]:
+            genome = GenomeInput(
+                fasta_path=Path(genome_dict["fasta_path"]),
+                barcode=genome_dict.get("barcode"),
+            )
+            reads = generator.generate_reads_in_memory(genome, count)
+            all_reads.extend(reads)
+        random.shuffle(all_reads)
+
+        output_dir = Path(kwargs["output_dir"])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        ext = kwargs["ext"]
+        file_index = kwargs["file_index"]
+        output_path = output_dir / f"reads_{file_index:04d}{ext}"
+        write_fastq_reads(all_reads, output_path)
+    else:
+        genome = GenomeInput(
+            fasta_path=Path(kwargs["fasta_path"]),
+            barcode=kwargs.get("barcode"),
+        )
+        output_dir = Path(kwargs["output_dir"])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = generator.generate_reads(
+            genome, output_dir, kwargs["file_index"],
+            num_reads=kwargs.get("num_reads"),
+        )
+
+    duration = time.time() - start
+    return {"output_path": str(output_path), "duration": duration}
 
 
 def _is_fastq_file(path: Path) -> bool:
@@ -123,13 +176,27 @@ class NanoporeSimulator:
         timing_config = config.get_timing_model_config()
         self.timing_model = create_timing_model(**timing_config)
 
-        # Initialize thread pool for parallel processing (if enabled)
-        self.executor: Optional[ThreadPoolExecutor] = None
+        # Initialize executor for parallel processing (if enabled).
+        # Generate mode uses ProcessPoolExecutor for CPU-bound work;
+        # replay mode uses ThreadPoolExecutor for I/O-bound operations.
+        self.executor: Optional[Union[ThreadPoolExecutor, ProcessPoolExecutor]] = None
         if config.parallel_processing:
-            self.executor = ThreadPoolExecutor(max_workers=config.worker_count)
-            self.logger.info(
-                f"Parallel processing enabled with {config.worker_count} workers"
-            )
+            if config.operation == "generate":
+                self.executor = ProcessPoolExecutor(
+                    max_workers=config.worker_count
+                )
+                self.logger.info(
+                    f"Parallel processing enabled with {config.worker_count} "
+                    f"worker processes (generate mode)"
+                )
+            else:
+                self.executor = ThreadPoolExecutor(
+                    max_workers=config.worker_count
+                )
+                self.logger.info(
+                    f"Parallel processing enabled with {config.worker_count} "
+                    f"worker threads"
+                )
 
         # Initialize progress monitoring
         self.enable_monitoring = enable_monitoring
@@ -347,7 +414,7 @@ class NanoporeSimulator:
     def _cleanup(self) -> None:
         """Clean up resources used by the simulator"""
         if self.executor is not None:
-            self.logger.info("Shutting down thread pool executor")
+            self.logger.info("Shutting down executor pool")
             self.executor.shutdown(wait=True)
             self.executor = None
 
@@ -866,31 +933,92 @@ class NanoporeSimulator:
             self._process_file(file_info)
 
     def _process_batch_parallel(self, batch: List[Dict]) -> None:
-        """Process a batch of files in parallel using ThreadPoolExecutor"""
+        """Process a batch of files in parallel.
+
+        Uses ProcessPoolExecutor for generate mode (CPU-bound) and
+        ThreadPoolExecutor for replay mode (I/O-bound).
+        """
         if not batch:
             return
 
-        # Submit all files in the batch for parallel processing
         if self.executor is None:
-            # Fallback to sequential processing if no executor
             self._process_batch_sequential(batch)
             return
 
+        # For generate mode with ProcessPoolExecutor, serialize work into
+        # picklable dicts and use the module-level worker function.
+        use_process_pool = (
+            self.config.operation == "generate"
+            and isinstance(self.executor, ProcessPoolExecutor)
+        )
+
         futures = []
-        for file_info in batch:
-            future = self.executor.submit(self._process_file, file_info)
-            futures.append(future)
+        if use_process_pool:
+            gen_config_dict = {
+                "num_reads": self.read_generator.config.num_reads,
+                "mean_read_length": self.read_generator.config.mean_read_length,
+                "std_read_length": self.read_generator.config.std_read_length,
+                "min_read_length": self.read_generator.config.min_read_length,
+                "mean_quality": self.read_generator.config.mean_quality,
+                "std_quality": self.read_generator.config.std_quality,
+                "reads_per_file": self.read_generator.config.reads_per_file,
+                "output_format": self.read_generator.config.output_format,
+            }
+            for file_info in batch:
+                kwargs = {
+                    "gen_config": gen_config_dict,
+                    "backend": self.config.generator_backend,
+                }
+                if file_info.get("mixed", False):
+                    kwargs["mixed"] = True
+                    kwargs["genome_reads"] = [
+                        (
+                            {
+                                "fasta_path": str(g.fasta_path),
+                                "barcode": g.barcode,
+                            },
+                            n,
+                        )
+                        for g, n in file_info["genome_reads"]
+                    ]
+                    kwargs["output_dir"] = str(file_info["target"])
+                    kwargs["file_index"] = file_info["file_index"]
+                    ext = (
+                        ".fastq.gz"
+                        if self.config.output_format == "fastq.gz"
+                        else ".fastq"
+                    )
+                    kwargs["ext"] = ext
+                else:
+                    genome = file_info["genome"]
+                    kwargs["fasta_path"] = str(genome.fasta_path)
+                    kwargs["barcode"] = genome.barcode
+                    kwargs["output_dir"] = str(file_info["target"])
+                    kwargs["file_index"] = file_info["file_index"]
+                    kwargs["num_reads"] = file_info.get("num_reads")
+
+                future = self.executor.submit(_generate_file_worker, kwargs)
+                futures.append((future, file_info))
+        else:
+            for file_info in batch:
+                future = self.executor.submit(self._process_file, file_info)
+                futures.append((future, file_info))
 
         # Wait for all files to complete and handle any exceptions
         exceptions = []
-        for future in as_completed(futures):
+        for future, file_info in futures:
             try:
-                future.result()  # This will raise any exception that occurred
+                result = future.result()
+                # For process pool results, update monitoring from main process
+                if use_process_pool and self.progress_monitor:
+                    output_path = Path(result["output_path"])
+                    self.progress_monitor.record_file_processed(
+                        output_path, result["duration"]
+                    )
             except Exception as e:
                 exceptions.append(e)
                 self.logger.error(f"Error processing file: {e}")
 
-        # If any exceptions occurred, raise the first one
         if exceptions:
             raise exceptions[0]
 

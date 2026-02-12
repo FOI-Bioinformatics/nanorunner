@@ -84,9 +84,15 @@ def write_fastq_reads(
         reads: List of 4-tuples representing FASTQ records.
         path: Output file path.
     """
-    open_fn = gzip.open if str(path).endswith(".gz") else open
-    mode = "wt" if str(path).endswith(".gz") else "w"
+    if str(path).endswith(".gz"):
+        fh = gzip.open(path, "wt", compresslevel=1)
+    else:
+        fh = open(path, "w")
 
-    with open_fn(path, mode) as fh:
-        for header, seq, sep, qual in reads:
-            fh.write(f"{header}\n{seq}\n{sep}\n{qual}\n")
+    with fh:
+        fh.write(
+            "".join(
+                f"{header}\n{seq}\n{sep}\n{qual}\n"
+                for header, seq, sep, qual in reads
+            )
+        )

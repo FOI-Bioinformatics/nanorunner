@@ -387,10 +387,8 @@ class TestAbundanceWeightedGeneration:
 
         # Each file should contain reads from both genomes
         for fq in fq_files:
-            content = fq.read_text()
-            headers = [
-                line for line in content.strip().split("\n") if line.startswith("@")
-            ]
+            lines = fq.read_text().strip().split("\n")
+            headers = [lines[i] for i in range(0, len(lines), 4)]
             stems = {h.split("_read_")[0].lstrip("@") for h in headers}
             assert len(stems) == 2, (
                 f"Expected reads from 2 genomes in {fq.name}, "
@@ -401,10 +399,8 @@ class TestAbundanceWeightedGeneration:
         all_genome1 = 0
         all_genome2 = 0
         for fq in fq_files:
-            content = fq.read_text()
-            headers = [
-                line for line in content.strip().split("\n") if line.startswith("@")
-            ]
+            lines = fq.read_text().strip().split("\n")
+            headers = [lines[i] for i in range(0, len(lines), 4)]
             for h in headers:
                 stem = h.split("_read_")[0].lstrip("@")
                 if stem == "genome1":

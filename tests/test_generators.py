@@ -275,6 +275,71 @@ class TestBuiltinGeneratorWarning:
         assert any("error-free" in msg.lower() for msg in caplog.messages)
 
 
+class TestGenomeCache:
+
+    def test_genome_cache_avoids_reparse(self, simple_fasta, default_config):
+        """Cached genome should return same sequence without re-parsing."""
+        gen = BuiltinGenerator(default_config)
+        genome = GenomeInput(fasta_path=simple_fasta)
+
+        seq1 = gen._get_genome_sequence(genome)
+        seq2 = gen._get_genome_sequence(genome)
+        assert seq1 is seq2  # Same object from cache
+
+    def test_genome_cache_resolves_symlinks(self, simple_fasta, tmp_path, default_config):
+        """Cache should identify symlinks to the same file."""
+        link = tmp_path / "link.fa"
+        link.symlink_to(simple_fasta)
+
+        gen = BuiltinGenerator(default_config)
+        g1 = GenomeInput(fasta_path=simple_fasta)
+        g2 = GenomeInput(fasta_path=link)
+
+        seq1 = gen._get_genome_sequence(g1)
+        seq2 = gen._get_genome_sequence(g2)
+        assert seq1 is seq2
+
+
+class TestReverseComplement:
+
+    def test_basic_complement(self):
+        """Verify reverse complement with known input."""
+        config = ReadGeneratorConfig()
+        assert BuiltinGenerator._reverse_complement("ATCG") == "CGAT"
+
+    def test_handles_lowercase(self):
+        """Translation table should handle lowercase bases."""
+        assert BuiltinGenerator._reverse_complement("atcg") == "cgat"
+
+    def test_handles_n(self):
+        """N bases should complement to N."""
+        assert BuiltinGenerator._reverse_complement("ANA") == "TNT"
+
+
+class TestQualityDistribution:
+
+    def test_quality_values_in_phred_range(self, simple_fasta, tmp_path):
+        """All quality characters should be in Phred+33 range [33, 73]."""
+        config = ReadGeneratorConfig(
+            reads_per_file=50,
+            mean_read_length=15,
+            std_read_length=2,
+            min_read_length=5,
+            mean_quality=20.0,
+            std_quality=5.0,
+            output_format="fastq",
+        )
+        gen = BuiltinGenerator(config)
+        genome = GenomeInput(fasta_path=simple_fasta)
+        output = gen.generate_reads(genome, tmp_path / "out", 0)
+
+        lines = output.read_text().strip().split("\n")
+        for i in range(3, len(lines), 4):
+            qual_line = lines[i]
+            for ch in qual_line:
+                assert 33 <= ord(ch) <= 73, f"Quality char {ch!r} out of range"
+
+
 class TestQualityDefaults:
 
     def test_config_default_mean_quality(self):

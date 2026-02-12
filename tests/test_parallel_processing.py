@@ -5,7 +5,7 @@ import tempfile
 import time
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 
 from nanopore_simulator.core.config import SimulationConfig
 from nanopore_simulator.core.simulator import NanoporeSimulator
@@ -63,7 +63,7 @@ class TestSimulatorParallelInitialization:
         assert simulator.config.parallel_processing is False
 
     def test_parallel_processing_initialization(self, temp_dirs):
-        """Test simulator initialization with parallel processing"""
+        """Test simulator initialization with parallel processing (replay mode)"""
         source_dir, target_dir = temp_dirs
         config = SimulationConfig(
             source_dir, target_dir, parallel_processing=True, worker_count=2
@@ -76,6 +76,34 @@ class TestSimulatorParallelInitialization:
         assert simulator.config.parallel_processing is True
 
         # Clean up
+        simulator._cleanup()
+
+    def test_parallel_generate_uses_process_pool(self, temp_dirs):
+        """Test that generate mode uses ProcessPoolExecutor"""
+        source_dir, target_dir = temp_dirs
+        fasta = source_dir / "genome.fa"
+        fasta.write_text(">chr1\nATCGATCGATCGATCGATCG\n")
+        config = SimulationConfig(
+            target_dir=target_dir,
+            operation="generate",
+            genome_inputs=[fasta],
+            read_count=10,
+            reads_per_file=10,
+            mean_read_length=10,
+            std_read_length=3,
+            min_read_length=5,
+            output_format="fastq",
+            interval=0.0,
+            timing_model="uniform",
+            generator_backend="builtin",
+            parallel_processing=True,
+            worker_count=2,
+        )
+        simulator = NanoporeSimulator(config, enable_monitoring=False)
+
+        assert simulator.executor is not None
+        assert isinstance(simulator.executor, ProcessPoolExecutor)
+
         simulator._cleanup()
 
     def test_cleanup_closes_executor(self, temp_dirs):

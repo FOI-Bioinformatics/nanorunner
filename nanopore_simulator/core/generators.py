@@ -12,7 +12,27 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+try:
+    import numpy as np
+
+    _HAS_NUMPY = True
+except ImportError:  # pragma: no cover
+    _HAS_NUMPY = False
+
 logger = logging.getLogger(__name__)
+
+
+def _generate_quality_string_numpy(
+    rng: "np.random.Generator", mean: float, std: float, length: int
+) -> str:
+    """Generate a Phred+33 quality string using numpy vectorized operations.
+
+    This is a shared helper used by generators that need synthetic quality
+    scores when numpy is available.
+    """
+    raw = rng.normal(mean, std, length) if std > 0 else np.full(length, mean)
+    clipped = np.clip(raw, 0, 40).astype(np.int8)
+    return (clipped + 33).tobytes().decode("ascii")
 
 
 @dataclass
@@ -74,14 +94,16 @@ def parse_fasta(fasta_path: Path) -> List[tuple]:
                 continue
             if line.startswith(">"):
                 if current_header is not None:
-                    sequences.append((current_header, "".join(current_seq)))
+                    sequences.append(
+                        (current_header, "".join(current_seq).upper())
+                    )
                 current_header = line[1:].split()[0]
                 current_seq = []
             else:
-                current_seq.append(line.upper())
+                current_seq.append(line)
 
     if current_header is not None:
-        sequences.append((current_header, "".join(current_seq)))
+        sequences.append((current_header, "".join(current_seq).upper()))
 
     return sequences
 
@@ -174,9 +196,38 @@ class BuiltinGenerator(ReadGenerator):
     backends (install separately).
     """
 
+    def __init__(self, config: ReadGeneratorConfig):
+        super().__init__(config)
+        self._genome_cache: Dict[Path, str] = {}
+        self._np_rng: Optional["np.random.Generator"] = None
+        if _HAS_NUMPY:
+            self._np_rng = np.random.default_rng()
+
     @classmethod
     def is_available(cls) -> bool:
         return True
+
+    def _get_genome_sequence(self, genome: GenomeInput) -> str:
+        """Return the concatenated genome sequence, caching by resolved path.
+
+        Raises:
+            ValueError: If the FASTA file contains no sequences or the
+                concatenated sequence is empty.
+        """
+        key = genome.fasta_path.resolve()
+        if key in self._genome_cache:
+            return self._genome_cache[key]
+
+        sequences = parse_fasta(genome.fasta_path)
+        if not sequences:
+            raise ValueError(f"No sequences found in {genome.fasta_path}")
+
+        full_seq = "".join(seq for _, seq in sequences)
+        if len(full_seq) == 0:
+            raise ValueError(f"Empty genome sequence in {genome.fasta_path}")
+
+        self._genome_cache[key] = full_seq
+        return full_seq
 
     def generate_reads(
         self,
@@ -185,14 +236,7 @@ class BuiltinGenerator(ReadGenerator):
         file_index: int,
         num_reads: Optional[int] = None,
     ) -> Path:
-        sequences = parse_fasta(genome.fasta_path)
-        if not sequences:
-            raise ValueError(f"No sequences found in {genome.fasta_path}")
-
-        # Concatenate all sequences for sampling
-        full_seq = "".join(seq for _, seq in sequences)
-        if len(full_seq) == 0:
-            raise ValueError(f"Empty genome sequence in {genome.fasta_path}")
+        full_seq = self._get_genome_sequence(genome)
 
         output_dir.mkdir(parents=True, exist_ok=True)
         filename = self._output_filename(genome, file_index)
@@ -210,13 +254,7 @@ class BuiltinGenerator(ReadGenerator):
         num_reads: int,
     ) -> List[Tuple[str, str, str, str]]:
         """Return reads as FASTQ 4-tuples without writing to disk."""
-        sequences = parse_fasta(genome.fasta_path)
-        if not sequences:
-            raise ValueError(f"No sequences found in {genome.fasta_path}")
-
-        full_seq = "".join(seq for _, seq in sequences)
-        if len(full_seq) == 0:
-            raise ValueError(f"Empty genome sequence in {genome.fasta_path}")
+        full_seq = self._get_genome_sequence(genome)
 
         raw_reads = self._sample_reads(full_seq, genome, num_reads)
         return [
@@ -230,9 +268,10 @@ class BuiltinGenerator(ReadGenerator):
         """Sample reads from the genome sequence.
 
         Returns list of (read_id, sequence, quality_string) tuples.
+        Uses numpy for batch-generating random values when available.
         """
-        reads = []
         genome_len = len(genome_seq)
+        stem = genome.fasta_path.stem
 
         # Log-normal parameters derived from mean and std
         mean_len = self.config.mean_read_length
@@ -245,8 +284,14 @@ class BuiltinGenerator(ReadGenerator):
             mu = math.log(mean_len)
             sigma = 0.0
 
+        if self._np_rng is not None:
+            return self._sample_reads_numpy(
+                genome_seq, genome_len, stem, num_reads, mu, sigma
+            )
+
+        # Stdlib fallback
+        reads = []
         for i in range(num_reads):
-            # Sample read length from log-normal distribution
             if sigma > 0:
                 read_len = int(random.lognormvariate(mu, sigma))
             else:
@@ -254,32 +299,76 @@ class BuiltinGenerator(ReadGenerator):
             read_len = max(self.config.min_read_length, read_len)
             read_len = min(read_len, genome_len)
 
-            # Sample start position
             max_start = max(0, genome_len - read_len)
             start = random.randint(0, max_start) if max_start > 0 else 0
             seq = genome_seq[start : start + read_len]
 
-            # Randomly reverse complement ~50% of reads
             if random.random() < 0.5:
                 seq = self._reverse_complement(seq)
 
-            # Generate quality scores
             quals = self._generate_quality_string(len(seq))
-
-            stem = genome.fasta_path.stem
             read_id = f"{stem}_read_{i}"
             reads.append((read_id, seq, quals))
 
         return reads
 
+    def _sample_reads_numpy(
+        self,
+        genome_seq: str,
+        genome_len: int,
+        stem: str,
+        num_reads: int,
+        mu: float,
+        sigma: float,
+    ) -> List[tuple]:
+        """Vectorized read sampling using numpy for batch random generation."""
+        rng = self._np_rng
+        min_len = self.config.min_read_length
+        mean_q = self.config.mean_quality
+        std_q = self.config.std_quality
+
+        # Batch-generate read lengths
+        if sigma > 0:
+            raw_lengths = rng.lognormal(mu, sigma, num_reads)
+            lengths = np.clip(raw_lengths.astype(int), min_len, genome_len)
+        else:
+            lengths = np.full(num_reads, min(self.config.mean_read_length, genome_len))
+
+        # Batch-generate RC decisions
+        rc_flags = rng.random(num_reads) < 0.5
+
+        reads = []
+        for i in range(num_reads):
+            read_len = int(lengths[i])
+            max_start = max(0, genome_len - read_len)
+            start = int(rng.integers(0, max_start + 1)) if max_start > 0 else 0
+            seq = genome_seq[start : start + read_len]
+
+            if rc_flags[i]:
+                seq = self._reverse_complement(seq)
+
+            quals = _generate_quality_string_numpy(rng, mean_q, std_q, len(seq))
+            read_id = f"{stem}_read_{i}"
+            reads.append((read_id, seq, quals))
+
+        return reads
+
+    _COMP_TABLE = str.maketrans("ACGTNacgtn", "TGCANtgcan")
+
     @staticmethod
     def _reverse_complement(seq: str) -> str:
         """Return the reverse complement of a DNA sequence."""
-        complement = {"A": "T", "T": "A", "G": "C", "C": "G", "N": "N"}
-        return "".join(complement.get(base, "N") for base in reversed(seq))
+        return seq.translate(BuiltinGenerator._COMP_TABLE)[::-1]
 
     def _generate_quality_string(self, length: int) -> str:
         """Generate a Phred+33 quality string."""
+        if self._np_rng is not None:
+            return _generate_quality_string_numpy(
+                self._np_rng,
+                self.config.mean_quality,
+                self.config.std_quality,
+                length,
+            )
         quals = []
         for _ in range(length):
             q = random.gauss(self.config.mean_quality, self.config.std_quality)
@@ -289,10 +378,17 @@ class BuiltinGenerator(ReadGenerator):
 
     def _write_fastq(self, reads: List[tuple], output_path: Path) -> None:
         """Write reads to a FASTQ file (plain or gzipped)."""
-        open_fn = gzip.open if output_path.suffix == ".gz" else open
-        with open_fn(output_path, "wt") as f:
-            for read_id, seq, quals in reads:
-                f.write(f"@{read_id}\n{seq}\n+\n{quals}\n")
+        if output_path.suffix == ".gz":
+            f = gzip.open(output_path, "wt", compresslevel=1)
+        else:
+            f = open(output_path, "w")
+        with f:
+            f.write(
+                "".join(
+                    f"@{read_id}\n{seq}\n+\n{quals}\n"
+                    for read_id, seq, quals in reads
+                )
+            )
 
 
 class BadreadGenerator(ReadGenerator):
@@ -338,12 +434,50 @@ class BadreadGenerator(ReadGenerator):
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
         if output_path.suffix == ".gz":
-            with gzip.open(output_path, "wt") as f:
+            with gzip.open(output_path, "wt", compresslevel=1) as f:
                 f.write(result.stdout)
         else:
             output_path.write_text(result.stdout)
 
         return output_path
+
+    def generate_reads_in_memory(
+        self,
+        genome: GenomeInput,
+        num_reads: int,
+    ) -> List[Tuple[str, str, str, str]]:
+        """Parse badread stdout directly into 4-tuples without temp files."""
+        actual_reads = num_reads
+        total_bases = actual_reads * self.config.mean_read_length
+
+        cmd = [
+            "badread",
+            "simulate",
+            "--reference",
+            str(genome.fasta_path),
+            "--quantity",
+            str(total_bases),
+            "--length",
+            f"{self.config.mean_read_length},{self.config.std_read_length}",
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+        reads: List[Tuple[str, str, str, str]] = []
+        lines = result.stdout.split("\n")
+        i = 0
+        while i + 3 < len(lines):
+            header = lines[i]
+            if not header.startswith("@"):
+                i += 1
+                continue
+            seq = lines[i + 1]
+            sep = lines[i + 2]
+            qual = lines[i + 3]
+            reads.append((header, seq, sep, qual))
+            i += 4
+
+        return reads
 
 
 class NanoSimGenerator(ReadGenerator):
@@ -408,27 +542,40 @@ class NanoSimGenerator(ReadGenerator):
                 fasta_file.unlink()
 
         # Convert to FASTQ with synthetic quality scores
-        open_fn = gzip.open if output_path.suffix == ".gz" else open
-        with open_fn(output_path, "wt") as f:
+        if _HAS_NUMPY:
+            _ns_rng = np.random.default_rng()
+        if output_path.suffix == ".gz":
+            fh = gzip.open(output_path, "wt", compresslevel=1)
+        else:
+            fh = open(output_path, "w")
+        with fh as f:
             for header, seq in all_seqs:
-                qual = "".join(
-                    chr(
-                        int(
-                            max(
-                                0,
-                                min(
-                                    40,
-                                    random.gauss(
-                                        self.config.mean_quality,
-                                        self.config.std_quality,
-                                    ),
-                                ),
-                            )
-                        )
-                        + 33
+                if _HAS_NUMPY:
+                    qual = _generate_quality_string_numpy(
+                        _ns_rng,
+                        self.config.mean_quality,
+                        self.config.std_quality,
+                        len(seq),
                     )
-                    for _ in range(len(seq))
-                )
+                else:
+                    qual = "".join(
+                        chr(
+                            int(
+                                max(
+                                    0,
+                                    min(
+                                        40,
+                                        random.gauss(
+                                            self.config.mean_quality,
+                                            self.config.std_quality,
+                                        ),
+                                    ),
+                                )
+                            )
+                            + 33
+                        )
+                        for _ in range(len(seq))
+                    )
                 f.write(f"@{header}\n{seq}\n+\n{qual}\n")
 
         return output_path
