@@ -22,6 +22,9 @@ nanorunner --version
 
 nanorunner --help
 # Shows all available subcommands
+
+nanorunner check-deps
+# Shows status of all dependencies with install hints for missing ones
 ```
 
 ---
@@ -488,7 +491,8 @@ nanorunner generate --mock zymo_d6300 -t /target
 # Replay with pipeline validation
 nanorunner replay -s /source -t /target --pipeline nanometa
 
-# List options
+# List options and check dependencies
+nanorunner check-deps
 nanorunner list-profiles
 nanorunner list-adapters
 nanorunner list-generators

@@ -71,6 +71,70 @@ pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git
 
 ---
 
+## Missing Dependencies
+
+### Check All Dependencies
+
+Before investigating specific issues, run the dependency checker:
+
+```bash
+nanorunner check-deps
+```
+
+This shows the status of all required and optional dependencies with install instructions.
+
+### Badread Not Working
+
+**Symptom**: `badread exited with status 1` or `ModuleNotFoundError: No module named 'edlib'`
+
+**Explanation**: Badread may be installed but missing a Python dependency (e.g., edlib). NanoRunner verifies that backends can actually start, not just that their binary exists on PATH.
+
+**Solution**:
+```bash
+# Check dependency status
+nanorunner check-deps
+
+# Reinstall badread (includes all dependencies)
+conda install -c conda-forge -c bioconda badread
+```
+
+### NCBI Datasets CLI Not Found
+
+**Symptom**: `datasets CLI is required` when using `--species`, `--mock`, or `--taxid`
+
+**Solution**:
+```bash
+# Install NCBI datasets CLI
+conda install -c conda-forge ncbi-datasets-cli
+
+# Verify
+datasets --version
+```
+
+### NanoSim Not Working
+
+**Symptom**: `nanosim exited with status 1` or backend unavailable
+
+**Solution**:
+```bash
+# Install NanoSim
+conda install -c conda-forge -c bioconda nanosim
+
+# Verify
+nanorunner check-deps
+```
+
+### NumPy Not Installed
+
+**Symptom**: Slower read generation performance (falls back to pure Python)
+
+**Solution**:
+```bash
+conda install -c conda-forge numpy
+```
+
+---
+
 ## Runtime Issues
 
 ### Permission Denied on Target Directory
@@ -175,13 +239,16 @@ nanorunner replay -s /source -t /target --profile high_throughput
 **Solution**:
 ```bash
 # Install psutil
-pip install psutil
+conda install -c conda-forge psutil
 
 # Or install with enhanced extras
 pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@main"
 
 # Verify psutil
 python -c "import psutil; print('OK')"
+
+# Or check all dependencies at once
+nanorunner check-deps
 ```
 
 ### Progress Bar Not Displaying

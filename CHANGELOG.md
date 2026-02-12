@@ -7,7 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Dependency Checking**: New `nanorunner check-deps` command that reports the status
+  of all required and optional dependencies with conda install instructions.
+- **Pre-flight Validation**: Automatic validation before long-running operations
+  (`generate`, `download`) catches missing tools (badread, nanosim, datasets CLI)
+  before work begins, with actionable error messages.
+- **Subprocess Error Wrapping**: External tool failures (badread, nanosim) now produce
+  clear error messages including exit codes, stderr output, and install hints instead
+  of bare tracebacks.
+- **Centralized Install Hints**: New `deps.py` module provides a single source of truth
+  for dependency install instructions, replacing scattered hardcoded strings.
+- **Robust Backend Detection**: `is_available()` for badread and nanosim now verifies
+  tools can actually start (catches broken installs where the binary exists but
+  dependencies like edlib are missing).
+
 ### Changed
+- **Install Instructions**: Standardized all install hints to use conda/bioconda
+  channels instead of pip (e.g., `conda install -c conda-forge -c bioconda badread`).
 - **Breaking: Pipeline Adapters**: Removed `miniknife` adapter (fictional pipeline
   with no published tool). Renamed `nanometanf` adapter to `nanometa` to align with
   the published Nanometa Live tool. Both built-in adapters (`nanometa`, `kraken`) are

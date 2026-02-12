@@ -6,7 +6,7 @@ This document provides a comprehensive guide to NanoRunner's test suite, includi
 
 NanoRunner has a comprehensive test suite designed to validate both individual components and complete workflows:
 
-- **Total Tests**: 730 tests across 37 test files
+- **Total Tests**: 902 tests across 40 test files
 - **Runtime**: ~45 seconds for non-slow suite
 - **Coverage**: 97% on core components
 
@@ -28,6 +28,7 @@ Test individual components in isolation with fast execution (<1 second per test)
 | `test_profiles.py` | Configuration profile system validation |
 | `test_mocks.py` | Mock community definitions, aliases, organism validation |
 | `test_species.py` | Species name resolution (GTDB/NCBI) |
+| `test_deps.py` | Dependency checking, install hints, pre-flight validation |
 
 ### Integration Tests
 
@@ -196,6 +197,7 @@ tests/
 ├── test_integration.py              # End-to-end tests
 ├── test_timing_integration.py       # Timing integration tests
 ├── test_edge_cases.py               # Edge case tests
+├── test_deps.py                     # Dependency checking and pre-flight
 ├── test_performance.py              # Performance benchmarks
 └── ...                              # Additional coverage files
 ```

@@ -69,6 +69,7 @@ pip install -e .[enhanced,dev]
 ```bash
 nanorunner --version  # Should output: nanorunner 2.0.2
 nanorunner --help     # Display all available subcommands
+nanorunner check-deps       # Check all dependencies and show install hints
 nanorunner list-profiles    # Show built-in configuration profiles
 nanorunner list-generators  # Show available read generation backends
 nanorunner list-mocks       # Show available mock communities
@@ -391,6 +392,20 @@ Built-in adapters provide validation for multiple bioinformatics workflows:
 - **kraken**: Kraken2/KrakenUniq taxonomic classification pipeline
 - **Generic**: Customizable adapter for arbitrary pipeline requirements
 
+## Dependency Management
+
+NanoRunner's core functionality (replay mode, built-in read generation) has no external dependencies beyond the Python standard library. Optional tools extend its capabilities:
+
+| Dependency | Purpose | Install |
+|-----------|---------|---------|
+| psutil | Enhanced resource monitoring | `conda install -c conda-forge psutil` |
+| numpy | Vectorized read generation | `conda install -c conda-forge numpy` |
+| badread | Nanopore read simulation with error models | `conda install -c conda-forge -c bioconda badread` |
+| nanosim | Statistical read simulation | `conda install -c conda-forge -c bioconda nanosim` |
+| datasets | NCBI genome downloads (`--species`, `--mock`) | `conda install -c conda-forge ncbi-datasets-cli` |
+
+Use `nanorunner check-deps` to see the status of all dependencies and install instructions for missing ones. Pre-flight validation catches missing dependencies before long-running operations begin, providing actionable error messages.
+
 ## Technical Requirements
 
 - **Python**: Version 3.9 or higher
@@ -398,7 +413,7 @@ Built-in adapters provide validation for multiple bioinformatics workflows:
 - **Enhanced features**: Optional psutil dependency for resource monitoring
 - **Optional read generators**: badread and/or NanoSim for higher-fidelity read simulation
 - **Platform compatibility**: POSIX-compliant operating systems (Linux, macOS, Unix)
-- **Testing**: 730 tests across 37 test files
+- **Testing**: 902 tests across 40 test files
 
 ## Development and Contribution
 
@@ -457,7 +472,8 @@ Common issues and solutions:
 - **Python version errors**: Ensure Python 3.9+ is installed
 - **Permission denied**: Use `--user` flag or check target directory permissions
 - **Import errors**: Verify installation with `pip show nanorunner`
-- **Enhanced monitoring unavailable**: Install with `pip install "nanorunner[enhanced] @ git+..."`
+- **Missing dependencies**: Run `nanorunner check-deps` to identify missing tools and install instructions
+- **Enhanced monitoring unavailable**: Install psutil with `conda install -c conda-forge psutil`
 
 For detailed troubleshooting steps, see [docs/troubleshooting.md](docs/troubleshooting.md).
 

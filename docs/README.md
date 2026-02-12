@@ -38,7 +38,7 @@ Comprehensive guides and references for the NanoRunner nanopore sequencing simul
 - **[Testing Guide](testing.md)**: Comprehensive guide covering test categories, running tests, organization, and contributing
 
 ### Current Status
-- **Test Count**: 730 tests across 37 test files
+- **Test Count**: 902 tests across 40 test files
 - **Coverage**: 97% on core components
 
 ## Quick Links
