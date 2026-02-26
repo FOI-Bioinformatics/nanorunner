@@ -27,8 +27,7 @@ This project adheres to strict quality principles in all code, documentation, an
 
 ### 3. Organization
 - **Logical structure**: Documentation and code should follow intuitive hierarchies
-  - Core components in `nanopore_simulator/core/`
-  - CLI interface in `nanopore_simulator/cli/`
+  - All source modules in `nanopore_simulator/` (flat layout, no subdirectories)
   - User guides in `docs/`
   - Examples in `examples/`
 - **Clear navigation**: All documentation must be linked from README.md or docs/README.md
@@ -83,19 +82,21 @@ pip install -e .[enhanced]
 pytest
 
 # Run specific test categories
-pytest tests/test_cli.py                    # CLI interface tests
-pytest tests/test_cli_enhanced.py           # Enhanced CLI feature tests
-pytest tests/test_enhanced_monitoring.py    # Advanced monitoring tests
-pytest tests/test_parallel_processing.py    # Parallel processing tests
-pytest tests/test_timing_models.py          # Timing model tests
-pytest tests/test_profiles.py               # Configuration profile tests
-pytest tests/test_adapters.py               # Pipeline adapter tests
-pytest tests/test_integration.py            # End-to-end integration tests
-pytest tests/test_deps.py                  # Dependency checking and pre-flight tests
-pytest tests/test_generators.py             # Read generation backend tests
-pytest tests/test_generate_integration.py   # Generate mode end-to-end tests
-pytest tests/test_practical.py -m practical # Practical tests with real NCBI genomes
-pytest tests/test_performance.py -m slow    # Performance benchmarks
+pytest tests/test_config.py                  # Configuration validation
+pytest tests/test_manifest.py                # Manifest building (plan phase)
+pytest tests/test_executor.py                # File execution (do phase)
+pytest tests/test_runner.py                  # Orchestration (plan-execute-monitor)
+pytest tests/test_cli.py                     # CLI interface tests
+pytest tests/test_timing.py                  # Timing model tests
+pytest tests/test_generators.py              # Read generation backend tests
+pytest tests/test_species.py                 # Species resolution tests
+pytest tests/test_mocks.py                   # Mock community tests
+pytest tests/test_monitoring.py              # Progress monitoring tests
+pytest tests/test_detection.py               # File structure detection tests
+pytest tests/test_adapters.py                # Pipeline adapter tests
+pytest tests/test_profiles.py                # Configuration profile tests
+pytest tests/test_deps.py                    # Dependency checking tests
+pytest tests/test_integration.py             # End-to-end integration tests
 
 # Run with coverage reporting
 pytest --cov=nanopore_simulator --cov-report=html --cov-report=term-missing
@@ -136,23 +137,42 @@ nanorunner generate --genomes genome.fa --target /target --mean-quality 25 --std
 
 ## Architecture
 
-### Core Components
+### Plan-Execute-Monitor Pattern
 
-**nanopore_simulator/core/**
-- `config.py`: SimulationConfig dataclass with validation for all simulation parameters including generate mode fields
-- `deps.py`: Centralized dependency checking (DependencyStatus, check_all_dependencies, check_preflight, get_install_hint) with install hints and pre-flight validation
-- `detector.py`: FileStructureDetector for automatic singleplex/multiplex structure recognition
-- `simulator.py`: NanoporeSimulator orchestration class handling both replay (copy/link) and generate operations
-- `timing.py`: Timing model implementations (UniformTimingModel, RandomTimingModel, PoissonTimingModel, AdaptiveTimingModel)
-- `generators.py`: Read generation backends (BuiltinGenerator, BadreadGenerator, NanoSimGenerator) with ABC, factory, and FASTA parsing
+The codebase follows a plan-execute-monitor decomposition. Instead of a single orchestration class, three small modules handle distinct phases:
+
+1. **Plan** (`manifest.py`): Config -> list of `FileEntry` describing what files to produce
+2. **Execute** (`executor.py`): One `FileEntry` -> one file on disk (copy, link, or generate)
+3. **Monitor** (`monitoring.py`): Progress tracking and display
+
+The orchestrator (`runner.py`) is a thin loop connecting these phases (~175 lines).
+
+### Module Layout
+
+Flat layout -- all source modules in `nanopore_simulator/` with no subdirectories.
+
+**Orchestration:**
+- `runner.py`: Thin orchestrator connecting plan, execute, and monitor phases
+- `manifest.py`: Builds file manifests for replay and generate modes (`FileEntry` dataclass, `build_replay_manifest()`, `build_generate_manifest()`, `distribute_reads()`)
+- `executor.py`: Produces one file per entry (`execute_entry()` dispatches to copy/link/generate)
+
+**Configuration:**
+- `config.py`: Mode-specific frozen dataclasses (`ReplayConfig`, `GenerateConfig`) with `__post_init__` validation
+- `profiles.py`: Dict-based configuration presets (`get_profile()`, `apply_profile()`, `get_recommendations()`)
+
+**Read Generation:**
+- `generators.py`: `ReadGenerator` ABC with `BuiltinGenerator` (random subsequences, log-normal lengths, optional numpy) and `SubprocessGenerator` (unified wrapper for badread/nanosim)
 - `species.py`: Species name resolution via GTDB REST API (bacteria/archaea) and NCBI datasets CLI (eukaryotes), with local caching
-- `mocks.py`: Mock community definitions (MockOrganism, MockCommunity), built-in communities, aliases, and lookup functions
-- `profiles.py`: Configuration profile system with built-in profiles for sequencing and generation scenarios
-- `adapters.py`: Pipeline adapter framework with data-driven BUILTIN_ADAPTER_CONFIGS (nanometa, kraken), GenericAdapter, and backward-compatible aliases
-- `monitoring.py`: Enhanced progress monitoring with resource tracking, predictive ETA, and interactive controls
+- `mocks.py`: Mock community definitions (`MockOrganism`, `MockCommunity`), built-in communities, aliases
 
-**nanopore_simulator/cli/**
-- `main.py`: Typer-based CLI with subcommands (`replay`, `generate`, `download`, `list-profiles`, `list-adapters`, `list-generators`, `list-mocks`, `recommend`, `validate`)
+**Infrastructure:**
+- `cli.py`: Typer-based CLI with subcommands (`replay`, `generate`, `download`, `list-profiles`, `list-adapters`, `list-generators`, `list-mocks`, `recommend`, `validate`, `check-deps`)
+- `timing.py`: Timing model implementations (Uniform, Random, Poisson, Adaptive) with factory
+- `monitoring.py`: Thread-safe `ProgressMonitor` with resource tracking, ETA, pause/resume; `NullMonitor` for headless mode
+- `detection.py`: Module-level functions for singleplex/multiplex structure detection
+- `adapters.py`: Dict-based pipeline validation (`ADAPTERS` registry, `validate_output()`) -- no ABC
+- `deps.py`: Dependency checking with install hints and pre-flight validation
+- `fastq.py`: FASTQ read/write utilities
 
 ### Key Design Patterns
 
@@ -160,33 +180,23 @@ nanorunner generate --genomes genome.fa --target /target --mean-quality 25 --std
 - **Replay mode** (`copy`/`link`): Transfers existing sequencing files from source to target with timing
 - **Generate mode** (`generate`): Produces simulated FASTQ reads from FASTA genomes with timing
 
-**Data Flow (Replay):**
-1. CLI parses arguments and handles profile/adapter commands
-2. Configuration created from profiles or direct parameters with timing model specification
-3. FileStructureDetector analyzes source directory structure
-4. NanoporeSimulator initializes with timing model, parallel processing, and monitoring components
-5. Files processed in batches with timing models and optional parallelization
-
-**Data Flow (Generate):**
-1. CLI receives `--genomes` argument, sets `operation="generate"`
-2. Configuration created with genome paths and generation parameters
-3. NanoporeSimulator initializes ReadGenerator via factory (auto/builtin/badread/nanosim)
-4. `_create_generate_manifest()` distributes total `read_count` across genomes using `_distribute_reads()` (abundance-weighted or equal split), then builds file plan per genome
-5. Each manifest entry processed through `_process_generate()` which calls `generator.generate_reads()`
-6. Output files appear incrementally with timing, compatible with downstream pipelines
+**Data Flow (both modes):**
+1. CLI parses arguments, applies profile overrides, builds `ReplayConfig` or `GenerateConfig`
+2. `runner.py` calls `build_replay_manifest()` or `build_generate_manifest()` to plan file operations
+3. Manifest entries processed via `execute_entry()` with timing delays between batches
+4. `ProgressMonitor` (or `NullMonitor`) tracks progress throughout
 
 **Timing Model Architecture:**
-- Abstract `TimingModel` base class with factory pattern implementation
+- Abstract `TimingModel` base class with factory pattern
 - Uniform: Constant intervals for deterministic testing
 - Random: Symmetric variation around base interval with configurable randomness factor
 - Poisson: Exponential intervals with burst clusters (not empirically validated)
 - Adaptive: Smoothly varying intervals via exponential moving average
 
 **Read Generator Architecture:**
-- Abstract `ReadGenerator` base class with factory pattern (`create_read_generator()`)
-- BuiltinGenerator: Error-free random subsequences from FASTA with log-normal length distribution. No error model. No external dependencies.
-- BadreadGenerator: Wraps `badread simulate` via subprocess
-- NanoSimGenerator: Wraps NanoSim via subprocess
+- Abstract `ReadGenerator` base class with factory pattern (`create_generator()`)
+- `BuiltinGenerator`: Error-free random subsequences from FASTA with log-normal length distribution. No error model. No external dependencies.
+- `SubprocessGenerator`: Unified wrapper for badread and nanosim backends
 - Auto mode tries badread, nanosim, then builtin in order of preference
 - `detect_available_backends()` reports which backends are installed
 
@@ -210,24 +220,21 @@ nanorunner generate --genomes genome.fa --target /target --mean-quality 25 --std
   - `wastewater`: Wastewater surveillance indicators and pathogens - 6 species
   - `quick_single`, `quick_3species`, `quick_gut5`, `quick_pathogens`: Fast testing mocks
 
-**Enhanced Monitoring System:**
-- Thread-safe `ProgressMonitor` with real-time resource tracking
-- Predictive ETA calculation with trend analysis (improving/degrading/stable)
-- Interactive controls (pause/resume) with signal handling
-- Automatic checkpoint/resume system for long simulations
-- Performance warning detection (high CPU/memory usage, low throughput)
+**Monitoring System:**
+- Thread-safe `ProgressMonitor` with optional resource tracking (psutil)
+- ETA calculation via throughput extrapolation
+- Pause/resume with signal handling
+- `NullMonitor` for headless or test execution
 
 **Configuration Profile System:**
 - Built-in profiles: `development`, `steady`, `bursty`, `high_throughput`, `gradual_drift`, `generate_test`, `generate_standard`
 - Profile recommendations based on file count and use case
 - Override capability for profile-based configurations
 
-**Pipeline Adapter Framework:**
-- Standardized validation interface for different bioinformatics pipelines
-- Built-in adapters defined via `BUILTIN_ADAPTER_CONFIGS`: `nanometa`, `kraken` (both use `GenericAdapter`)
+**Pipeline Validation:**
+- Dict-based `ADAPTERS` registry with validation specs for nanometa and kraken
+- `validate_output()` checks file patterns and required structure
 - Backward-compatible alias: `nanometanf` -> `nanometa`
-- `PipelineAdapter` ABC available for custom adapter subclasses
-- File pattern validation and structure requirements checking
 
 ### Supported File Types
 - **Replay mode input**: `.fastq`, `.fq`, `.fastq.gz`, `.fq.gz`, `.pod5`
@@ -242,39 +249,29 @@ nanorunner generate --genomes genome.fa --target /target --mean-quality 25 --std
 
 ## Testing Architecture
 
-**Test Categories:**
-- `test_cli.py`, `test_cli_enhanced.py`, `test_cli_coverage.py`, `test_cli_additional_coverage.py`: CLI interface, enhanced features, coverage
-- `test_cli_species.py`, `test_cli_download.py`: Species/mock CLI and download subcommand
-- `test_config.py`, `test_config_coverage.py`: Configuration validation and parameter handling
-- `test_detector.py`: File structure detection algorithms
-- `test_simulator.py`, `test_simulator_coverage.py`, `test_simulator_additional_coverage.py`: Core simulation
-- `test_simulator_species.py`: Species resolution within simulation workflow
-- `test_timing_models.py`: Timing model implementations and edge cases
-- `test_timing_integration.py`: Timing model integration with simulation workflow
-- `test_parallel_processing.py`: Parallel processing capabilities and thread safety
-- `test_enhanced_monitoring.py`, `test_monitoring.py`, `test_monitoring_coverage.py`, `test_monitoring_additional_coverage.py`, `test_monitoring_eta_and_detailed.py`: Monitoring and resource tracking
-- `test_profiles.py`: Configuration profile system validation
-- `test_adapters.py`, `test_adapters_coverage.py`: Pipeline adapter functionality
-- `test_deps.py`: Dependency checking, install hints, pre-flight validation
-- `test_generators.py`: Read generation backends, FASTA parsing, factory, config validation, subprocess error wrapping
-- `test_generate_integration.py`: End-to-end generate mode with multiplex, singleplex, mixed, and timing
-- `test_species.py`, `test_species_integration.py`: Species name resolution and GTDB/NCBI integration
-- `test_mocks.py`: Mock community definitions, aliases, organism validation
-- `test_practical.py`: Practical tests using real NCBI genomes (Lambda, S. aureus, E. coli); requires datasets CLI
-- `test_integration.py`: End-to-end workflow testing with various configurations
-- `test_edge_cases.py`, `test_realistic_edge_cases.py`: Error handling, permissions, boundary conditions
-- `test_realistic_scenarios.py`, `test_realistic_long_running.py`: Extended runs, checkpoint/resume
-- `test_unit_core_components.py`: Core component isolation tests
-- `test_performance.py`: Large dataset handling and performance benchmarks (marked as `slow`)
+**Test organization:** One test file per source module, plus integration tests.
 
-**Cross-Platform Considerations:**
-- Tests accommodate case-insensitive filesystems (macOS) with unique naming strategies
-- Graceful degradation for optional dependencies (psutil for enhanced monitoring)
-- Thread-safe operations with proper resource cleanup
+**Test files:**
+- `test_config.py`: ReplayConfig and GenerateConfig validation
+- `test_manifest.py`: Manifest building for replay and generate modes
+- `test_executor.py`: File copy/link/generate operations
+- `test_runner.py`: Orchestration, parallel execution, batching
+- `test_timing.py`: All timing models and factory
+- `test_generators.py`: Read generator backends, FASTA parsing, factory
+- `test_species.py`: Species resolution with mocked HTTP/subprocess
+- `test_mocks.py`: Mock community data, aliases, validation
+- `test_monitoring.py`: Progress monitoring, ETA, resource tracking
+- `test_detection.py`: File structure detection
+- `test_adapters.py`: Pipeline validation
+- `test_profiles.py`: Configuration profiles
+- `test_deps.py`: Dependency checking
+- `test_cli.py`: CLI commands via typer.testing.CliRunner
+- `test_integration.py`: End-to-end workflows
+- `conftest.py`: Shared fixtures (sample_fasta, source directories)
 
 **Coverage Standards:**
 - Minimum coverage threshold: 90%
-- 898 tests across 40 test files
+- 721 tests across 18 test files
 - Comprehensive integration testing with multiple timing models and configurations
 
 ## Integration Context
@@ -323,10 +320,10 @@ When extending functionality:
 1. **Timing models**: Inherit from `TimingModel` abstract base class with `next_interval()` implementation
 2. **Read generators**: Inherit from `ReadGenerator` ABC with `generate_reads()` and `is_available()` implementations; register in `_BACKENDS` dict in `generators.py`
 3. **Mock communities**: Add `MockOrganism` list and `MockCommunity` entry in `mocks.py`; use GTDB resolver for bacteria/archaea, NCBI with explicit accession for fungi
-4. **Pipeline adapters**: Implement `PipelineAdapter` interface with validation logic
+4. **Pipeline adapters**: Add entry to `ADAPTERS` dict in `adapters.py` with validation spec
 5. **Monitoring**: Use thread-safe `ProgressMonitor` methods for metrics collection
 6. **Testing**: Include both unit tests and integration tests with performance considerations
-7. **Configuration**: Add new parameters to `SimulationConfig` with appropriate validation
+7. **Configuration**: Add new parameters to `ReplayConfig` or `GenerateConfig` with `__post_init__` validation
 8. **Documentation**: Update both technical documentation and user-facing examples
 
 ## User Documentation
