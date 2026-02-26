@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 _VALID_TIMING_MODELS = {"uniform", "random", "poisson", "adaptive"}
-_VALID_MONITOR_TYPES = {"basic", "enhanced"}
+_VALID_MONITOR_TYPES = {"basic", "enhanced", "none"}
 _VALID_STRUCTURES_REPLAY = {"auto", "singleplex", "multiplex"}
 _VALID_STRUCTURES_GENERATE = {"singleplex", "multiplex"}
 _VALID_GENERATOR_BACKENDS = {"auto", "builtin", "badread", "nanosim"}
