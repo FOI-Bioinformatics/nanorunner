@@ -36,14 +36,16 @@ class FileEntry:
     Attributes:
         source: Source file path (replay mode).  None for generate.
         target: Target file path (full path including filename).
-        operation: One of "copy", "link", or "generate".
+        operation: One of "copy", "link", "generate", or "rechunk".
         genome: Genome FASTA path (generate mode).  None for replay.
-        read_count: Number of reads to write (generate mode).
+        read_count: Number of reads to write (generate/rechunk mode).
         batch: Zero-based batch index for timing.
         file_index: Sequential file index for naming output files.
         barcode: Barcode directory name, or None for singleplex.
         mixed_genome_reads: For mixed-mode generate entries, a list of
             (genome_path, read_count) tuples.
+        source_files: For rechunk entries, ordered list of source FASTQ
+            paths whose reads are pooled and re-distributed.
     """
 
     source: Optional[Path] = None
@@ -55,6 +57,7 @@ class FileEntry:
     file_index: int = 0
     barcode: Optional[str] = None
     mixed_genome_reads: Optional[List[tuple]] = None
+    source_files: Optional[List[Path]] = None
 
 
 # -------------------------------------------------------------------
@@ -278,6 +281,9 @@ def _rechunk_entries(
         ext = _get_fastq_extension(first_source) if first_source else ".fastq"
         stem = _fastq_stem(first_source) if first_source else "reads"
 
+        # Collect ordered source paths for the rechunk entries.
+        source_paths = [src for src, _ in grp["fastq_files"]]
+
         for chunk_idx in range(n_output):
             filename = f"{stem}_chunk_{chunk_idx:04d}{ext}"
             rechunked.append(
@@ -290,6 +296,7 @@ def _rechunk_entries(
                         rpf, total_reads - chunk_idx * rpf
                     ),
                     file_index=chunk_idx,
+                    source_files=source_paths,
                 )
             )
 

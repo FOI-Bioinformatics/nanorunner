@@ -1,10 +1,12 @@
 """File executor for producing individual output files.
 
-Handles the three operations defined by ``FileEntry``:
+Handles the four operations defined by ``FileEntry``:
 
 - **copy**: Copy a source file to the target path.
 - **link**: Create a symbolic link at the target path.
 - **generate**: Produce a simulated FASTQ file via a ReadGenerator.
+- **rechunk**: Read FASTQ records from source files and write a
+  chunk of them to the target path.
 
 Each function ensures parent directories exist before writing.
 """
@@ -48,6 +50,8 @@ def execute_entry(
         if generator is None:
             raise ValueError("generator required for generate operation")
         return _generate_file(entry, generator)
+    elif entry.operation == "rechunk":
+        return _rechunk_file(entry)
     else:
         raise ValueError(f"Unknown operation: {entry.operation}")
 
@@ -107,6 +111,45 @@ def _generate_file(entry: FileEntry, generator: ReadGenerator) -> Path:
         num_reads=entry.read_count,
     )
     return output_path
+
+
+def _rechunk_file(entry: FileEntry) -> Path:
+    """Write a chunk of reads from source FASTQ files to the target.
+
+    Reads are drawn from the source files in order, skipping reads
+    that belong to earlier chunks and writing ``entry.read_count``
+    reads to the target path.
+
+    Args:
+        entry: A rechunk-mode FileEntry with ``source_files``,
+            ``file_index``, and ``read_count`` populated.
+
+    Returns:
+        Path to the written output file.
+    """
+    from nanopore_simulator_v2.fastq import iter_reads, write_reads
+
+    if not entry.source_files:
+        raise ValueError("rechunk operation requires source_files")
+
+    reads_per_chunk = entry.read_count or 0
+    skip = entry.file_index * reads_per_chunk
+
+    collected = []
+    skipped = 0
+    for src in entry.source_files:
+        for record in iter_reads(src):
+            if skipped < skip:
+                skipped += 1
+                continue
+            collected.append(record)
+            if len(collected) >= reads_per_chunk:
+                break
+        if len(collected) >= reads_per_chunk:
+            break
+
+    write_reads(collected, entry.target)
+    return entry.target
 
 
 def _generate_mixed_file(
