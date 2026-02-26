@@ -1,668 +1,347 @@
-"""Comprehensive CLI tests to improve coverage.
+"""Targeted CLI tests to boost coverage for error-handling and edge paths.
 
-Uses typer.testing.CliRunner for CLI integration tests and direct function
-calls for standalone command helpers.
+Covers the ValueError catch blocks, preflight validation failures,
+enhanced monitor psutil fallback, and generate error paths.
 """
 
-import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch, PropertyMock
 
 import pytest
 from typer.testing import CliRunner
 
-from nanopore_simulator.cli.main import (
-    app,
-    list_profiles_command,
-    list_adapters_command,
-    recommend_profiles_command,
-    validate_pipeline_command,
-)
+from nanopore_simulator.cli import app, _resolve_monitor, MonitorLevel
 
 runner = CliRunner()
 
 
-# ---------------------------------------------------------------------------
-# Direct function tests (standalone helpers, not routed through Typer)
-# ---------------------------------------------------------------------------
+class TestResolveMonitor:
+    """Direct tests for the _resolve_monitor helper."""
+
+    def test_quiet_returns_none(self) -> None:
+        assert _resolve_monitor(MonitorLevel.default, quiet=True) == "none"
+
+    def test_none_level_returns_none(self) -> None:
+        assert _resolve_monitor(MonitorLevel.none, quiet=False) == "none"
+
+    def test_default_returns_basic(self) -> None:
+        assert _resolve_monitor(MonitorLevel.default, quiet=False) == "basic"
+
+    def test_detailed_returns_basic(self) -> None:
+        assert _resolve_monitor(MonitorLevel.detailed, quiet=False) == "basic"
+
+    def test_enhanced_with_psutil_returns_enhanced(self) -> None:
+        # psutil is available in test env
+        result = _resolve_monitor(MonitorLevel.enhanced, quiet=False)
+        assert result == "enhanced"
+
+    def test_enhanced_without_psutil_falls_back(self) -> None:
+        """When psutil import fails, enhanced falls back to basic."""
+        import sys
+        # Temporarily remove psutil from modules
+        with patch.dict(sys.modules, {"psutil": None}):
+            # Patch the import to raise ImportError
+            import builtins
+            real_import = builtins.__import__
+
+            def mock_import(name, *args, **kwargs):
+                if name == "psutil":
+                    raise ImportError("mocked")
+                return real_import(name, *args, **kwargs)
+
+            with patch("builtins.__import__", side_effect=mock_import):
+                result = _resolve_monitor(MonitorLevel.enhanced, quiet=False)
+                assert result == "basic"
 
 
-class TestCLICommandFunctions:
-    """Test individual CLI command functions called directly."""
+class TestReplayErrorPaths:
+    """CLI replay error-handling paths."""
 
-    def test_list_profiles_command(self, capsys):
-        """Test the list profiles command function."""
-        with patch(
-            "nanopore_simulator.cli.main.get_available_profiles"
-        ) as mock_profiles:
-            mock_profiles.return_value = {
-                "bursty": "Intermittent burst pattern for pipeline robustness testing",
-                "development": "Fast iteration with deterministic uniform timing",
-            }
+    def test_replay_config_validation_error(self, tmp_path: Path) -> None:
+        """Config validation error is caught and reported."""
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "r.fastq").write_text("@r1\nACGT\n+\nIIII\n")
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source),
+                "--target", str(tmp_path / "target"),
+                "--batch-size", "0",  # Invalid
+                "--interval", "0",
+            ],
+        )
+        assert result.exit_code != 0
 
-            result = list_profiles_command()
+    def test_replay_negative_interval(self, tmp_path: Path) -> None:
+        """Negative interval is caught as config validation error."""
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "r.fastq").write_text("@r1\nACGT\n+\nIIII\n")
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source),
+                "--target", str(tmp_path / "target"),
+                "--interval", "-1",
+            ],
+        )
+        assert result.exit_code != 0
 
-            captured = capsys.readouterr()
-            assert result == 0
-            assert "Available Configuration Profiles:" in captured.out
-            assert "bursty" in captured.out
-            assert "development" in captured.out
-            assert "Intermittent burst pattern for pipeline robustness testing" in captured.out
-
-    def test_list_adapters_command(self, capsys):
-        """Test the list adapters command function."""
-        with patch(
-            "nanopore_simulator.cli.main.get_available_adapters"
-        ) as mock_adapters:
-            mock_adapters.return_value = {
-                "nanometa": "Nanometa Live real-time taxonomic analysis pipeline",
-                "kraken": "Kraken2/KrakenUniq taxonomic classification pipeline",
-            }
-
-            result = list_adapters_command()
-
-            captured = capsys.readouterr()
-            assert result == 0
-            assert "Available Pipeline Adapters:" in captured.out
-            assert "nanometa" in captured.out
-            assert "kraken" in captured.out
-            assert "Nanometa Live real-time taxonomic analysis pipeline" in captured.out
-
-    def test_recommend_profiles_command_success(self, capsys):
-        """Test recommend profiles command with sequencing files."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source_dir = Path(temp_dir)
-
-            (source_dir / "sample1.fastq").write_text("@read1\\nACGT\\n+\\nIIII\\n")
-            (source_dir / "sample2.fastq.gz").write_text("compressed_data")
-
-            with patch(
-                "nanopore_simulator.cli.main.get_profile_recommendations"
-            ) as mock_rec:
-                with patch(
-                    "nanopore_simulator.cli.main.get_available_profiles"
-                ) as mock_profiles:
-                    mock_rec.return_value = [
-                        "bursty",
-                        "development",
-                    ]
-                    mock_profiles.return_value = {
-                        "bursty": "Intermittent burst pattern",
-                        "development": "Fast iteration",
-                    }
-
-                    result = recommend_profiles_command(source_dir)
-
-                    captured = capsys.readouterr()
-                    assert result == 0
-                    assert f"Analysis of {source_dir}:" in captured.out
-                    assert "Found 2 sequencing file(s)" in captured.out
-                    assert "Detected structure:" in captured.out
-                    assert "Recommended replay profiles for 2 files:" in captured.out
-                    assert "bursty" in captured.out
-
-    def test_recommend_profiles_command_nonexistent_dir(self, capsys):
-        """Test recommend profiles command with nonexistent directory."""
-        nonexistent_dir = Path("/nonexistent/directory/path")
-
-        result = recommend_profiles_command(nonexistent_dir)
-
-        captured = capsys.readouterr()
-        assert result == 1
-        assert "Error: Source directory does not exist" in captured.out
-
-    def test_recommend_profiles_command_no_source(self, capsys):
-        """Test recommend profiles command with no source shows overview."""
-        result = recommend_profiles_command()
-
-        captured = capsys.readouterr()
-        assert result == 0
-        assert "Available Configuration Profiles" in captured.out
-        assert "Replay profiles" in captured.out
-        assert "Generate profiles" in captured.out
-        assert "development" in captured.out
-        assert "generate_test" in captured.out
-
-    def test_recommend_profiles_command_genome_files(self, capsys):
-        """Test recommend profiles command with genome FASTA files."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source_dir = Path(temp_dir)
-            (source_dir / "genome.fasta").write_text(">chr1\\nACGTACGT\\n")
-
-            with patch(
-                "nanopore_simulator.cli.main.get_generate_recommendations"
-            ) as mock_rec:
-                with patch(
-                    "nanopore_simulator.cli.main.get_available_profiles"
-                ) as mock_profiles:
-                    mock_rec.return_value = [
-                        "generate_test",
-                        "generate_standard",
-                    ]
-                    mock_profiles.return_value = {
-                        "generate_test": "Quick smoke test",
-                        "generate_standard": "Standard run",
-                    }
-
-                    result = recommend_profiles_command(source_dir)
-
-                    captured = capsys.readouterr()
-                    assert result == 0
-                    assert "genome FASTA file(s)" in captured.out
-                    assert "Recommended generate profiles" in captured.out
-
-    def test_recommend_profiles_command_both_types(self, capsys):
-        """Test recommend with both sequencing and genome files."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source_dir = Path(temp_dir)
-            (source_dir / "reads.fastq").write_text("@r1\\nACGT\\n+\\nIIII\\n")
-            (source_dir / "genome.fa").write_text(">chr1\\nACGT\\n")
-
-            with patch(
-                "nanopore_simulator.cli.main.get_profile_recommendations"
-            ) as mock_replay_rec:
-                with patch(
-                    "nanopore_simulator.cli.main.get_generate_recommendations"
-                ) as mock_gen_rec:
-                    with patch(
-                        "nanopore_simulator.cli.main.get_available_profiles"
-                    ) as mock_profiles:
-                        mock_replay_rec.return_value = ["bursty"]
-                        mock_gen_rec.return_value = ["generate_test"]
-                        mock_profiles.return_value = {
-                            "bursty": "Burst pattern",
-                            "generate_test": "Quick test",
-                        }
-
-                        result = recommend_profiles_command(source_dir)
-
-                        captured = capsys.readouterr()
-                        assert result == 0
-                        assert "sequencing file(s)" in captured.out
-                        assert "genome FASTA file(s)" in captured.out
-
-    def test_recommend_profiles_command_empty_dir(self, capsys):
-        """Test recommend with an empty directory."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source_dir = Path(temp_dir)
-
-            result = recommend_profiles_command(source_dir)
-
-            captured = capsys.readouterr()
-            assert result == 1
-            assert "No sequencing or genome files found" in captured.out
-
-    def test_validate_pipeline_command_success(self, capsys):
-        """Test validate pipeline command with valid directory."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            target_dir = Path(temp_dir)
-
-            (target_dir / "sample.fastq").write_text("@read1\\nACGT\\n+\\nIIII\\n")
-
-            with patch(
-                "nanopore_simulator.cli.main.validate_for_pipeline"
-            ) as mock_validate:
-                mock_validate.return_value = {
-                    "valid": True,
-                    "structure": "singleplex",
-                    "file_count": 1,
-                    "issues": [],
-                    "recommendations": [],
-                }
-
-                result = validate_pipeline_command(target_dir, "nanometa")
-
-                captured = capsys.readouterr()
-                assert result == 0
-                assert "Pipeline validation report for 'nanometa':" in captured.out
-                assert "Valid: yes" in captured.out
-
-    def test_validate_pipeline_command_invalid(self, capsys):
-        """Test validate pipeline command with invalid pipeline results."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            target_dir = Path(temp_dir)
-
-            with patch(
-                "nanopore_simulator.cli.main.validate_for_pipeline"
-            ) as mock_validate:
-                mock_validate.return_value = {
-                    "valid": False,
-                    "structure": "unknown",
-                    "file_count": 0,
-                    "issues": ["No sequencing files found"],
-                    "recommendations": ["Add FASTQ or POD5 files"],
-                }
-
-                result = validate_pipeline_command(target_dir, "kraken")
-
-                captured = capsys.readouterr()
-                assert result == 1
-                assert "Pipeline validation report for 'kraken':" in captured.out
-                assert "Valid: no" in captured.out
-
-    def test_validate_pipeline_command_with_warnings(self, capsys):
-        """Test validate pipeline command output includes warnings."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            target_dir = Path(temp_dir)
-
-            with patch(
-                "nanopore_simulator.cli.main.validate_for_pipeline"
-            ) as mock_validate:
-                mock_validate.return_value = {
-                    "valid": False,
-                    "structure": "unknown",
-                    "file_count": 0,
-                    "warnings": ["Missing barcode directories"],
-                    "errors": ["No FASTQ files"],
-                }
-
-                result = validate_pipeline_command(target_dir, "nanometa")
-
-                captured = capsys.readouterr()
-                assert result == 1
-                assert "Warning: Missing barcode directories" in captured.out
-                assert "Error: No FASTQ files" in captured.out
-
-    def test_validate_pipeline_command_nonexistent_dir(self, capsys):
-        """Test validate pipeline command with nonexistent directory."""
-        nonexistent_dir = Path("/nonexistent/directory/path")
-
-        result = validate_pipeline_command(nonexistent_dir, "nanometa")
-
-        captured = capsys.readouterr()
-        assert result == 1
-        assert "Error: Target directory does not exist" in captured.out
-
-
-# ---------------------------------------------------------------------------
-# CLI integration tests via CliRunner
-# ---------------------------------------------------------------------------
-
-
-class TestCLISpecialOptions:
-    """Test CLI subcommands routed through the Typer app."""
-
-    def test_cli_list_profiles(self):
-        """Test list-profiles subcommand."""
-        with patch(
-            "nanopore_simulator.cli.main.get_available_profiles"
-        ) as mock_profiles:
-            mock_profiles.return_value = {
-                "bursty": "Intermittent burst pattern for pipeline robustness testing",
-            }
-            result = runner.invoke(app, ["list-profiles"])
-            assert result.exit_code == 0
-            assert "Available Configuration Profiles:" in result.output
-            assert "bursty" in result.output
-
-    def test_cli_list_adapters(self):
-        """Test list-adapters subcommand."""
-        with patch(
-            "nanopore_simulator.cli.main.get_available_adapters"
-        ) as mock_adapters:
-            mock_adapters.return_value = {
-                "nanometa": "Nanometa Live real-time taxonomic analysis pipeline",
-                "kraken": "Kraken2/KrakenUniq taxonomic classification pipeline",
-            }
-            result = runner.invoke(app, ["list-adapters"])
-            assert result.exit_code == 0
-            assert "Available Pipeline Adapters:" in result.output
-            assert "nanometa" in result.output
-
-    def test_cli_list_generators(self):
-        """Test list-generators subcommand."""
-        with patch(
-            "nanopore_simulator.cli.main.detect_available_backends"
-        ) as mock_backends:
-            mock_backends.return_value = {
-                "builtin": True,
-                "badread": False,
-                "nanosim": False,
-            }
-            result = runner.invoke(app, ["list-generators"])
-            assert result.exit_code == 0
-            assert "Available Read Generation Backends:" in result.output
-            assert "builtin" in result.output
-
-    def test_cli_recommend_profiles(self):
-        """Test recommend subcommand via CliRunner with a real directory."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source_dir = Path(temp_dir)
-            (source_dir / "sample1.fastq").write_text("@read1\\nACGT\\n+\\nIIII\\n")
-
-            with patch(
-                "nanopore_simulator.cli.main.get_profile_recommendations"
-            ) as mock_rec:
-                with patch(
-                    "nanopore_simulator.cli.main.get_available_profiles"
-                ) as mock_profiles:
-                    mock_rec.return_value = ["bursty"]
-                    mock_profiles.return_value = {
-                        "bursty": "Intermittent burst pattern",
-                    }
-
-                    result = runner.invoke(
-                        app, ["recommend", "--source", str(source_dir)]
-                    )
-                    assert result.exit_code == 0
-                    assert "Analysis of" in result.output
-
-    def test_cli_recommend_no_source(self):
-        """Test recommend subcommand with no --source shows overview."""
-        result = runner.invoke(app, ["recommend"])
+    def test_replay_with_pipeline_validation_post_run(
+        self, tmp_path: Path
+    ) -> None:
+        """Pipeline validation runs after replay and includes adapter name."""
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "r.fastq").write_text("@r1\nACGT\n+\nIIII\n")
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source),
+                "--target", str(tmp_path / "target"),
+                "--pipeline", "kraken",
+                "--interval", "0",
+            ],
+        )
         assert result.exit_code == 0
-        assert "Available Configuration Profiles" in result.output
+        assert "kraken" in result.output.lower()
 
-    def test_cli_validate_pipeline(self):
-        """Test validate subcommand via CliRunner with a real directory."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            target_dir = Path(temp_dir)
-            (target_dir / "sample.fastq").write_text("@read1\\nACGT\\n+\\nIIII\\n")
 
+class TestGenerateErrorPaths:
+    """CLI generate error-handling paths."""
+
+    def test_generate_config_validation_catches_value_error(
+        self, tmp_path: Path
+    ) -> None:
+        """ValueError from GenerateConfig is caught."""
+        fasta = tmp_path / "g.fa"
+        fasta.write_text(">c\nACGT\n")
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target", str(tmp_path / "target"),
+                "--genomes", str(fasta),
+                "--batch-size", "0",  # Invalid
+                "--no-wait",
+            ],
+        )
+        assert result.exit_code != 0
+
+    def test_generate_with_pipeline_validation(
+        self, tmp_path: Path
+    ) -> None:
+        """Pipeline validation runs after generate mode."""
+        fasta = tmp_path / "g.fa"
+        fasta.write_text(">chr1\nACGTACGTACGTACGT\n")
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target", str(tmp_path / "target"),
+                "--genomes", str(fasta),
+                "--generator-backend", "builtin",
+                "--read-count", "10",
+                "--reads-per-file", "10",
+                "--output-format", "fastq",
+                "--pipeline", "nanometa",
+                "--no-wait",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "nanometa" in result.output.lower()
+
+    def test_generate_runtime_error_caught(self, tmp_path: Path) -> None:
+        """Runtime errors from run_generate are caught and reported."""
+        fasta = tmp_path / "g.fa"
+        fasta.write_text(">chr1\nACGTACGTACGTACGT\n")
+        with patch(
+            "nanopore_simulator.cli.run_generate",
+            side_effect=RuntimeError("test error"),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "generate",
+                    "--target", str(tmp_path / "target"),
+                    "--genomes", str(fasta),
+                    "--no-wait",
+                    "--quiet",
+                ],
+            )
+            assert result.exit_code != 0
+
+    def test_replay_runtime_error_caught(self, tmp_path: Path) -> None:
+        """Runtime errors from run_replay are caught and reported."""
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "r.fastq").write_text("@r1\nACGT\n+\nIIII\n")
+        with patch(
+            "nanopore_simulator.cli.run_replay",
+            side_effect=RuntimeError("test error"),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "replay",
+                    "--source", str(source),
+                    "--target", str(tmp_path / "target"),
+                    "--interval", "0",
+                    "--quiet",
+                ],
+            )
+            assert result.exit_code != 0
+
+
+class TestDownloadCommand:
+    """Test download command error paths (no network)."""
+
+    def test_download_mock_preflight_fails(self) -> None:
+        """Download with missing datasets CLI reports preflight error."""
+        with patch(
+            "nanopore_simulator.deps.check_preflight",
+            return_value=["datasets CLI not found"],
+        ):
+            result = runner.invoke(
+                app,
+                ["download", "--mock", "zymo_d6300"],
+            )
+            assert result.exit_code != 0
+
+    def test_download_species_preflight_fails(self) -> None:
+        """Download with missing datasets CLI reports preflight error."""
+        with patch(
+            "nanopore_simulator.deps.check_preflight",
+            return_value=["datasets CLI not found"],
+        ):
+            result = runner.invoke(
+                app,
+                ["download", "--species", "Escherichia coli"],
+            )
+            assert result.exit_code != 0
+
+    def test_download_taxid_preflight_fails(self) -> None:
+        """Download with missing datasets CLI reports preflight error."""
+        with patch(
+            "nanopore_simulator.deps.check_preflight",
+            return_value=["datasets CLI not found"],
+        ):
+            result = runner.invoke(
+                app,
+                ["download", "--taxid", "562"],
+            )
+            assert result.exit_code != 0
+
+    def test_download_unknown_mock(self) -> None:
+        """Download with an unknown mock name fails."""
+        with patch(
+            "nanopore_simulator.deps.check_preflight", return_value=[]
+        ):
+            result = runner.invoke(
+                app,
+                ["download", "--mock", "nonexistent_mock"],
+            )
+            assert result.exit_code != 0
+
+    def test_download_mock_successful_download(self) -> None:
+        """Download mock with successful genome download."""
+        mock_ref = MagicMock()
+        mock_ref.name = "E. coli"
+        mock_ref.accession = "GCF_000005845.2"
+        mock_ref.source = "ncbi"
+        mock_ref.domain = "bacteria"
+
+        with patch(
+            "nanopore_simulator.deps.check_preflight", return_value=[]
+        ):
             with patch(
-                "nanopore_simulator.cli.main.validate_for_pipeline"
-            ) as mock_validate:
-                mock_validate.return_value = {
-                    "valid": True,
-                    "structure": "singleplex",
-                    "file_count": 1,
-                    "issues": [],
-                    "recommendations": [],
-                }
-
-                result = runner.invoke(
-                    app,
-                    [
-                        "validate",
-                        "--pipeline",
-                        "nanometa",
-                        "--target",
-                        str(target_dir),
-                    ],
-                )
-                assert result.exit_code == 0
-                assert "Pipeline validation report for 'nanometa':" in result.output
-                assert "Valid: yes" in result.output
-
-
-class TestCLIErrorHandling:
-    """Test CLI error handling paths via CliRunner."""
-
-    def test_cli_invalid_profile_name(self):
-        """Test CLI replay with invalid profile name."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source_dir = Path(temp_dir)
-            target_dir = Path(temp_dir) / "output"
-
-            (source_dir / "sample.fastq").write_text("@read1\\nACGT\\n+\\nIIII\\n")
-
-            with patch(
-                "nanopore_simulator.cli.main.validate_profile_name",
-                return_value=False,
+                "nanopore_simulator.species.download_genome",
+                return_value=Path("/tmp/fake_genome.fa"),
             ):
                 result = runner.invoke(
                     app,
-                    [
-                        "replay",
-                        "--source",
-                        str(source_dir),
-                        "--target",
-                        str(target_dir),
-                        "--profile",
-                        "invalid_profile",
-                    ],
-                )
-                assert result.exit_code == 2
-
-    def test_cli_simulation_error(self):
-        """Test CLI when simulation raises a runtime error."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source_dir = Path(temp_dir)
-            target_dir = Path(temp_dir) / "output"
-
-            (source_dir / "sample.fastq").write_text("@read1\\nACGT\\n+\\nIIII\\n")
-
-            with patch(
-                "nanopore_simulator.cli.main.NanoporeSimulator"
-            ) as mock_sim_class:
-                mock_sim = MagicMock()
-                mock_sim.run_simulation.side_effect = RuntimeError("Simulation error")
-                mock_sim_class.return_value = mock_sim
-
-                result = runner.invoke(
-                    app,
-                    [
-                        "replay",
-                        "--source",
-                        str(source_dir),
-                        "--target",
-                        str(target_dir),
-                    ],
-                )
-                assert result.exit_code == 1
-
-    def test_cli_permission_error(self):
-        """Test CLI when a permission error occurs during simulation."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source_dir = Path(temp_dir)
-            target_dir = Path(temp_dir) / "output"
-
-            (source_dir / "sample.fastq").write_text("@read1\\nACGT\\n+\\nIIII\\n")
-
-            with patch(
-                "nanopore_simulator.cli.main.NanoporeSimulator"
-            ) as mock_sim_class:
-                mock_sim = MagicMock()
-                mock_sim.run_simulation.side_effect = PermissionError(
-                    "Permission denied"
-                )
-                mock_sim_class.return_value = mock_sim
-
-                result = runner.invoke(
-                    app,
-                    [
-                        "replay",
-                        "--source",
-                        str(source_dir),
-                        "--target",
-                        str(target_dir),
-                    ],
-                )
-                assert result.exit_code == 1
-
-
-class TestCLIArgumentValidation:
-    """Test CLI argument validation for invalid enum/choice values."""
-
-    def test_cli_invalid_timing_model(self):
-        """Test CLI replay with an invalid timing model value."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source_dir = Path(temp_dir)
-            target_dir = Path(temp_dir) / "output"
-            (source_dir / "sample.fastq").write_text("@read1\\nACGT\\n+\\nIIII\\n")
-
-            result = runner.invoke(
-                app,
-                [
-                    "replay",
-                    "--source",
-                    str(source_dir),
-                    "--target",
-                    str(target_dir),
-                    "--timing-model",
-                    "invalid_model",
-                ],
-            )
-            assert result.exit_code == 2
-
-    def test_cli_invalid_operation(self):
-        """Test CLI replay with an invalid operation value."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source_dir = Path(temp_dir)
-            target_dir = Path(temp_dir) / "output"
-            (source_dir / "sample.fastq").write_text("@read1\\nACGT\\n+\\nIIII\\n")
-
-            result = runner.invoke(
-                app,
-                [
-                    "replay",
-                    "--source",
-                    str(source_dir),
-                    "--target",
-                    str(target_dir),
-                    "--operation",
-                    "invalid_operation",
-                ],
-            )
-            assert result.exit_code == 2
-
-    def test_cli_invalid_force_structure(self):
-        """Test CLI replay with an invalid force-structure value."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source_dir = Path(temp_dir)
-            target_dir = Path(temp_dir) / "output"
-            (source_dir / "sample.fastq").write_text("@read1\\nACGT\\n+\\nIIII\\n")
-
-            result = runner.invoke(
-                app,
-                [
-                    "replay",
-                    "--source",
-                    str(source_dir),
-                    "--target",
-                    str(target_dir),
-                    "--force-structure",
-                    "invalid_structure",
-                ],
-            )
-            assert result.exit_code == 2
-
-    def test_cli_invalid_monitor(self):
-        """Test CLI replay with an invalid monitor level."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source_dir = Path(temp_dir)
-            target_dir = Path(temp_dir) / "output"
-            (source_dir / "sample.fastq").write_text("@read1\\nACGT\\n+\\nIIII\\n")
-
-            result = runner.invoke(
-                app,
-                [
-                    "replay",
-                    "--source",
-                    str(source_dir),
-                    "--target",
-                    str(target_dir),
-                    "--monitor",
-                    "invalid_monitor",
-                ],
-            )
-            assert result.exit_code == 2
-
-
-class TestCLIAdvancedFeatures:
-    """Test advanced CLI features and option combinations."""
-
-    def test_cli_all_timing_options(self):
-        """Test CLI replay with Poisson timing model and burst parameters."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source_dir = Path(temp_dir)
-            target_dir = Path(temp_dir) / "output"
-
-            (source_dir / "sample.fastq").write_text("@read1\\nACGT\\n+\\nIIII\\n")
-
-            with patch(
-                "nanopore_simulator.cli.main.NanoporeSimulator"
-            ) as mock_sim_class:
-                mock_sim = MagicMock()
-                mock_sim_class.return_value = mock_sim
-
-                result = runner.invoke(
-                    app,
-                    [
-                        "replay",
-                        "--source",
-                        str(source_dir),
-                        "--target",
-                        str(target_dir),
-                        "--timing-model",
-                        "poisson",
-                        "--burst-probability",
-                        "0.2",
-                        "--burst-rate-multiplier",
-                        "3.0",
-                    ],
+                    ["download", "--mock", "quick_single"],
                 )
                 assert result.exit_code == 0
-                mock_sim.run_simulation.assert_called_once()
+                assert "Download" in result.output
 
-    def test_cli_parallel_processing_options(self):
-        """Test CLI replay with parallel processing enabled."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source_dir = Path(temp_dir)
-            target_dir = Path(temp_dir) / "output"
-
-            (source_dir / "sample.fastq").write_text("@read1\\nACGT\\n+\\nIIII\\n")
-
+    def test_download_species_resolve_fails(self) -> None:
+        """Download species that fails to resolve."""
+        with patch(
+            "nanopore_simulator.deps.check_preflight", return_value=[]
+        ):
             with patch(
-                "nanopore_simulator.cli.main.NanoporeSimulator"
-            ) as mock_sim_class:
-                mock_sim = MagicMock()
-                mock_sim_class.return_value = mock_sim
-
+                "nanopore_simulator.species.resolve_species",
+                return_value=None,
+            ):
                 result = runner.invoke(
                     app,
-                    [
-                        "replay",
-                        "--source",
-                        str(source_dir),
-                        "--target",
-                        str(target_dir),
-                        "--parallel",
-                        "--worker-count",
-                        "8",
-                    ],
+                    ["download", "--species", "Nonexistent species"],
                 )
-                assert result.exit_code == 0
-                mock_sim.run_simulation.assert_called_once()
+                assert result.exit_code != 0
 
-    def test_cli_enhanced_monitoring_options(self):
-        """Test CLI replay with enhanced monitoring and quiet mode."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            source_dir = Path(temp_dir)
-            target_dir = Path(temp_dir) / "output"
-
-            (source_dir / "sample.fastq").write_text("@read1\\nACGT\\n+\\nIIII\\n")
-
+    def test_download_taxid_resolve_fails(self) -> None:
+        """Download taxid that fails to resolve."""
+        with patch(
+            "nanopore_simulator.deps.check_preflight", return_value=[]
+        ):
             with patch(
-                "nanopore_simulator.cli.main.NanoporeSimulator"
-            ) as mock_sim_class:
-                mock_sim = MagicMock()
-                mock_sim_class.return_value = mock_sim
-
+                "nanopore_simulator.species.resolve_taxid",
+                return_value=None,
+            ):
                 result = runner.invoke(
                     app,
-                    [
-                        "replay",
-                        "--source",
-                        str(source_dir),
-                        "--target",
-                        str(target_dir),
-                        "--monitor",
-                        "enhanced",
-                        "--quiet",
-                    ],
+                    ["download", "--taxid", "999999999"],
                 )
-                assert result.exit_code == 0
-                mock_sim.run_simulation.assert_called_once()
+                assert result.exit_code != 0
 
-    def test_cli_version_flag(self):
-        """Test --version flag prints version and exits."""
-        result = runner.invoke(app, ["--version"])
+
+class TestRecommendWithSource:
+    """Test recommend command with source directory analysis."""
+
+    def test_recommend_source_with_barcode_subdirs(
+        self, tmp_path: Path
+    ) -> None:
+        """Recommend with multiplex source finds files in subdirs."""
+        source = tmp_path / "source"
+        source.mkdir()
+        bc = source / "barcode01"
+        bc.mkdir()
+        (bc / "r.fastq").write_text("@r1\nACGT\n+\nIIII\n")
+        result = runner.invoke(
+            app,
+            ["recommend", "--source", str(source)],
+        )
         assert result.exit_code == 0
-        assert "nanorunner" in result.output
+        assert "Recommended profiles" in result.output
 
-    def test_cli_no_args_shows_help(self):
-        """Test that invoking the app with no arguments shows help."""
-        result = runner.invoke(app, [])
-        assert result.exit_code == 0
-        assert "Usage" in result.output or "Commands" in result.output
+    def test_recommend_invalid_source_path(self, tmp_path: Path) -> None:
+        """Recommend with a file (not directory) fails."""
+        fpath = tmp_path / "file.txt"
+        fpath.write_text("not a dir")
+        result = runner.invoke(
+            app,
+            ["recommend", "--source", str(fpath)],
+        )
+        assert result.exit_code != 0
+
+
+class TestCliMainEntryPoint:
+    """Test the main() entry point function."""
+
+    def test_main_returns_zero_on_success(self) -> None:
+        from nanopore_simulator.cli import main
+        with patch("nanopore_simulator.cli.app") as mock_app:
+            mock_app.return_value = None
+            code = main()
+            assert code == 0
+
+    def test_main_returns_exit_code_on_system_exit(self) -> None:
+        from nanopore_simulator.cli import main
+        with patch("nanopore_simulator.cli.app", side_effect=SystemExit(1)):
+            code = main()
+            assert code == 1

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nanorunner"
-version = "2.0.2"
+version = "3.0.0"
 description = "Comprehensive nanopore sequencing simulator with timing models, parallel processing, and real-time monitoring for bioinformatics pipeline testing"
 readme = "README.md"
 dependencies = [
@@ -38,7 +38,7 @@ Documentation = "https://github.com/FOI-Bioinformatics/nanorunner#readme"
 "Bug Tracker" = "https://github.com/FOI-Bioinformatics/nanorunner/issues"
 
 [project.scripts]
-nanorunner = "nanopore_simulator.cli.main:main"
+nanorunner = "nanopore_simulator.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -58,7 +58,7 @@ enhanced = [
 ]
 
 [tool.setuptools]
-packages = ["nanopore_simulator", "nanopore_simulator.core", "nanopore_simulator.cli"]
+packages = ["nanopore_simulator"]
 
 [tool.black]
 line-length = 88

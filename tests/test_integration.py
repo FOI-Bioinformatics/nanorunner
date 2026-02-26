@@ -1,355 +1,873 @@
-"""Integration tests for complete workflows"""
+"""End-to-end integration tests for nanorunner v2.
+
+Exercises the full stack through the CLI (typer.testing.CliRunner),
+verifying that replay, generate, and utility commands produce the
+expected on-disk results.  All tests use --interval 0 or --no-wait
+for speed and rely on tmp_path fixtures.
+"""
+
+import gzip
+import os
+from pathlib import Path
 
 import pytest
-import tempfile
-import subprocess
-import sys
-from pathlib import Path
-from unittest.mock import patch
-import time
+from typer.testing import CliRunner
 
-from nanopore_simulator import (
-    SimulationConfig,
-    NanoporeSimulator,
-    FileStructureDetector,
-)
+from nanopore_simulator.cli import app
 
+runner = CliRunner()
 
-class TestIntegrationWorkflows:
 
-    def setup_method(self):
-        """Set up test fixtures"""
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.temp_path = Path(self.temp_dir.name)
+# -------------------------------------------------------------------
+# Replay integration
+# -------------------------------------------------------------------
 
-    def teardown_method(self):
-        """Clean up test fixtures"""
-        self.temp_dir.cleanup()
 
-    def create_sample_data(self, structure_type="singleplex"):
-        """Helper to create sample test data"""
-        source_dir = self.temp_path / "sample_data"
-        source_dir.mkdir()
+class TestReplaySingleplex:
+    """Singleplex replay through the CLI."""
 
-        if structure_type == "singleplex":
-            # Create singleplex structure
-            (source_dir / "sample1.fastq").write_text("@read1\nACGT\n+\nIIII\n")
-            (source_dir / "sample2.fastq.gz").write_text("compressed_fastq_data")
-            (source_dir / "sample3.pod5").write_text("binary_pod5_data")
-
-        elif structure_type == "multiplex":
-            # Create multiplex structure
-            for barcode_num in ["01", "02", "12"]:
-                barcode_dir = source_dir / f"barcode{barcode_num}"
-                barcode_dir.mkdir()
-                (barcode_dir / f"reads_{barcode_num}.fastq").write_text(
-                    f"@read_bc{barcode_num}\nACGT\n+\nIIII\n"
-                )
-                (barcode_dir / f"additional_{barcode_num}.fastq.gz").write_text(
-                    f"compressed_bc{barcode_num}"
-                )
-
-            # Add unclassified directory
-            unclass_dir = source_dir / "unclassified"
-            unclass_dir.mkdir()
-            (unclass_dir / "unassigned.fastq").write_text(
-                "@unassigned_read\nNNNN\n+\n!!!!\n"
-            )
-
-        elif structure_type == "mixed":
-            # Create mixed structure (both files and barcode dirs)
-            (source_dir / "direct_file.fastq").write_text("@direct\nACGT\n+\nIIII\n")
-
-            barcode_dir = source_dir / "barcode01"
-            barcode_dir.mkdir()
-            (barcode_dir / "barcode_file.fastq").write_text("@barcode\nACGT\n+\nIIII\n")
-
-        return source_dir
-
-    def test_end_to_end_singleplex_workflow(self):
-        """Test complete singleplex workflow from detection to file processing"""
-        source_dir = self.create_sample_data("singleplex")
-        target_dir = self.temp_path / "output_singleplex"
-
-        # Step 1: Detect structure
-        structure = FileStructureDetector.detect_structure(source_dir)
-        assert structure == "singleplex"
-
-        # Step 2: Configure simulation
-        config = SimulationConfig(
-            source_dir=source_dir,
-            target_dir=target_dir,
-            interval=0.1,  # Fast for testing
-            operation="copy",
-            batch_size=2,
-        )
-
-        # Step 3: Run simulation
-        simulator = NanoporeSimulator(config)
-        simulator.run_simulation()
-
-        # Step 4: Verify results
-        assert target_dir.exists()
-        assert (target_dir / "sample1.fastq").exists()
-        assert (target_dir / "sample2.fastq.gz").exists()
-        assert (target_dir / "sample3.pod5").exists()
-
-        # Verify content preservation
-        assert (target_dir / "sample1.fastq").read_text() == "@read1\nACGT\n+\nIIII\n"
-        assert (target_dir / "sample2.fastq.gz").read_text() == "compressed_fastq_data"
-        assert (target_dir / "sample3.pod5").read_text() == "binary_pod5_data"
-
-    def test_end_to_end_multiplex_workflow(self):
-        """Test complete multiplex workflow"""
-        source_dir = self.create_sample_data("multiplex")
-        target_dir = self.temp_path / "output_multiplex"
-
-        # Detect and simulate
-        structure = FileStructureDetector.detect_structure(source_dir)
-        assert structure == "multiplex"
-
-        config = SimulationConfig(
-            source_dir=source_dir,
-            target_dir=target_dir,
-            interval=0.1,
-            operation="link",  # Test symlink operation
-        )
-
-        simulator = NanoporeSimulator(config)
-        simulator.run_simulation()
-
-        # Verify barcode directory structure
-        for barcode_num in ["01", "02", "12"]:
-            barcode_dir = target_dir / f"barcode{barcode_num}"
-            assert barcode_dir.exists()
-            assert barcode_dir.is_dir()
-
-            reads_file = barcode_dir / f"reads_{barcode_num}.fastq"
-            additional_file = barcode_dir / f"additional_{barcode_num}.fastq.gz"
-
-            assert reads_file.exists()
-            assert additional_file.exists()
-
-            # Verify symlinks
-            assert reads_file.is_symlink()
-            assert additional_file.is_symlink()
-
-            # Verify content through symlinks
-            assert reads_file.read_text() == f"@read_bc{barcode_num}\nACGT\n+\nIIII\n"
-
-        # Verify unclassified directory
-        unclass_dir = target_dir / "unclassified"
-        assert unclass_dir.exists()
-        unclass_file = unclass_dir / "unassigned.fastq"
-        assert unclass_file.exists()
-        assert unclass_file.is_symlink()
-        assert unclass_file.read_text() == "@unassigned_read\nNNNN\n+\n!!!!\n"
-
-    def test_console_script_integration(self):
-        """Test the installed console script end-to-end"""
-        source_dir = self.create_sample_data("singleplex")
-        target_dir = self.temp_path / "console_output"
-
-        # Run via console script
-        cmd = [
-            sys.executable,
-            "-m",
-            "nanopore_simulator.cli.main",
-            "replay",
-            "--source",
-            str(source_dir),
-            "--target",
-            str(target_dir),
-            "--interval",
-            "0.1",
-            "--batch-size",
-            "3",
-        ]
-
-        result = subprocess.run(cmd, capture_output=True, text=True)
-
-        assert result.returncode == 0
-        assert "Starting nanopore simulation" in result.stderr
-        assert "Simulation completed" in result.stderr
-
-        # Verify files were processed
-        assert (target_dir / "sample1.fastq").exists()
-        assert (target_dir / "sample2.fastq.gz").exists()
-        assert (target_dir / "sample3.pod5").exists()
-
-    def test_forced_structure_override(self):
-        """Test forcing structure detection override"""
-        source_dir = self.create_sample_data(
-            "mixed"
-        )  # Has both direct files and barcode dirs
-        target_dir = self.temp_path / "forced_output"
-
-        # Force singleplex interpretation
-        config = SimulationConfig(
-            source_dir=source_dir,
-            target_dir=target_dir,
-            force_structure="singleplex",
-            interval=0.1,
-        )
-
-        simulator = NanoporeSimulator(config)
-        simulator.run_simulation()
-
-        # Should only process direct files, ignore barcode directories
-        assert (target_dir / "direct_file.fastq").exists()
-        assert not (target_dir / "barcode01").exists()
-
-    def test_large_batch_processing(self):
-        """Test processing with large batch sizes"""
-        source_dir = self.temp_path / "large_batch_source"
-        source_dir.mkdir()
-
-        # Create many files
-        num_files = 20
-        for i in range(num_files):
-            (source_dir / f"file_{i:03d}.fastq").write_text(
-                f"@read{i}\nACGT\n+\nIIII\n"
-            )
-
-        target_dir = self.temp_path / "large_batch_output"
-
-        config = SimulationConfig(
-            source_dir=source_dir,
-            target_dir=target_dir,
-            interval=0.05,  # Very fast
-            batch_size=10,  # Large batch
-        )
-
-        start_time = time.time()
-        simulator = NanoporeSimulator(config)
-        simulator.run_simulation()
-        end_time = time.time()
-
-        # Verify all files processed
-        assert len(list(target_dir.glob("*.fastq"))) == num_files
-
-        # Should be faster due to batching (less than 2 intervals for 20 files with batch_size=10)
-        assert end_time - start_time < 0.2  # Should complete in under 200ms
-
-    def test_mixed_file_types_workflow(self):
-        """Test workflow with mixed FASTQ and POD5 files"""
-        source_dir = self.temp_path / "mixed_types_source"
-        source_dir.mkdir()
-
-        # Create various file types
-        (source_dir / "reads.fastq").write_text("@read1\nACGT\n+\nIIII\n")
-        (source_dir / "reads.fq").write_text("@read2\nTGCA\n+\n~~~\n")
-        (source_dir / "reads.fastq.gz").write_text("compressed_fastq")
-        (source_dir / "reads.fq.gz").write_text("compressed_fq")
-        (source_dir / "signals.pod5").write_text("binary_pod5_signals")
-
-        # Add non-sequencing files (should be ignored)
-        (source_dir / "readme.txt").write_text("This is documentation")
-        (source_dir / "config.json").write_text('{"setting": "value"}')
-
-        target_dir = self.temp_path / "mixed_types_output"
-
-        config = SimulationConfig(
-            source_dir=source_dir, target_dir=target_dir, interval=0.1
-        )
-
-        simulator = NanoporeSimulator(config)
-        simulator.run_simulation()
-
-        # Verify only sequencing files were processed
-        sequencing_files = [
-            "reads.fastq",
-            "reads.fq",
-            "reads.fastq.gz",
-            "reads.fq.gz",
-            "signals.pod5",
-        ]
-        for filename in sequencing_files:
-            assert (target_dir / filename).exists()
-
-        # Verify non-sequencing files were ignored
-        assert not (target_dir / "readme.txt").exists()
-        assert not (target_dir / "config.json").exists()
-
-    def test_nested_barcode_structure(self):
-        """Test handling of complex nested barcode structures"""
-        source_dir = self.temp_path / "nested_source"
-        source_dir.mkdir()
-
-        # Create complex barcode structure with unique names (case-insensitive filesystem safe)
-        barcode_combinations = [
-            ("barcode", "01"),
-            ("barcode", "12"),
-            ("barcode", "96"),
-            ("BC", "02"),
-            ("BC", "13"),
-            ("BC", "97"),  # Different numbers to avoid case conflicts
-            ("bc", "03"),
-            ("bc", "14"),
-            ("bc", "98"),  # Different numbers to avoid case conflicts
-        ]
-
-        for bc_pattern, num in barcode_combinations:
-            barcode_dir = source_dir / f"{bc_pattern}{num}"
-            barcode_dir.mkdir(exist_ok=True)
-
-            # Add multiple files per barcode
-            (barcode_dir / "reads_part1.fastq").write_text(
-                f"@{bc_pattern}{num}_1\nACGT\n+\nIIII\n"
-            )
-            (barcode_dir / "reads_part2.fastq.gz").write_text(
-                f"compressed_{bc_pattern}{num}"
-            )
-            (barcode_dir / "signals.pod5").write_text(f"pod5_{bc_pattern}{num}")
-
-        target_dir = self.temp_path / "nested_output"
-
-        config = SimulationConfig(
-            source_dir=source_dir, target_dir=target_dir, interval=0.05, batch_size=5
-        )
-
-        simulator = NanoporeSimulator(config)
-        simulator.run_simulation()
-
-        # Verify all barcode directories and files were processed
-        expected_dirs = 9  # 9 unique barcode combinations
-        actual_dirs = len([d for d in target_dir.iterdir() if d.is_dir()])
-        assert actual_dirs == expected_dirs
-
-        # Verify file count (3 files per directory × 9 directories)
-        total_files = sum(
-            len(list(d.glob("*"))) for d in target_dir.iterdir() if d.is_dir()
-        )
-        assert total_files == 27
-
-    def test_error_recovery_and_partial_completion(self):
-        """Test behavior when some files cannot be processed"""
-        source_dir = self.temp_path / "error_source"
-        source_dir.mkdir()
-
-        # Create normal files
-        (source_dir / "good_file1.fastq").write_text("@read1\nACGT\n+\nIIII\n")
-        (source_dir / "good_file2.fastq").write_text("@read2\nTGCA\n+\n~~~\n")
-
-        target_dir = self.temp_path / "error_output"
-
-        config = SimulationConfig(
-            source_dir=source_dir, target_dir=target_dir, interval=0.1
-        )
-
-        simulator = NanoporeSimulator(config)
-
-        # Simulate partial failure by making target directory read-only after first file
-        with patch.object(
-            simulator,
-            "_process_file",
-            side_effect=[
-                None,  # First call succeeds
-                PermissionError("Permission denied"),  # Second call fails
+    def test_singleplex_copy_uniform_timing(
+        self, source_dir_singleplex: Path, tmp_path: Path
+    ):
+        """Copy files from a flat source directory with zero interval."""
+        target = tmp_path / "target"
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source_dir_singleplex),
+                "--target", str(target),
+                "--interval", "0",
+                "--quiet",
             ],
-        ):
-            with pytest.raises(PermissionError):
-                simulator.run_simulation()
+        )
+        assert result.exit_code == 0, result.output
+        copied_files = list(target.glob("*.fastq"))
+        source_files = list(source_dir_singleplex.glob("*.fastq"))
+        assert len(copied_files) == len(source_files)
 
-        # Should have processed at least the first file before error
-        # (This tests graceful degradation)
+    def test_singleplex_copy_file_contents_match(
+        self, source_dir_singleplex: Path, tmp_path: Path
+    ):
+        """Copied files preserve the original content."""
+        target = tmp_path / "target"
+        runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source_dir_singleplex),
+                "--target", str(target),
+                "--interval", "0",
+                "--quiet",
+            ],
+        )
+        for src_file in sorted(source_dir_singleplex.glob("*.fastq")):
+            tgt_file = target / src_file.name
+            assert tgt_file.exists()
+            assert tgt_file.read_text() == src_file.read_text()
+
+
+class TestReplayMultiplex:
+    """Multiplex replay through the CLI."""
+
+    def test_multiplex_copy_preserves_barcode_structure(
+        self, source_dir_multiplex: Path, tmp_path: Path
+    ):
+        """Barcode subdirectories are reproduced in the target."""
+        target = tmp_path / "target"
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source_dir_multiplex),
+                "--target", str(target),
+                "--interval", "0",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        for bc in ["barcode01", "barcode02"]:
+            bc_dir = target / bc
+            assert bc_dir.is_dir(), f"Missing barcode dir: {bc}"
+            files = list(bc_dir.glob("*.fastq"))
+            assert len(files) == 3, f"Expected 3 files in {bc}"
+
+
+class TestReplayLink:
+    """Symlink operation through the CLI."""
+
+    def test_link_creates_symlinks(
+        self, source_dir_singleplex: Path, tmp_path: Path
+    ):
+        """Link mode creates working symbolic links."""
+        target = tmp_path / "target"
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source_dir_singleplex),
+                "--target", str(target),
+                "--operation", "link",
+                "--interval", "0",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        linked = list(target.glob("*.fastq"))
+        assert len(linked) == 5
+        for f in linked:
+            assert f.is_symlink()
+
+    def test_link_target_readable(
+        self, source_dir_singleplex: Path, tmp_path: Path
+    ):
+        """Symlinked files resolve to readable content."""
+        target = tmp_path / "target"
+        runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source_dir_singleplex),
+                "--target", str(target),
+                "--operation", "link",
+                "--interval", "0",
+                "--quiet",
+            ],
+        )
+        for f in target.glob("*.fastq"):
+            content = f.read_text()
+            assert "@read" in content
+
+
+class TestReplayProfile:
+    """Profile-based replay through the CLI."""
+
+    def test_development_profile(
+        self, source_dir_singleplex: Path, tmp_path: Path
+    ):
+        """The development profile completes without error."""
+        target = tmp_path / "target"
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source_dir_singleplex),
+                "--target", str(target),
+                "--profile", "development",
+                "--interval", "0",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        # Development profile uses link operation
+        linked = list(target.glob("*.fastq"))
+        assert len(linked) == 5
+
+
+class TestReplayParallel:
+    """Parallel replay through the CLI."""
+
+    def test_parallel_replay_produces_files(
+        self, source_dir_singleplex: Path, tmp_path: Path
+    ):
+        """Parallel mode produces the same files as sequential."""
+        target = tmp_path / "target"
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source_dir_singleplex),
+                "--target", str(target),
+                "--parallel",
+                "--worker-count", "2",
+                "--interval", "0",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert len(list(target.glob("*.fastq"))) == 5
+
+
+class TestReplayTimingModels:
+    """All timing models complete successfully through the CLI."""
+
+    @pytest.mark.parametrize("model", ["uniform", "random", "poisson", "adaptive"])
+    def test_timing_model_completes(
+        self, model: str, source_dir_singleplex: Path, tmp_path: Path
+    ):
+        """Each timing model runs to completion with --interval 0."""
+        target = tmp_path / f"target_{model}"
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source_dir_singleplex),
+                "--target", str(target),
+                "--timing-model", model,
+                "--interval", "0",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert len(list(target.glob("*.fastq"))) == 5
+
+
+class TestReplayNoWait:
+    """The --no-wait flag zeroes the interval."""
+
+    def test_no_wait_flag(
+        self, source_dir_singleplex: Path, tmp_path: Path
+    ):
+        """--no-wait produces the same result as --interval 0."""
+        target = tmp_path / "target"
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source_dir_singleplex),
+                "--target", str(target),
+                "--no-wait",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert len(list(target.glob("*.fastq"))) == 5
+
+
+class TestReplayBatchSize:
+    """Batch size controls how files are grouped."""
+
+    def test_batch_size_does_not_affect_file_count(
+        self, source_dir_singleplex: Path, tmp_path: Path
+    ):
+        """All files are produced regardless of batch size."""
+        target = tmp_path / "target"
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source_dir_singleplex),
+                "--target", str(target),
+                "--batch-size", "3",
+                "--interval", "0",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert len(list(target.glob("*.fastq"))) == 5
+
+
+# -------------------------------------------------------------------
+# Generate integration
+# -------------------------------------------------------------------
+
+
+class TestGenerateSingleGenome:
+    """Single-genome generation through the CLI."""
+
+    def test_single_genome_builtin(self, sample_fasta: Path, tmp_path: Path):
+        """Generate reads from one genome and verify output file count."""
+        target = tmp_path / "gen_target"
+        read_count = 200
+        reads_per_file = 100
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target", str(target),
+                "--genomes", str(sample_fasta),
+                "--generator-backend", "builtin",
+                "--read-count", str(read_count),
+                "--reads-per-file", str(reads_per_file),
+                "--output-format", "fastq",
+                "--no-wait",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        output_files = list(target.glob("*.fastq"))
+        expected_files = read_count // reads_per_file
+        assert len(output_files) == expected_files
+
+    def test_single_genome_output_has_reads(
+        self, sample_fasta: Path, tmp_path: Path
+    ):
+        """Each output file contains the expected number of reads."""
+        target = tmp_path / "gen_target"
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target", str(target),
+                "--genomes", str(sample_fasta),
+                "--generator-backend", "builtin",
+                "--read-count", "50",
+                "--reads-per-file", "50",
+                "--output-format", "fastq",
+                "--no-wait",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        output_files = list(target.glob("*.fastq"))
+        assert len(output_files) == 1
+        content = output_files[0].read_text()
+        # Each read has 4 lines
+        lines = [l for l in content.strip().split("\n") if l]
+        assert len(lines) == 50 * 4
+
+    def test_generate_gzipped_output(
+        self, sample_fasta: Path, tmp_path: Path
+    ):
+        """Generate mode produces gzipped FASTQ files."""
+        target = tmp_path / "gen_target"
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target", str(target),
+                "--genomes", str(sample_fasta),
+                "--generator-backend", "builtin",
+                "--read-count", "50",
+                "--reads-per-file", "50",
+                "--output-format", "fastq.gz",
+                "--no-wait",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        gz_files = list(target.glob("*.fastq.gz"))
+        assert len(gz_files) == 1
+        # Verify the file is actually gzipped and readable
+        with gzip.open(gz_files[0], "rt") as f:
+            content = f.read()
+        assert "@" in content
+
+
+class TestGenerateMultipleGenomes:
+    """Multiple-genome generation through the CLI."""
+
+    def test_multiple_genomes_singleplex(self, tmp_path: Path):
+        """Two genomes produce separate output files in singleplex mode."""
+        genome_a = tmp_path / "genome_a.fa"
+        genome_b = tmp_path / "genome_b.fa"
+        genome_a.write_text(">chr1\nACGTACGTACGTACGT\n")
+        genome_b.write_text(">chr1\nTTTTAAAACCCCGGGG\n")
+
+        target = tmp_path / "gen_target"
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target", str(target),
+                "--genomes", str(genome_a),
+                "--genomes", str(genome_b),
+                "--generator-backend", "builtin",
+                "--read-count", "200",
+                "--reads-per-file", "100",
+                "--output-format", "fastq",
+                "--no-wait",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        output_files = list(target.glob("*.fastq"))
+        # 200 reads split between 2 genomes = 100 each = 1 file each = 2 files
+        assert len(output_files) == 2
+
+    def test_multiple_genomes_multiplex(self, tmp_path: Path):
+        """Two genomes in multiplex mode produce barcode directories."""
+        genome_a = tmp_path / "genome_a.fa"
+        genome_b = tmp_path / "genome_b.fa"
+        genome_a.write_text(">chr1\nACGTACGTACGTACGT\n")
+        genome_b.write_text(">chr1\nTTTTAAAACCCCGGGG\n")
+
+        target = tmp_path / "gen_target"
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target", str(target),
+                "--genomes", str(genome_a),
+                "--genomes", str(genome_b),
+                "--generator-backend", "builtin",
+                "--read-count", "200",
+                "--reads-per-file", "100",
+                "--output-format", "fastq",
+                "--force-structure", "multiplex",
+                "--no-wait",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert (target / "barcode01").is_dir()
+        assert (target / "barcode02").is_dir()
+        bc01_files = list((target / "barcode01").glob("*.fastq"))
+        bc02_files = list((target / "barcode02").glob("*.fastq"))
+        assert len(bc01_files) >= 1
+        assert len(bc02_files) >= 1
+
+
+class TestGenerateAbundanceWeighting:
+    """Abundance-weighted read distribution through the CLI."""
+
+    def test_abundance_weighting(self, tmp_path: Path):
+        """Genomes with different abundances produce proportional files."""
+        genome_a = tmp_path / "genome_a.fa"
+        genome_b = tmp_path / "genome_b.fa"
+        genome_a.write_text(">chr1\nACGTACGTACGTACGT\n")
+        genome_b.write_text(">chr1\nTTTTAAAACCCCGGGG\n")
+
+        target = tmp_path / "gen_target"
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target", str(target),
+                "--genomes", str(genome_a),
+                "--genomes", str(genome_b),
+                "--generator-backend", "builtin",
+                "--read-count", "1000",
+                "--reads-per-file", "100",
+                "--output-format", "fastq",
+                "--abundances", "0.9",
+                "--abundances", "0.1",
+                "--no-wait",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        output_files = list(target.glob("*.fastq"))
+        # 1000 reads total / 100 per file = 10 files
+        assert len(output_files) == 10
+        # Files are named per genome - genome_a should have more files
+        a_files = [f for f in output_files if "genome_a" in f.name]
+        b_files = [f for f in output_files if "genome_b" in f.name]
+        assert len(a_files) > len(b_files)
+
+
+class TestGenerateTimingModels:
+    """Generate mode works with all timing models."""
+
+    @pytest.mark.parametrize("model", ["uniform", "random", "poisson", "adaptive"])
+    def test_generate_with_timing_model(
+        self, model: str, sample_fasta: Path, tmp_path: Path
+    ):
+        """Each timing model completes in generate mode."""
+        target = tmp_path / f"gen_{model}"
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target", str(target),
+                "--genomes", str(sample_fasta),
+                "--generator-backend", "builtin",
+                "--read-count", "50",
+                "--reads-per-file", "50",
+                "--output-format", "fastq",
+                "--timing-model", model,
+                "--no-wait",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert len(list(target.glob("*.fastq"))) == 1
+
+
+class TestGenerateParallel:
+    """Parallel generation through the CLI."""
+
+    def test_parallel_generate(self, sample_fasta: Path, tmp_path: Path):
+        """Parallel mode produces expected number of files."""
+        target = tmp_path / "gen_target"
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target", str(target),
+                "--genomes", str(sample_fasta),
+                "--generator-backend", "builtin",
+                "--read-count", "300",
+                "--reads-per-file", "100",
+                "--output-format", "fastq",
+                "--parallel",
+                "--worker-count", "2",
+                "--no-wait",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert len(list(target.glob("*.fastq"))) == 3
+
+
+# -------------------------------------------------------------------
+# Cross-cutting / utility commands
+# -------------------------------------------------------------------
+
+
+class TestListCommands:
+    """Utility list commands return expected content."""
+
+    def test_list_profiles_exits_zero(self):
+        result = runner.invoke(app, ["list-profiles"])
+        assert result.exit_code == 0
+
+    def test_list_profiles_contains_development(self):
+        result = runner.invoke(app, ["list-profiles"])
+        assert "development" in result.output
+
+    def test_list_profiles_contains_bursty(self):
+        result = runner.invoke(app, ["list-profiles"])
+        assert "bursty" in result.output
+
+    def test_list_profiles_contains_generate_test(self):
+        result = runner.invoke(app, ["list-profiles"])
+        assert "generate_test" in result.output
+
+    def test_list_adapters_exits_zero(self):
+        result = runner.invoke(app, ["list-adapters"])
+        assert result.exit_code == 0
+
+    def test_list_adapters_contains_nanometa(self):
+        result = runner.invoke(app, ["list-adapters"])
+        assert "nanometa" in result.output
+
+    def test_list_adapters_contains_kraken(self):
+        result = runner.invoke(app, ["list-adapters"])
+        assert "kraken" in result.output
+
+    def test_list_generators_exits_zero(self):
+        result = runner.invoke(app, ["list-generators"])
+        assert result.exit_code == 0
+
+    def test_list_generators_contains_builtin(self):
+        result = runner.invoke(app, ["list-generators"])
+        assert "builtin" in result.output
+
+    def test_list_mocks_exits_zero(self):
+        result = runner.invoke(app, ["list-mocks"])
+        assert result.exit_code == 0
+
+    def test_list_mocks_contains_zymo(self):
+        result = runner.invoke(app, ["list-mocks"])
+        assert "zymo_d6300" in result.output
+
+
+class TestCheckDeps:
+    """Dependency checking through the CLI."""
+
+    def test_check_deps_exits_zero(self):
+        result = runner.invoke(app, ["check-deps"])
+        assert result.exit_code == 0
+
+    def test_check_deps_shows_builtin(self):
+        result = runner.invoke(app, ["check-deps"])
+        assert "builtin" in result.output
+
+    def test_check_deps_shows_categories(self):
+        result = runner.invoke(app, ["check-deps"])
+        assert "Read Generation Backends" in result.output
+
+
+class TestValidateCommand:
+    """Pipeline validation through the CLI."""
+
+    def test_validate_nanometa_with_multiplex_fastq(
+        self, source_dir_multiplex: Path, tmp_path: Path
+    ):
+        """Validate a multiplex directory against the nanometa adapter."""
+        # First replay to create a valid output directory
+        target = tmp_path / "target"
+        runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source_dir_multiplex),
+                "--target", str(target),
+                "--interval", "0",
+                "--quiet",
+            ],
+        )
+        # Now validate
+        result = runner.invoke(
+            app,
+            [
+                "validate",
+                "--pipeline", "nanometa",
+                "--target", str(target),
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Valid: yes" in result.output
+
+    def test_validate_empty_directory_reports_issues(self, tmp_path: Path):
+        """Validating an empty directory reports missing files."""
+        empty_dir = tmp_path / "empty"
+        empty_dir.mkdir()
+        result = runner.invoke(
+            app,
+            [
+                "validate",
+                "--pipeline", "nanometa",
+                "--target", str(empty_dir),
+            ],
+        )
+        assert result.exit_code == 1
+        assert "Valid: no" in result.output
+
+    def test_validate_kraken_adapter(
+        self, source_dir_singleplex: Path, tmp_path: Path
+    ):
+        """Validate a singleplex directory against the kraken adapter."""
+        target = tmp_path / "target"
+        runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source_dir_singleplex),
+                "--target", str(target),
+                "--interval", "0",
+                "--quiet",
+            ],
+        )
+        result = runner.invoke(
+            app,
+            [
+                "validate",
+                "--pipeline", "kraken",
+                "--target", str(target),
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Valid: yes" in result.output
+
+
+class TestRecommendCommand:
+    """Profile recommendation through the CLI."""
+
+    def test_recommend_by_file_count(self):
+        result = runner.invoke(
+            app,
+            ["recommend", "--file-count", "10"],
+        )
+        assert result.exit_code == 0
+        assert "Recommended profiles" in result.output
+
+    def test_recommend_source_directory(
+        self, source_dir_singleplex: Path
+    ):
+        result = runner.invoke(
+            app,
+            ["recommend", "--source", str(source_dir_singleplex)],
+        )
+        assert result.exit_code == 0
+        assert "Recommended profiles" in result.output
+
+
+class TestVersionFlag:
+    """Version flag returns the expected version string."""
+
+    def test_version_output(self):
+        result = runner.invoke(app, ["--version"])
+        assert result.exit_code == 0
+        assert "nanorunner" in result.output
+        assert "3.0.0" in result.output
+
+
+class TestReplayRechunking:
+    """Replay with --reads-per-file rechunking."""
+
+    def test_rechunk_singleplex(self, tmp_path: Path):
+        """Rechunking distributes reads across multiple output files."""
+        # Create source with multi-read FASTQ files
+        source = tmp_path / "source"
+        source.mkdir()
+        reads_content = ""
+        for i in range(10):
+            reads_content += f"@read{i}\nACGTACGT\n+\nIIIIIIII\n"
+        (source / "reads.fastq").write_text(reads_content)
+
+        target = tmp_path / "target"
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source),
+                "--target", str(target),
+                "--reads-per-file", "3",
+                "--interval", "0",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        # 10 reads / 3 per file = 4 chunks (3+3+3+1)
+        output_files = list(target.glob("*.fastq"))
+        assert len(output_files) == 4
+
+
+class TestReplayForceStructure:
+    """The --force-structure flag overrides auto-detection."""
+
+    def test_force_singleplex(
+        self, source_dir_singleplex: Path, tmp_path: Path
+    ):
+        target = tmp_path / "target"
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source_dir_singleplex),
+                "--target", str(target),
+                "--force-structure", "singleplex",
+                "--interval", "0",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert len(list(target.glob("*.fastq"))) == 5
+
+
+class TestReplayPipelinePostValidation:
+    """Post-run pipeline validation through the CLI."""
+
+    def test_replay_with_pipeline_flag(
+        self, source_dir_singleplex: Path, tmp_path: Path
+    ):
+        """The --pipeline flag triggers post-run validation output."""
+        target = tmp_path / "target"
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source_dir_singleplex),
+                "--target", str(target),
+                "--pipeline", "nanometa",
+                "--interval", "0",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "nanometa" in result.output.lower()
+
+
+class TestGenerateWithGenomeDirectory:
+    """Generate mode with a directory of genome files."""
+
+    def test_genome_directory_expansion(self, tmp_path: Path):
+        """A directory containing genome files is expanded automatically."""
+        genome_dir = tmp_path / "genomes"
+        genome_dir.mkdir()
+        (genome_dir / "species_a.fa").write_text(">chr1\nACGTACGTACGTACGT\n")
+        (genome_dir / "species_b.fa").write_text(">chr1\nTTTTAAAACCCCGGGG\n")
+
+        target = tmp_path / "gen_target"
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target", str(target),
+                "--genomes", str(genome_dir),
+                "--generator-backend", "builtin",
+                "--read-count", "100",
+                "--reads-per-file", "50",
+                "--output-format", "fastq",
+                "--no-wait",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        output_files = list(target.glob("*.fastq"))
+        # 100 reads / 2 genomes = 50 each / 50 per file = 1 file each
+        assert len(output_files) == 2
+
+
+class TestErrorHandling:
+    """CLI reports errors cleanly for invalid inputs."""
+
+    def test_missing_source_directory(self, tmp_path: Path):
+        """Replay with non-existent source directory fails."""
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(tmp_path / "nonexistent"),
+                "--target", str(tmp_path / "target"),
+            ],
+        )
+        assert result.exit_code != 0
+
+    def test_generate_no_genome_source(self, tmp_path: Path):
+        """Generate without any genome source fails."""
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target", str(tmp_path / "target"),
+            ],
+        )
+        assert result.exit_code != 0
+
+    def test_generate_mutual_exclusion(
+        self, sample_fasta: Path, tmp_path: Path
+    ):
+        """Providing both --genomes and --mock fails."""
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target", str(tmp_path / "target"),
+                "--genomes", str(sample_fasta),
+                "--mock", "zymo_d6300",
+                "--no-wait",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "mutually exclusive" in result.output.lower()
+
+    def test_invalid_profile_name(
+        self, source_dir_singleplex: Path, tmp_path: Path
+    ):
+        """An unrecognized profile name fails with a clear message."""
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source_dir_singleplex),
+                "--target", str(tmp_path / "target"),
+                "--profile", "nonexistent_profile",
+                "--interval", "0",
+            ],
+        )
+        assert result.exit_code != 0
+
+    def test_reads_per_file_incompatible_with_link(
+        self, source_dir_singleplex: Path, tmp_path: Path
+    ):
+        """--reads-per-file with --operation link fails."""
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source", str(source_dir_singleplex),
+                "--target", str(tmp_path / "target"),
+                "--operation", "link",
+                "--reads-per-file", "5",
+                "--interval", "0",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "incompatible" in result.output.lower()
+
+    def test_validate_unknown_adapter(self, tmp_path: Path):
+        """Validating with an unknown adapter name fails."""
+        empty_dir = tmp_path / "empty"
+        empty_dir.mkdir()
+        result = runner.invoke(
+            app,
+            [
+                "validate",
+                "--pipeline", "nonexistent",
+                "--target", str(empty_dir),
+            ],
+        )
+        assert result.exit_code != 0

@@ -1,45 +1,59 @@
-"""Tests for read generation backends"""
+"""Tests for read generation backends."""
 
 import gzip
 import subprocess
-import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from nanopore_simulator.core.config import SimulationConfig
-from nanopore_simulator.core.simulator import NanoporeSimulator
-from nanopore_simulator.core.generators import (
-    ReadGeneratorConfig,
-    GenomeInput,
+import pytest
+
+from nanopore_simulator.generators import (
     BuiltinGenerator,
-    BadreadGenerator,
-    NanoSimGenerator,
-    create_read_generator,
+    GeneratorConfig,
+    GenomeInput,
+    SubprocessGenerator,
+    create_generator,
     detect_available_backends,
     parse_fasta,
 )
 
 
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
 @pytest.fixture
-def simple_fasta(tmp_path):
-    """Create a simple FASTA file for testing."""
+def simple_fasta(tmp_path: Path) -> Path:
+    """Create a two-record FASTA file."""
     fasta = tmp_path / "genome.fa"
-    fasta.write_text(">chr1\nATCGATCGATCGATCGATCG\n>chr2\nGCTAGCTAGCTAGCTAGCTA\n")
+    fasta.write_text(
+        ">chr1\nACGTACGTACGTACGTACGT\n"
+        ">chr2\nGCTAGCTAGCTAGCTAGCTA\n"
+    )
     return fasta
 
 
 @pytest.fixture
-def gzipped_fasta(tmp_path):
-    """Create a gzipped FASTA file for testing."""
+def gzipped_fasta(tmp_path: Path) -> Path:
+    """Create a gzip-compressed FASTA file."""
     fasta = tmp_path / "genome.fa.gz"
     with gzip.open(fasta, "wt") as f:
-        f.write(">chr1\nATCGATCGATCG\n")
+        f.write(">chr1\nACGTACGTACGT\n>chr2\nTTTTAAAA\n")
     return fasta
 
 
 @pytest.fixture
-def default_config():
-    return ReadGeneratorConfig(
+def empty_fasta(tmp_path: Path) -> Path:
+    """Create a FASTA file with no records."""
+    fasta = tmp_path / "empty.fa"
+    fasta.write_text("")
+    return fasta
+
+
+@pytest.fixture
+def default_config() -> GeneratorConfig:
+    return GeneratorConfig(
         num_reads=50,
         mean_read_length=10,
         std_read_length=3,
@@ -50,455 +64,560 @@ def default_config():
     )
 
 
-class TestReadGeneratorConfig:
+# ---------------------------------------------------------------------------
+# GeneratorConfig
+# ---------------------------------------------------------------------------
 
-    def test_default_values(self):
-        config = ReadGeneratorConfig()
-        assert config.num_reads == 1000
-        assert config.mean_read_length == 5000
-        assert config.output_format == "fastq.gz"
 
-    def test_invalid_num_reads(self):
+class TestGeneratorConfig:
+    """Validation of the GeneratorConfig dataclass."""
+
+    def test_default_values(self) -> None:
+        cfg = GeneratorConfig()
+        assert cfg.num_reads == 1000
+        assert cfg.mean_read_length == 5000
+        assert cfg.std_read_length == 2000
+        assert cfg.min_read_length == 200
+        assert cfg.mean_quality == 20.0
+        assert cfg.std_quality == 4.0
+        assert cfg.reads_per_file == 100
+        assert cfg.output_format == "fastq.gz"
+
+    def test_invalid_num_reads_zero(self) -> None:
         with pytest.raises(ValueError, match="num_reads"):
-            ReadGeneratorConfig(num_reads=0)
+            GeneratorConfig(num_reads=0)
 
-    def test_invalid_output_format(self):
-        with pytest.raises(ValueError, match="output_format"):
-            ReadGeneratorConfig(output_format="bam")
+    def test_invalid_num_reads_negative(self) -> None:
+        with pytest.raises(ValueError, match="num_reads"):
+            GeneratorConfig(num_reads=-5)
 
-    def test_invalid_mean_quality(self):
+    def test_invalid_mean_read_length(self) -> None:
+        with pytest.raises(ValueError, match="mean_read_length"):
+            GeneratorConfig(mean_read_length=0)
+
+    def test_invalid_std_read_length_negative(self) -> None:
+        with pytest.raises(ValueError, match="std_read_length"):
+            GeneratorConfig(std_read_length=-1)
+
+    def test_invalid_min_read_length(self) -> None:
+        with pytest.raises(ValueError, match="min_read_length"):
+            GeneratorConfig(min_read_length=0)
+
+    def test_invalid_mean_quality_zero(self) -> None:
         with pytest.raises(ValueError, match="mean_quality"):
-            ReadGeneratorConfig(mean_quality=-1)
+            GeneratorConfig(mean_quality=0)
 
-    def test_invalid_reads_per_file(self):
+    def test_invalid_mean_quality_negative(self) -> None:
+        with pytest.raises(ValueError, match="mean_quality"):
+            GeneratorConfig(mean_quality=-1.0)
+
+    def test_invalid_std_quality_negative(self) -> None:
+        with pytest.raises(ValueError, match="std_quality"):
+            GeneratorConfig(std_quality=-1)
+
+    def test_invalid_reads_per_file(self) -> None:
         with pytest.raises(ValueError, match="reads_per_file"):
-            ReadGeneratorConfig(reads_per_file=0)
+            GeneratorConfig(reads_per_file=0)
+
+    def test_invalid_output_format(self) -> None:
+        with pytest.raises(ValueError, match="output_format"):
+            GeneratorConfig(output_format="bam")
+
+    def test_valid_output_format_fastq(self) -> None:
+        cfg = GeneratorConfig(output_format="fastq")
+        assert cfg.output_format == "fastq"
+
+    def test_valid_output_format_fastq_gz(self) -> None:
+        cfg = GeneratorConfig(output_format="fastq.gz")
+        assert cfg.output_format == "fastq.gz"
+
+    def test_zero_std_length_is_valid(self) -> None:
+        cfg = GeneratorConfig(std_read_length=0)
+        assert cfg.std_read_length == 0
+
+    def test_zero_std_quality_is_valid(self) -> None:
+        cfg = GeneratorConfig(std_quality=0)
+        assert cfg.std_quality == 0
 
 
-class TestParseFasta:
-
-    def test_parse_simple(self, simple_fasta):
-        seqs = parse_fasta(simple_fasta)
-        assert len(seqs) == 2
-        assert seqs[0][0] == "chr1"
-        assert seqs[0][1] == "ATCGATCGATCGATCGATCG"
-        assert seqs[1][0] == "chr2"
-
-    def test_parse_gzipped(self, gzipped_fasta):
-        seqs = parse_fasta(gzipped_fasta)
-        assert len(seqs) == 1
-        assert seqs[0][1] == "ATCGATCGATCG"
-
-    def test_empty_file(self, tmp_path):
-        empty = tmp_path / "empty.fa"
-        empty.write_text("")
-        seqs = parse_fasta(empty)
-        assert seqs == []
-
-
-class TestBuiltinGenerator:
-
-    def test_is_available(self):
-        assert BuiltinGenerator.is_available() is True
-
-    def test_generate_reads_fastq(self, simple_fasta, tmp_path, default_config):
-        gen = BuiltinGenerator(default_config)
-        genome = GenomeInput(fasta_path=simple_fasta)
-        output = gen.generate_reads(genome, tmp_path / "out", 0)
-
-        assert output.exists()
-        assert output.suffix == ".fastq"
-
-        # Verify FASTQ format
-        lines = output.read_text().strip().split("\n")
-        assert len(lines) == default_config.reads_per_file * 4
-        assert lines[0].startswith("@")
-        assert lines[2] == "+"
-
-    def test_generate_reads_gzipped(self, simple_fasta, tmp_path):
-        config = ReadGeneratorConfig(
-            reads_per_file=5,
-            mean_read_length=10,
-            std_read_length=2,
-            min_read_length=5,
-            output_format="fastq.gz",
-        )
-        gen = BuiltinGenerator(config)
-        genome = GenomeInput(fasta_path=simple_fasta)
-        output = gen.generate_reads(genome, tmp_path / "out", 1)
-
-        assert output.exists()
-        assert output.name.endswith(".fastq.gz")
-
-        with gzip.open(output, "rt") as f:
-            content = f.read()
-        lines = content.strip().split("\n")
-        assert len(lines) == 5 * 4
-
-    def test_empty_genome_raises(self, tmp_path, default_config):
-        fasta = tmp_path / "empty.fa"
-        fasta.write_text(">chr1\n")
-        gen = BuiltinGenerator(default_config)
-        genome = GenomeInput(fasta_path=fasta)
-        with pytest.raises(ValueError, match="Empty genome"):
-            gen.generate_reads(genome, tmp_path / "out", 0)
-
-    def test_no_sequences_raises(self, tmp_path, default_config):
-        fasta = tmp_path / "noseq.fa"
-        fasta.write_text("")
-        gen = BuiltinGenerator(default_config)
-        genome = GenomeInput(fasta_path=fasta)
-        with pytest.raises(ValueError, match="No sequences found"):
-            gen.generate_reads(genome, tmp_path / "out", 0)
-
-    def test_read_lengths_respect_minimum(self, simple_fasta, tmp_path):
-        config = ReadGeneratorConfig(
-            reads_per_file=20,
-            mean_read_length=8,
-            std_read_length=5,
-            min_read_length=5,
-            output_format="fastq",
-        )
-        gen = BuiltinGenerator(config)
-        genome = GenomeInput(fasta_path=simple_fasta)
-        output = gen.generate_reads(genome, tmp_path / "out", 0)
-
-        lines = output.read_text().strip().split("\n")
-        for i in range(0, len(lines), 4):
-            seq = lines[i + 1]
-            assert len(seq) >= 5
-
-    def test_zero_std_produces_uniform_length(self, simple_fasta, tmp_path):
-        config = ReadGeneratorConfig(
-            reads_per_file=5,
-            mean_read_length=10,
-            std_read_length=0,
-            min_read_length=5,
-            output_format="fastq",
-        )
-        gen = BuiltinGenerator(config)
-        genome = GenomeInput(fasta_path=simple_fasta)
-        output = gen.generate_reads(genome, tmp_path / "out", 0)
-
-        lines = output.read_text().strip().split("\n")
-        for i in range(0, len(lines), 4):
-            seq = lines[i + 1]
-            assert len(seq) == 10
-
-
-class TestBadreadGenerator:
-
-    def test_is_available_when_missing(self):
-        with patch("shutil.which", return_value=None):
-            assert BadreadGenerator.is_available() is False
-
-    def test_is_available_when_present(self):
-        mock_result = MagicMock(returncode=0)
-        with patch("shutil.which", return_value="/usr/bin/badread"):
-            with patch("subprocess.run", return_value=mock_result):
-                assert BadreadGenerator.is_available() is True
-
-    def test_is_available_false_when_deps_broken(self):
-        """badread in PATH but fails to start (e.g. missing edlib)."""
-        mock_result = MagicMock(returncode=1)
-        with patch("shutil.which", return_value="/usr/bin/badread"):
-            with patch("subprocess.run", return_value=mock_result):
-                assert BadreadGenerator.is_available() is False
-
-    def test_is_available_false_on_timeout(self):
-        with patch("shutil.which", return_value="/usr/bin/badread"):
-            with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("badread", 10)):
-                assert BadreadGenerator.is_available() is False
-
-
-class TestNanoSimGenerator:
-
-    def test_is_available_when_missing(self):
-        with patch("shutil.which", return_value=None):
-            assert NanoSimGenerator.is_available() is False
-
-    def test_is_available_when_present(self):
-        mock_result = MagicMock(returncode=0)
-        with patch("shutil.which", return_value="/usr/bin/nanosim"):
-            with patch("subprocess.run", return_value=mock_result):
-                assert NanoSimGenerator.is_available() is True
-
-    def test_is_available_false_when_deps_broken(self):
-        """nanosim in PATH but fails to start."""
-        mock_result = MagicMock(returncode=1)
-        with patch("shutil.which", return_value="/usr/bin/nanosim"):
-            with patch("subprocess.run", return_value=mock_result):
-                assert NanoSimGenerator.is_available() is False
-
-
-class TestFactory:
-
-    def test_create_builtin(self):
-        config = ReadGeneratorConfig()
-        gen = create_read_generator("builtin", config)
-        assert isinstance(gen, BuiltinGenerator)
-
-    def test_create_auto_selects_builtin(self):
-        config = ReadGeneratorConfig()
-        with patch.object(BadreadGenerator, "is_available", return_value=False):
-            with patch.object(NanoSimGenerator, "is_available", return_value=False):
-                gen = create_read_generator("auto", config)
-                assert isinstance(gen, BuiltinGenerator)
-
-    def test_create_unknown_backend(self):
-        config = ReadGeneratorConfig()
-        with pytest.raises(ValueError, match="Unknown backend"):
-            create_read_generator("nonexistent", config)
-
-    def test_create_unavailable_backend(self):
-        config = ReadGeneratorConfig()
-        with patch.object(BadreadGenerator, "is_available", return_value=False):
-            with pytest.raises(ValueError, match="not available"):
-                create_read_generator("badread", config)
-
-
-class TestDetectBackends:
-
-    def test_detect_returns_dict(self):
-        backends = detect_available_backends()
-        assert "builtin" in backends
-        assert "badread" in backends
-        assert "nanosim" in backends
-        assert backends["builtin"] is True
+# ---------------------------------------------------------------------------
+# GenomeInput
+# ---------------------------------------------------------------------------
 
 
 class TestGenomeInput:
+    """GenomeInput dataclass."""
 
-    def test_defaults(self, simple_fasta):
+    def test_basic_creation(self, simple_fasta: Path) -> None:
         gi = GenomeInput(fasta_path=simple_fasta)
+        assert gi.fasta_path == simple_fasta
         assert gi.barcode is None
 
-    def test_with_barcode(self, simple_fasta):
+    def test_with_barcode(self, simple_fasta: Path) -> None:
         gi = GenomeInput(fasta_path=simple_fasta, barcode="barcode01")
         assert gi.barcode == "barcode01"
 
 
-class TestBuiltinGeneratorWarning:
-
-    def test_builtin_generator_warning_logged(self, simple_fasta, tmp_path, caplog):
-        """Verify warning is emitted when builtin generator is used."""
-        import logging
-
-        config = SimulationConfig(
-            target_dir=tmp_path / "output",
-            operation="generate",
-            genome_inputs=[simple_fasta],
-            read_count=10,
-            reads_per_file=10,
-            mean_read_length=10,
-            std_read_length=3,
-            min_read_length=5,
-            output_format="fastq",
-            interval=0.0,
-            timing_model="uniform",
-            generator_backend="builtin",
-        )
-        with caplog.at_level(logging.WARNING):
-            NanoporeSimulator(config, enable_monitoring=False)
-        assert any("error-free" in msg.lower() for msg in caplog.messages)
+# ---------------------------------------------------------------------------
+# parse_fasta
+# ---------------------------------------------------------------------------
 
 
-class TestGenomeCache:
+class TestParseFasta:
+    """FASTA parsing for both plain and gzipped files."""
 
-    def test_genome_cache_avoids_reparse(self, simple_fasta, default_config):
-        """Cached genome should return same sequence without re-parsing."""
+    def test_parse_plain(self, simple_fasta: Path) -> None:
+        records = parse_fasta(simple_fasta)
+        assert len(records) == 2
+        assert records[0][0] == "chr1"
+        assert records[0][1] == "ACGTACGTACGTACGTACGT"
+        assert records[1][0] == "chr2"
+
+    def test_parse_gzipped(self, gzipped_fasta: Path) -> None:
+        records = parse_fasta(gzipped_fasta)
+        assert len(records) == 2
+        assert records[0][0] == "chr1"
+        assert records[0][1] == "ACGTACGTACGT"
+
+    def test_parse_empty(self, empty_fasta: Path) -> None:
+        records = parse_fasta(empty_fasta)
+        assert records == []
+
+    def test_sequences_uppercased(self, tmp_path: Path) -> None:
+        fasta = tmp_path / "lower.fa"
+        fasta.write_text(">seq1\nacgtacgt\n")
+        records = parse_fasta(fasta)
+        assert records[0][1] == "ACGTACGT"
+
+    def test_multi_line_sequence(self, tmp_path: Path) -> None:
+        fasta = tmp_path / "multiline.fa"
+        fasta.write_text(">seq1\nACGT\nTTTT\n")
+        records = parse_fasta(fasta)
+        assert records[0][1] == "ACGTTTTT"
+
+    def test_header_uses_first_word(self, tmp_path: Path) -> None:
+        fasta = tmp_path / "header.fa"
+        fasta.write_text(">seq1 description text\nACGT\n")
+        records = parse_fasta(fasta)
+        assert records[0][0] == "seq1"
+
+
+# ---------------------------------------------------------------------------
+# BuiltinGenerator
+# ---------------------------------------------------------------------------
+
+
+class TestBuiltinGenerator:
+    """Tests for the built-in (error-free) read generator."""
+
+    def test_is_available_always_true(self) -> None:
+        assert BuiltinGenerator.is_available() is True
+
+    def test_generate_reads_creates_file(
+        self, default_config: GeneratorConfig, simple_fasta: Path, tmp_path: Path
+    ) -> None:
         gen = BuiltinGenerator(default_config)
         genome = GenomeInput(fasta_path=simple_fasta)
+        out = gen.generate_reads(genome, tmp_path / "out", file_index=0)
+        assert out.exists()
+        assert out.stat().st_size > 0
 
-        seq1 = gen._get_genome_sequence(genome)
-        seq2 = gen._get_genome_sequence(genome)
-        assert seq1 is seq2  # Same object from cache
-
-    def test_genome_cache_resolves_symlinks(self, simple_fasta, tmp_path, default_config):
-        """Cache should identify symlinks to the same file."""
-        link = tmp_path / "link.fa"
-        link.symlink_to(simple_fasta)
-
-        gen = BuiltinGenerator(default_config)
-        g1 = GenomeInput(fasta_path=simple_fasta)
-        g2 = GenomeInput(fasta_path=link)
-
-        seq1 = gen._get_genome_sequence(g1)
-        seq2 = gen._get_genome_sequence(g2)
-        assert seq1 is seq2
-
-
-class TestReverseComplement:
-
-    def test_basic_complement(self):
-        """Verify reverse complement with known input."""
-        config = ReadGeneratorConfig()
-        assert BuiltinGenerator._reverse_complement("ATCG") == "CGAT"
-
-    def test_handles_lowercase(self):
-        """Translation table should handle lowercase bases."""
-        assert BuiltinGenerator._reverse_complement("atcg") == "cgat"
-
-    def test_handles_n(self):
-        """N bases should complement to N."""
-        assert BuiltinGenerator._reverse_complement("ANA") == "TNT"
-
-
-class TestQualityDistribution:
-
-    def test_quality_values_in_phred_range(self, simple_fasta, tmp_path):
-        """All quality characters should be in Phred+33 range [33, 73]."""
-        config = ReadGeneratorConfig(
-            reads_per_file=50,
-            mean_read_length=15,
+    def test_generate_reads_correct_count(
+        self, simple_fasta: Path, tmp_path: Path
+    ) -> None:
+        cfg = GeneratorConfig(
+            num_reads=20,
+            mean_read_length=10,
             std_read_length=2,
             min_read_length=5,
-            mean_quality=20.0,
-            std_quality=5.0,
+            reads_per_file=20,
             output_format="fastq",
         )
-        gen = BuiltinGenerator(config)
+        gen = BuiltinGenerator(cfg)
         genome = GenomeInput(fasta_path=simple_fasta)
-        output = gen.generate_reads(genome, tmp_path / "out", 0)
+        out = gen.generate_reads(genome, tmp_path / "out", file_index=0)
 
-        lines = output.read_text().strip().split("\n")
-        for i in range(3, len(lines), 4):
-            qual_line = lines[i]
-            for ch in qual_line:
-                assert 33 <= ord(ch) <= 73, f"Quality char {ch!r} out of range"
+        # Count reads in the output file (each FASTQ record = 4 lines)
+        lines = out.read_text().strip().split("\n")
+        assert len(lines) == 20 * 4
 
-
-class TestQualityDefaults:
-
-    def test_config_default_mean_quality(self):
-        """Default mean_quality should be 20.0 (R10.4.1 + SUP)."""
-        config = ReadGeneratorConfig()
-        assert config.mean_quality == 20.0
-
-    def test_config_default_std_quality(self):
-        """Default std_quality should be 4.0."""
-        config = ReadGeneratorConfig()
-        assert config.std_quality == 4.0
-
-    def test_simulation_config_default_mean_quality(self, simple_fasta, tmp_path):
-        """SimulationConfig default mean_quality should be 20.0."""
-        config = SimulationConfig(
-            target_dir=tmp_path,
-            operation="generate",
-            genome_inputs=[simple_fasta],
+    def test_generate_reads_explicit_num_reads(
+        self, default_config: GeneratorConfig, simple_fasta: Path, tmp_path: Path
+    ) -> None:
+        gen = BuiltinGenerator(default_config)
+        genome = GenomeInput(fasta_path=simple_fasta)
+        out = gen.generate_reads(
+            genome, tmp_path / "out", file_index=0, num_reads=5
         )
-        assert config.mean_quality == 20.0
+        lines = out.read_text().strip().split("\n")
+        assert len(lines) == 5 * 4
 
-    def test_simulation_config_default_std_quality(self, simple_fasta, tmp_path):
-        """SimulationConfig default std_quality should be 4.0."""
-        config = SimulationConfig(
-            target_dir=tmp_path,
-            operation="generate",
-            genome_inputs=[simple_fasta],
-        )
-        assert config.std_quality == 4.0
-
-
-class TestSubprocessErrorWrapping:
-    """Tests for subprocess error wrapping with install hints."""
-
-    def test_badread_subprocess_error_includes_hint(self, simple_fasta, tmp_path):
-        """BadreadGenerator should wrap CalledProcessError with install hint."""
-        config = ReadGeneratorConfig(
-            reads_per_file=5,
+    def test_generate_reads_gzipped(
+        self, simple_fasta: Path, tmp_path: Path
+    ) -> None:
+        cfg = GeneratorConfig(
+            num_reads=5,
             mean_read_length=10,
-            output_format="fastq",
-        )
-        gen = BadreadGenerator(config)
-        genome = GenomeInput(fasta_path=simple_fasta)
-
-        error = subprocess.CalledProcessError(
-            1, "badread", stderr="reference file not found"
-        )
-        with patch("subprocess.run", side_effect=error):
-            with pytest.raises(RuntimeError, match="badread exited with status 1"):
-                gen.generate_reads(genome, tmp_path / "out", 0)
-
-    def test_badread_error_contains_install_hint(self, simple_fasta, tmp_path):
-        """Error message should include conda install instructions."""
-        config = ReadGeneratorConfig(
+            std_read_length=0,
+            min_read_length=5,
             reads_per_file=5,
-            mean_read_length=10,
-            output_format="fastq",
+            output_format="fastq.gz",
         )
-        gen = BadreadGenerator(config)
+        gen = BuiltinGenerator(cfg)
         genome = GenomeInput(fasta_path=simple_fasta)
+        out = gen.generate_reads(genome, tmp_path / "out", file_index=0)
+        assert out.name.endswith(".fastq.gz")
+        with gzip.open(out, "rt") as f:
+            content = f.read().strip()
+        assert len(content.split("\n")) == 5 * 4
 
-        error = subprocess.CalledProcessError(1, "badread", stderr="error msg")
-        with patch("subprocess.run", side_effect=error):
-            with pytest.raises(RuntimeError, match="conda install.*badread"):
-                gen.generate_reads(genome, tmp_path / "out", 0)
+    def test_generate_reads_in_memory(
+        self, default_config: GeneratorConfig, simple_fasta: Path
+    ) -> None:
+        gen = BuiltinGenerator(default_config)
+        genome = GenomeInput(fasta_path=simple_fasta)
+        reads = gen.generate_reads_in_memory(genome, num_reads=5)
+        assert len(reads) == 5
+        for header, seq, sep, qual in reads:
+            assert header.startswith("@")
+            assert len(seq) > 0
+            assert sep == "+"
+            assert len(qual) == len(seq)
 
-    def test_badread_in_memory_error_wrapping(self, simple_fasta):
-        """BadreadGenerator.generate_reads_in_memory should also wrap errors."""
-        config = ReadGeneratorConfig(
+    def test_generate_reads_in_memory_quality_valid_phred(
+        self, default_config: GeneratorConfig, simple_fasta: Path
+    ) -> None:
+        gen = BuiltinGenerator(default_config)
+        genome = GenomeInput(fasta_path=simple_fasta)
+        reads = gen.generate_reads_in_memory(genome, num_reads=3)
+        for _, _, _, qual in reads:
+            for ch in qual:
+                assert 33 <= ord(ch) <= 73  # Phred+33 range
+
+    def test_output_filename_plain(
+        self, default_config: GeneratorConfig, simple_fasta: Path
+    ) -> None:
+        gen = BuiltinGenerator(default_config)
+        genome = GenomeInput(fasta_path=simple_fasta)
+        name = gen._output_filename(genome, file_index=3)
+        assert "genome" in name
+        assert "0003" in name
+        assert name.endswith(".fastq")
+
+    def test_output_filename_gz(
+        self, simple_fasta: Path
+    ) -> None:
+        cfg = GeneratorConfig(output_format="fastq.gz")
+        gen = BuiltinGenerator(cfg)
+        genome = GenomeInput(fasta_path=simple_fasta)
+        name = gen._output_filename(genome, file_index=0)
+        assert name.endswith(".fastq.gz")
+
+    def test_genome_caching(
+        self, default_config: GeneratorConfig, simple_fasta: Path, tmp_path: Path
+    ) -> None:
+        gen = BuiltinGenerator(default_config)
+        genome = GenomeInput(fasta_path=simple_fasta)
+        # First call parses; second should use cache.
+        gen.generate_reads(genome, tmp_path / "out1", file_index=0, num_reads=2)
+        gen.generate_reads(genome, tmp_path / "out2", file_index=1, num_reads=2)
+        # Cache should have exactly one entry
+        assert len(gen._genome_cache) == 1
+
+    def test_empty_fasta_raises(
+        self, default_config: GeneratorConfig, empty_fasta: Path, tmp_path: Path
+    ) -> None:
+        gen = BuiltinGenerator(default_config)
+        genome = GenomeInput(fasta_path=empty_fasta)
+        with pytest.raises(ValueError, match="No sequences"):
+            gen.generate_reads(genome, tmp_path / "out", file_index=0)
+
+    def test_reverse_complement(self) -> None:
+        assert BuiltinGenerator._reverse_complement("ACGT") == "ACGT"
+        assert BuiltinGenerator._reverse_complement("AAAA") == "TTTT"
+        assert BuiltinGenerator._reverse_complement("GCTA") == "TAGC"
+
+    def test_zero_std_produces_constant_length(
+        self, simple_fasta: Path
+    ) -> None:
+        cfg = GeneratorConfig(
+            num_reads=5,
+            mean_read_length=10,
+            std_read_length=0,
+            min_read_length=5,
             reads_per_file=5,
-            mean_read_length=10,
             output_format="fastq",
         )
-        gen = BadreadGenerator(config)
+        gen = BuiltinGenerator(cfg)
         genome = GenomeInput(fasta_path=simple_fasta)
+        reads = gen.generate_reads_in_memory(genome, num_reads=5)
+        for _, seq, _, _ in reads:
+            assert len(seq) == 10
 
-        error = subprocess.CalledProcessError(1, "badread", stderr="boom")
-        with patch("subprocess.run", side_effect=error):
-            with pytest.raises(RuntimeError, match="badread exited with status 1"):
-                gen.generate_reads_in_memory(genome, 5)
-
-    def test_nanosim_subprocess_error_includes_hint(self, simple_fasta, tmp_path):
-        """NanoSimGenerator should wrap CalledProcessError with install hint."""
-        config = ReadGeneratorConfig(
-            reads_per_file=5,
-            mean_read_length=10,
+    def test_min_read_length_enforced(
+        self, simple_fasta: Path
+    ) -> None:
+        cfg = GeneratorConfig(
+            num_reads=20,
+            mean_read_length=5,
+            std_read_length=10,
+            min_read_length=5,
+            reads_per_file=20,
             output_format="fastq",
         )
-        gen = NanoSimGenerator(config)
+        gen = BuiltinGenerator(cfg)
+        genome = GenomeInput(fasta_path=simple_fasta)
+        reads = gen.generate_reads_in_memory(genome, num_reads=20)
+        for _, seq, _, _ in reads:
+            assert len(seq) >= 5
+
+
+# ---------------------------------------------------------------------------
+# SubprocessGenerator
+# ---------------------------------------------------------------------------
+
+
+class TestSubprocessGenerator:
+    """Tests for the unified subprocess wrapper (badread / nanosim)."""
+
+    def test_class_is_available_always_false(self) -> None:
+        # The classmethod returns False; instance _backend_available() checks.
+        assert SubprocessGenerator.is_available() is False
+
+    def test_badread_backend_available_when_installed(self) -> None:
+        with patch("nanopore_simulator.generators.shutil.which", return_value="/usr/bin/badread"):
+            with patch("nanopore_simulator.generators.subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0)
+                gen = SubprocessGenerator(GeneratorConfig(), backend="badread")
+                assert gen._backend_available() is True
+
+    def test_badread_not_available(self) -> None:
+        with patch("nanopore_simulator.generators.shutil.which", return_value=None):
+            gen = SubprocessGenerator(GeneratorConfig(), backend="badread")
+            assert gen._backend_available() is False
+
+    def test_nanosim_available_via_nanosim(self) -> None:
+        def which_side_effect(name: str) -> str:
+            if name == "nanosim":
+                return "/usr/bin/nanosim"
+            return None
+
+        with patch("nanopore_simulator.generators.shutil.which", side_effect=which_side_effect):
+            with patch("nanopore_simulator.generators.subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0)
+                gen = SubprocessGenerator(GeneratorConfig(), backend="nanosim")
+                assert gen._backend_available() is True
+
+    def test_nanosim_available_via_simulator_py(self) -> None:
+        def which_side_effect(name: str) -> str:
+            if name == "simulator.py":
+                return "/usr/bin/simulator.py"
+            return None
+
+        with patch("nanopore_simulator.generators.shutil.which", side_effect=which_side_effect):
+            with patch("nanopore_simulator.generators.subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0)
+                gen = SubprocessGenerator(GeneratorConfig(), backend="nanosim")
+                assert gen._backend_available() is True
+
+    def test_nanosim_not_available(self) -> None:
+        with patch("nanopore_simulator.generators.shutil.which", return_value=None):
+            gen = SubprocessGenerator(GeneratorConfig(), backend="nanosim")
+            assert gen._backend_available() is False
+
+    def test_badread_generate_reads(
+        self, simple_fasta: Path, tmp_path: Path
+    ) -> None:
+        fastq_output = "@read1\nACGT\n+\nIIII\n@read2\nTTTT\n+\nIIII\n"
+        mock_result = MagicMock(
+            returncode=0, stdout=fastq_output, stderr=""
+        )
+        cfg = GeneratorConfig(
+            num_reads=2,
+            mean_read_length=10,
+            reads_per_file=2,
+            output_format="fastq",
+        )
+        gen = SubprocessGenerator(cfg, backend="badread")
         genome = GenomeInput(fasta_path=simple_fasta)
 
-        error = subprocess.CalledProcessError(
-            1, "nanosim", stderr="model not found"
+        with patch("nanopore_simulator.generators.subprocess.run", return_value=mock_result):
+            out = gen.generate_reads(genome, tmp_path / "out", file_index=0)
+
+        assert out.exists()
+        content = out.read_text()
+        assert "@read1" in content
+
+    def test_badread_generate_reads_subprocess_error(
+        self, simple_fasta: Path, tmp_path: Path
+    ) -> None:
+        cfg = GeneratorConfig(
+            num_reads=2, mean_read_length=10, reads_per_file=2, output_format="fastq"
         )
-        with patch("subprocess.run", side_effect=error):
-            with patch.object(
-                NanoSimGenerator, "_get_command", return_value="nanosim"
+        gen = SubprocessGenerator(cfg, backend="badread")
+        genome = GenomeInput(fasta_path=simple_fasta)
+
+        exc = subprocess.CalledProcessError(1, "badread", stderr="boom")
+        with patch("nanopore_simulator.generators.subprocess.run", side_effect=exc):
+            with pytest.raises(RuntimeError, match="badread exited"):
+                gen.generate_reads(genome, tmp_path / "out", file_index=0)
+
+    def test_nanosim_generate_reads(
+        self, simple_fasta: Path, tmp_path: Path
+    ) -> None:
+        """NanoSim produces FASTA output that must be converted to FASTQ."""
+        cfg = GeneratorConfig(
+            num_reads=2,
+            mean_read_length=10,
+            reads_per_file=2,
+            output_format="fastq",
+        )
+        gen = SubprocessGenerator(cfg, backend="nanosim")
+        genome = GenomeInput(fasta_path=simple_fasta)
+        output_dir = tmp_path / "out"
+
+        def run_side_effect(*args, **kwargs):
+            # NanoSim writes aligned/unaligned FASTA files using a prefix
+            cmd = args[0]
+            prefix = None
+            for i, arg in enumerate(cmd):
+                if arg == "-o" and i + 1 < len(cmd):
+                    prefix = cmd[i + 1]
+                    break
+            if prefix:
+                Path(f"{prefix}_aligned_reads.fasta").write_text(
+                    ">read1\nACGT\n>read2\nTTTT\n"
+                )
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch(
+            "nanopore_simulator.generators.shutil.which", return_value="/usr/bin/nanosim"
+        ):
+            with patch(
+                "nanopore_simulator.generators.subprocess.run",
+                side_effect=run_side_effect,
             ):
-                with pytest.raises(RuntimeError, match="nanosim exited with status 1"):
-                    gen.generate_reads(genome, tmp_path / "out", 0)
+                out = gen.generate_reads(genome, output_dir, file_index=0)
 
-    def test_badread_error_includes_stderr(self, simple_fasta, tmp_path):
-        """Wrapped error should include the original stderr content."""
-        config = ReadGeneratorConfig(
-            reads_per_file=5,
+        assert out.exists()
+        # Output should be FASTQ (4 lines per record)
+        lines = out.read_text().strip().split("\n")
+        assert len(lines) % 4 == 0
+        assert lines[0].startswith("@")
+
+    def test_badread_generate_reads_in_memory(self, simple_fasta: Path) -> None:
+        fastq_output = "@read1\nACGT\n+\nIIII\n@read2\nTTTT\n+\nIIII\n"
+        mock_result = MagicMock(
+            returncode=0, stdout=fastq_output, stderr=""
+        )
+        cfg = GeneratorConfig(
+            num_reads=2,
             mean_read_length=10,
+            reads_per_file=2,
             output_format="fastq",
         )
-        gen = BadreadGenerator(config)
+        gen = SubprocessGenerator(cfg, backend="badread")
         genome = GenomeInput(fasta_path=simple_fasta)
 
-        error = subprocess.CalledProcessError(
-            1, "badread", stderr="specific error details"
+        with patch("nanopore_simulator.generators.subprocess.run", return_value=mock_result):
+            reads = gen.generate_reads_in_memory(genome, num_reads=2)
+
+        assert len(reads) == 2
+        assert reads[0][0] == "@read1"
+
+    def test_unknown_backend_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unknown subprocess backend"):
+            SubprocessGenerator(GeneratorConfig(), backend="unknown")
+
+
+# ---------------------------------------------------------------------------
+# create_generator factory
+# ---------------------------------------------------------------------------
+
+
+class TestCreateGenerator:
+    """Factory function for creating generators."""
+
+    def test_create_builtin(self) -> None:
+        gen = create_generator("builtin", GeneratorConfig())
+        assert isinstance(gen, BuiltinGenerator)
+
+    def test_create_auto_falls_to_builtin(self) -> None:
+        """With no external tools, auto should fall back to builtin."""
+        with patch("nanopore_simulator.generators.shutil.which", return_value=None):
+            gen = create_generator("auto", GeneratorConfig())
+            assert isinstance(gen, BuiltinGenerator)
+
+    def test_create_auto_prefers_badread(self) -> None:
+        with patch("nanopore_simulator.generators.shutil.which", return_value="/usr/bin/badread"):
+            with patch("nanopore_simulator.generators.subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0)
+                gen = create_generator("auto", GeneratorConfig())
+                assert isinstance(gen, SubprocessGenerator)
+
+    def test_create_invalid_backend(self) -> None:
+        with pytest.raises(ValueError, match="Unknown backend"):
+            create_generator("invalid", GeneratorConfig())
+
+    def test_create_badread_not_installed(self) -> None:
+        with patch("nanopore_simulator.generators.shutil.which", return_value=None):
+            with pytest.raises(ValueError, match="not available"):
+                create_generator("badread", GeneratorConfig())
+
+    def test_create_nanosim_not_installed(self) -> None:
+        with patch("nanopore_simulator.generators.shutil.which", return_value=None):
+            with pytest.raises(ValueError, match="not available"):
+                create_generator("nanosim", GeneratorConfig())
+
+
+# ---------------------------------------------------------------------------
+# detect_available_backends
+# ---------------------------------------------------------------------------
+
+
+class TestDetectAvailableBackends:
+    """Backend availability detection."""
+
+    def test_returns_dict(self) -> None:
+        result = detect_available_backends()
+        assert isinstance(result, dict)
+        assert "builtin" in result
+
+    def test_builtin_always_true(self) -> None:
+        result = detect_available_backends()
+        assert result["builtin"] is True
+
+    def test_has_badread_and_nanosim_keys(self) -> None:
+        result = detect_available_backends()
+        assert "badread" in result
+        assert "nanosim" in result
+
+    def test_with_no_external_tools(self) -> None:
+        with patch("nanopore_simulator.generators.shutil.which", return_value=None):
+            result = detect_available_backends()
+            assert result["builtin"] is True
+            assert result["badread"] is False
+            assert result["nanosim"] is False
+
+
+# ---------------------------------------------------------------------------
+# Worker genome cache
+# ---------------------------------------------------------------------------
+
+
+class TestWorkerGenomeCache:
+    """Module-level worker genome cache for ProcessPoolExecutor."""
+
+    def test_init_worker_genomes(self) -> None:
+        from nanopore_simulator.generators import (
+            _WORKER_GENOME_CACHE,
+            _init_worker_genomes,
         )
-        with patch("subprocess.run", side_effect=error):
-            with pytest.raises(RuntimeError, match="specific error details"):
-                gen.generate_reads(genome, tmp_path / "out", 0)
 
+        _init_worker_genomes({"test": "ACGT"})
+        # Import again to check the module-level variable was set
+        from nanopore_simulator import generators
 
-class TestFactoryInstallHints:
-    """Tests for install hints in the factory function."""
-
-    def test_unavailable_backend_includes_install_hint(self):
-        """Factory should include install hint for unavailable backends."""
-        config = ReadGeneratorConfig()
-        with patch.object(BadreadGenerator, "is_available", return_value=False):
-            with pytest.raises(ValueError, match="Install with:.*conda"):
-                create_read_generator("badread", config)
-
-    def test_unavailable_nanosim_includes_install_hint(self):
-        config = ReadGeneratorConfig()
-        with patch.object(NanoSimGenerator, "is_available", return_value=False):
-            with pytest.raises(ValueError, match="Install with:.*conda"):
-                create_read_generator("nanosim", config)
+        assert generators._WORKER_GENOME_CACHE.get("test") == "ACGT"
+        # Clean up
+        _init_worker_genomes({})

@@ -1,20 +1,6 @@
-"""
-Nanopore Simulator Package
+"""nanorunner - nanopore sequencing run simulator."""
 
-A Python package for simulating nanopore sequencing runs by copying/linking
-FASTQ or POD5 files to create folder structures that downstream pipelines can watch.
-"""
+__version__ = "3.0.0"
 
-from .core.config import SimulationConfig
-from .core.detector import FileStructureDetector
-from .core.simulator import NanoporeSimulator
-
-__version__ = "2.0.2"
-__author__ = "Andreas Sjodin"
-__email__ = "andreas@example.com"
-
-__all__ = [
-    "SimulationConfig",
-    "FileStructureDetector",
-    "NanoporeSimulator",
-]
+from .config import ReplayConfig, GenerateConfig
+from .runner import run_replay, run_generate

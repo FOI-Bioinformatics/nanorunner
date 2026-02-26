@@ -1,475 +1,342 @@
-"""Tests for progress monitoring system"""
+"""Tests for progress monitoring and resource tracking."""
+
+import threading
+import time
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
-import time
-import threading
-from pathlib import Path
-from unittest.mock import Mock, patch
 
-from nanopore_simulator.core.monitoring import (
-    SimulationMetrics,
-    ProgressDisplay,
+from nanopore_simulator.monitoring import (
+    NullMonitor,
     ProgressMonitor,
-    DetailedProgressMonitor,
-    create_progress_monitor,
+    SimulationMetrics,
+    create_monitor,
+    format_bytes,
+    format_time,
 )
 
 
+# ---------------------------------------------------------------------------
+# SimulationMetrics
+# ---------------------------------------------------------------------------
+
+
 class TestSimulationMetrics:
-    """Test the SimulationMetrics class"""
+    """Metrics dataclass behaviour."""
 
-    def test_metrics_initialization(self):
-        """Test metrics initialization"""
-        metrics = SimulationMetrics(files_total=100)
+    def test_defaults(self) -> None:
+        m = SimulationMetrics(files_total=100)
+        assert m.files_processed == 0
+        assert m.files_total == 100
+        assert m.bytes_processed == 0
+        assert m.eta_seconds is None
+        assert m.start_time > 0
 
-        assert metrics.files_total == 100
-        assert metrics.files_processed == 0
-        assert metrics.start_time > 0
-        assert metrics.end_time is None
-        assert metrics.progress_percentage == 0.0
-        assert metrics.is_complete is False
-        assert len(metrics.timing_breakdown) > 0
+    def test_progress_percentage_zero(self) -> None:
+        m = SimulationMetrics(files_total=0)
+        assert m.progress_percentage == 0.0
 
-    def test_progress_percentage_calculation(self):
-        """Test progress percentage calculation"""
-        metrics = SimulationMetrics(files_total=50)
+    def test_progress_percentage(self) -> None:
+        m = SimulationMetrics(files_total=50, files_processed=25)
+        assert m.progress_percentage == 50.0
 
-        assert metrics.progress_percentage == 0.0
+    def test_progress_percentage_complete(self) -> None:
+        m = SimulationMetrics(files_total=10, files_processed=10)
+        assert m.progress_percentage == 100.0
 
-        metrics.files_processed = 25
-        assert metrics.progress_percentage == 50.0
+    def test_elapsed(self) -> None:
+        m = SimulationMetrics(files_total=10)
+        m.start_time = time.time() - 5.0
+        assert 4.5 <= m.elapsed <= 6.0
 
-        metrics.files_processed = 50
-        assert metrics.progress_percentage == 100.0
-        assert metrics.is_complete is True
+    def test_throughput(self) -> None:
+        m = SimulationMetrics(files_total=100, files_processed=50)
+        m.start_time = time.time() - 10.0
+        assert 4.0 <= m.throughput <= 6.0
 
-    def test_elapsed_time(self):
-        """Test elapsed time calculation"""
-        start_time = time.time()
-        metrics = SimulationMetrics()
-        metrics.start_time = start_time
-
-        time.sleep(0.1)  # Small delay
-        elapsed = metrics.elapsed_time
-        assert elapsed >= 0.1
-        assert elapsed < 1.0  # Should be much less than 1 second
-
-    def test_update_throughput(self):
-        """Test throughput calculation"""
-        metrics = SimulationMetrics()
-        metrics.start_time = time.time() - 10  # 10 seconds ago
-        metrics.files_processed = 20
-        metrics.total_bytes_processed = 2000
-
-        metrics.update_throughput()
-
-        assert (
-            abs(metrics.throughput_files_per_sec - 2.0) < 0.01
-        )  # ~20 files / 10 seconds
-        assert (
-            abs(metrics.throughput_bytes_per_sec - 200.0) < 0.01
-        )  # ~2000 bytes / 10 seconds
-        assert metrics.average_file_size == 100.0  # 2000 bytes / 20 files
-
-    def test_eta_estimation(self):
-        """Test ETA estimation"""
-        metrics = SimulationMetrics(files_total=100)
-        metrics.start_time = time.time() - 10
-        metrics.files_processed = 20
-        metrics.batches_processed = 4
-        metrics.batches_total = 20
-        metrics.total_wait_time = 8.0  # 2 seconds average wait per batch
-
-        metrics.update_throughput()
-        metrics.estimate_eta()
-
-        assert metrics.eta_seconds is not None
-        assert metrics.eta_seconds > 0
-        # Should include both processing time and wait time
-
-    def test_to_dict_conversion(self):
-        """Test conversion to dictionary"""
-        metrics = SimulationMetrics(files_total=50)
-        metrics.files_processed = 25
-        metrics.total_bytes_processed = 1000
-
-        metrics_dict = metrics.to_dict()
-
-        assert metrics_dict["files_processed"] == 25
-        assert metrics_dict["files_total"] == 50
-        assert metrics_dict["progress_percentage"] == 50.0
-        assert metrics_dict["total_bytes_processed"] == 1000
-        assert "timing_breakdown" in metrics_dict
+    def test_throughput_zero_elapsed(self) -> None:
+        m = SimulationMetrics(files_total=100, files_processed=0)
+        assert m.throughput == 0.0
 
 
-class TestProgressDisplay:
-    """Test the ProgressDisplay utility functions"""
-
-    def test_format_bytes(self):
-        """Test byte formatting"""
-        assert ProgressDisplay.format_bytes(512) == "512.0 B"
-        assert ProgressDisplay.format_bytes(1536) == "1.5 KB"
-        assert ProgressDisplay.format_bytes(2048 * 1024) == "2.0 MB"
-        assert ProgressDisplay.format_bytes(1024**3) == "1.0 GB"
-
-    def test_format_time(self):
-        """Test time formatting"""
-        assert ProgressDisplay.format_time(30) == "30.0s"
-        assert ProgressDisplay.format_time(90) == "1.5m"
-        assert ProgressDisplay.format_time(3660) == "1.0h"
-
-    def test_format_rate(self):
-        """Test rate formatting"""
-        assert ProgressDisplay.format_rate(5.2, "files") == "5.2 files/sec"
-        assert ProgressDisplay.format_rate(1024, "bytes") == "1.0 KB/sec"
-
-    def test_create_progress_bar(self):
-        """Test progress bar creation"""
-        bar = ProgressDisplay.create_progress_bar(50.0, width=10)
-        assert "[" in bar and "]" in bar
-        assert "50.0%" in bar
-        assert "█" in bar  # Filled portion
-        assert "░" in bar  # Empty portion
-
-    def test_format_progress_line(self):
-        """Test complete progress line formatting"""
-        metrics = SimulationMetrics(files_total=100)
-        metrics.files_processed = 30
-        metrics.throughput_files_per_sec = 2.5
-        metrics.eta_seconds = 120
-
-        line = ProgressDisplay.format_progress_line(metrics)
-
-        assert "30/100 files" in line
-        assert "2.5 files/sec" in line
-        assert "ETA:" in line
-        assert "Elapsed:" in line
+# ---------------------------------------------------------------------------
+# ProgressMonitor
+# ---------------------------------------------------------------------------
 
 
 class TestProgressMonitor:
-    """Test the ProgressMonitor class"""
+    """Core progress monitor operations."""
 
-    def test_monitor_initialization(self):
-        """Test monitor initialization"""
-        monitor = ProgressMonitor(total_files=50)
+    def test_start_and_stop(self) -> None:
+        mon = ProgressMonitor(total_files=10)
+        mon.start()
+        assert mon._update_thread is not None
+        assert mon._update_thread.is_alive()
+        mon.stop()
+        # Thread should have joined
+        assert not mon._update_thread.is_alive()
 
-        assert monitor.metrics.files_total == 50
-        assert monitor.update_interval == 1.0
-        assert monitor._stop_event is not None
-        assert monitor._lock is not None
+    def test_update_increments(self) -> None:
+        mon = ProgressMonitor(total_files=10)
+        mon.update(bytes_delta=1024)
+        mon.update(bytes_delta=2048)
+        metrics = mon.get_metrics()
+        assert metrics.files_processed == 2
+        assert metrics.bytes_processed == 3072
 
-    def test_monitor_start_stop(self):
-        """Test starting and stopping monitor"""
-        monitor = ProgressMonitor(total_files=10, update_interval=0.1)
+    def test_progress_percentage(self) -> None:
+        mon = ProgressMonitor(total_files=4)
+        mon.update()
+        mon.update()
+        metrics = mon.get_metrics()
+        assert metrics.progress_percentage == 50.0
 
-        # Start monitoring
-        monitor.start()
-        assert monitor._update_thread is not None
-        assert monitor._update_thread.is_alive()
+    def test_estimate_eta_no_progress(self) -> None:
+        mon = ProgressMonitor(total_files=100)
+        metrics = mon.get_metrics()
+        assert metrics.eta_seconds is None
 
-        # Give it a moment to run
-        time.sleep(0.2)
+    def test_estimate_eta_with_progress(self) -> None:
+        mon = ProgressMonitor(total_files=100)
+        # Simulate some progress
+        mon._metrics.start_time = time.time() - 10.0
+        for _ in range(50):
+            mon.update()
+        metrics = mon.get_metrics()
+        # ETA should be approximately 10 seconds (50 files in 10s, 50 remaining)
+        assert metrics.eta_seconds is not None
+        assert 5.0 <= metrics.eta_seconds <= 20.0
 
-        # Stop monitoring
-        monitor.stop()
-        assert not monitor._update_thread.is_alive()
-        assert monitor.metrics.end_time is not None
+    def test_estimate_eta_complete(self) -> None:
+        mon = ProgressMonitor(total_files=5)
+        for _ in range(5):
+            mon.update()
+        metrics = mon.get_metrics()
+        assert metrics.eta_seconds == 0.0
 
-    def test_batch_tracking(self):
-        """Test batch start/end tracking"""
-        monitor = ProgressMonitor(total_files=20)
-        monitor.set_batch_count(5)
+    def test_pause_and_resume(self) -> None:
+        mon = ProgressMonitor(total_files=10)
+        assert not mon.is_paused()
+        mon.pause()
+        assert mon.is_paused()
+        mon.resume()
+        assert not mon.is_paused()
 
-        # Start and end a batch
-        start_time = monitor.start_batch()
-        time.sleep(0.1)
-        monitor.end_batch(start_time)
+    def test_get_metrics_returns_copy(self) -> None:
+        mon = ProgressMonitor(total_files=10)
+        mon.update()
+        m1 = mon.get_metrics()
+        mon.update()
+        m2 = mon.get_metrics()
+        # Copies should differ
+        assert m1.files_processed == 1
+        assert m2.files_processed == 2
 
-        assert monitor.metrics.batches_processed == 1
-        assert monitor.metrics.total_processing_time >= 0.1
+    def test_stop_without_start(self) -> None:
+        """Stopping without starting should not raise."""
+        mon = ProgressMonitor(total_files=10)
+        mon.stop()  # Should be safe
 
-    def test_file_processing_tracking(self):
-        """Test file processing tracking"""
-        monitor = ProgressMonitor(total_files=10)
+    def test_start_idempotent(self) -> None:
+        """Calling start twice should not create duplicate threads."""
+        mon = ProgressMonitor(total_files=10)
+        mon.start()
+        thread1 = mon._update_thread
+        mon.start()
+        thread2 = mon._update_thread
+        # Should be the same thread since it's still alive
+        assert thread1 is thread2
+        mon.stop()
 
-        # Create a temporary file for testing
-        import tempfile
+    def test_resource_metrics_without_psutil(self) -> None:
+        with patch("nanopore_simulator.monitoring.HAS_PSUTIL", False):
+            mon = ProgressMonitor(total_files=10, enable_resources=True)
+            mon.update()
+            metrics = mon.get_metrics()
+            # Should still work, just no resource data
+            assert metrics.files_processed == 1
 
-        with tempfile.NamedTemporaryFile() as tmp_file:
-            tmp_path = Path(tmp_file.name)
-            tmp_file.write(b"test content")
-            tmp_file.flush()
 
-            monitor.record_file_processed(tmp_path, operation_time=0.05)
+# ---------------------------------------------------------------------------
+# Thread safety
+# ---------------------------------------------------------------------------
 
-            assert monitor.metrics.files_processed == 1
-            assert monitor.metrics.total_bytes_processed > 0
-            assert monitor.metrics.timing_breakdown["file_operations"] == 0.05
 
-    def test_error_recording(self):
-        """Test error recording"""
-        monitor = ProgressMonitor(total_files=5)
+class TestThreadSafety:
+    """Concurrent access to the monitor."""
 
-        monitor.record_error("test_error")
-        assert monitor.metrics.errors_encountered == 1
+    def test_concurrent_updates(self) -> None:
+        mon = ProgressMonitor(total_files=200)
+        barrier = threading.Barrier(4)
 
-        monitor.record_error("another_error")
-        assert monitor.metrics.errors_encountered == 2
+        def worker() -> None:
+            barrier.wait()
+            for _ in range(50):
+                mon.update(bytes_delta=100)
 
-    def test_wait_time_tracking(self):
-        """Test wait time tracking"""
-        monitor = ProgressMonitor(total_files=5)
+        threads = [threading.Thread(target=worker) for _ in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
 
-        monitor.add_wait_time(2.5)
-        assert monitor.metrics.total_wait_time == 2.5
-        assert monitor.metrics.timing_breakdown["waiting"] == 2.5
+        metrics = mon.get_metrics()
+        assert metrics.files_processed == 200
+        assert metrics.bytes_processed == 200 * 100
 
-    def test_custom_timing_recording(self):
-        """Test custom timing category recording"""
-        monitor = ProgressMonitor(total_files=5)
 
-        monitor.record_timing("validation", 1.2)
-        monitor.record_timing("custom_operation", 0.8)
+# ---------------------------------------------------------------------------
+# NullMonitor
+# ---------------------------------------------------------------------------
 
-        assert monitor.metrics.timing_breakdown["validation"] == 1.2
-        assert monitor.metrics.timing_breakdown["custom_operation"] == 0.8
 
-    def test_thread_safe_metrics_access(self):
-        """Test thread-safe access to metrics"""
-        monitor = ProgressMonitor(total_files=10, update_interval=0.1)
+class TestNullMonitor:
+    """Null monitor implements the same interface but does nothing."""
 
-        monitor.start()
+    def test_is_instance_compatible(self) -> None:
+        mon = NullMonitor()
+        # Should have the same public methods as ProgressMonitor
+        assert hasattr(mon, "start")
+        assert hasattr(mon, "stop")
+        assert hasattr(mon, "update")
+        assert hasattr(mon, "get_metrics")
+        assert hasattr(mon, "pause")
+        assert hasattr(mon, "resume")
+        assert hasattr(mon, "is_paused")
 
-        # Access metrics from main thread while monitor thread is running
-        metrics = monitor.get_metrics()
+    def test_start_stop_no_ops(self) -> None:
+        mon = NullMonitor()
+        mon.start()
+        mon.stop()
+        # No exception raised
+
+    def test_update_no_op(self) -> None:
+        mon = NullMonitor()
+        mon.update()
+        mon.update(bytes_delta=1024)
+        metrics = mon.get_metrics()
+        assert metrics.files_processed == 0
+
+    def test_get_metrics_returns_empty(self) -> None:
+        mon = NullMonitor()
+        metrics = mon.get_metrics()
         assert isinstance(metrics, SimulationMetrics)
-        assert metrics.files_total == 10
+        assert metrics.files_total == 0
 
-        monitor.stop()
+    def test_pause_resume_no_ops(self) -> None:
+        mon = NullMonitor()
+        mon.pause()
+        assert not mon.is_paused()
+        mon.resume()
+        assert not mon.is_paused()
 
-    def test_custom_display_callback(self):
-        """Test custom display callback"""
-        display_calls = []
+    def test_estimate_eta_always_none(self) -> None:
+        mon = NullMonitor()
+        metrics = mon.get_metrics()
+        assert metrics.eta_seconds is None
 
-        def custom_display(metrics):
-            display_calls.append(metrics.files_processed)
 
-        monitor = ProgressMonitor(
-            total_files=5, update_interval=0.1, display_callback=custom_display
+# ---------------------------------------------------------------------------
+# create_monitor factory
+# ---------------------------------------------------------------------------
+
+
+class TestCreateMonitor:
+    """Factory function for creating monitors."""
+
+    def test_create_basic(self) -> None:
+        mon = create_monitor("basic", total_files=100)
+        assert isinstance(mon, ProgressMonitor)
+        assert not isinstance(mon, NullMonitor)
+
+    def test_create_enhanced(self) -> None:
+        mon = create_monitor("enhanced", total_files=100)
+        assert isinstance(mon, ProgressMonitor)
+
+    def test_create_none(self) -> None:
+        mon = create_monitor("none", total_files=100)
+        assert isinstance(mon, NullMonitor)
+
+    def test_total_files_propagated(self) -> None:
+        mon = create_monitor("basic", total_files=42)
+        metrics = mon.get_metrics()
+        assert metrics.files_total == 42
+
+
+# ---------------------------------------------------------------------------
+# Formatting helpers
+# ---------------------------------------------------------------------------
+
+
+class TestFormatBytes:
+    """Human-readable byte formatting."""
+
+    def test_bytes(self) -> None:
+        assert format_bytes(500) == "500.0 B"
+
+    def test_kilobytes(self) -> None:
+        assert format_bytes(1024) == "1.0 KB"
+
+    def test_megabytes(self) -> None:
+        assert format_bytes(1024 * 1024) == "1.0 MB"
+
+    def test_gigabytes(self) -> None:
+        assert format_bytes(1024 ** 3) == "1.0 GB"
+
+    def test_zero(self) -> None:
+        assert format_bytes(0) == "0.0 B"
+
+
+class TestFormatTime:
+    """Human-readable time formatting."""
+
+    def test_seconds(self) -> None:
+        assert format_time(30.0) == "30.0s"
+
+    def test_minutes(self) -> None:
+        assert format_time(90.0) == "1.5m"
+
+    def test_hours(self) -> None:
+        assert format_time(7200.0) == "2.0h"
+
+    def test_zero(self) -> None:
+        assert format_time(0.0) == "0.0s"
+
+
+# ---------------------------------------------------------------------------
+# Resource monitoring (psutil optional)
+# ---------------------------------------------------------------------------
+
+
+class TestResourceMonitoring:
+    """Resource tracking with optional psutil."""
+
+    def test_monitor_with_psutil_available(self) -> None:
+        """When psutil is available, resource metrics are populated."""
+        try:
+            import psutil  # noqa: F401
+            has_psutil = True
+        except ImportError:
+            has_psutil = False
+
+        mon = ProgressMonitor(
+            total_files=10, enable_resources=True, update_interval=0.05
         )
+        mon.start()
+        # Wait long enough for at least one background update cycle.
+        time.sleep(0.3)
+        mon.update()
+        mon.stop()
 
-        monitor.start()
-        time.sleep(0.15)  # Let it update once
-        monitor.stop()
+        metrics = mon.get_metrics()
+        if has_psutil:
+            assert metrics.resource_cpu_percent is not None
+            assert metrics.resource_memory_mb is not None
 
-        # Should have been called at least once
-        assert len(display_calls) > 0
-
-
-class TestDetailedProgressMonitor:
-    """Test the DetailedProgressMonitor class"""
-
-    def test_detailed_monitor_initialization(self):
-        """Test detailed monitor initialization"""
-        monitor = DetailedProgressMonitor(total_files=20, update_interval=0.5)
-
-        assert monitor.metrics.files_total == 20
-        assert monitor.update_interval == 0.5
-        assert monitor.batch_details == []
-        assert monitor.file_details == []
-
-    def test_detailed_batch_tracking(self):
-        """Test detailed batch tracking"""
-        monitor = DetailedProgressMonitor(total_files=10)
-
-        start_time = monitor.start_batch()
-        time.sleep(0.1)
-        monitor.end_batch(start_time)
-
-        assert len(monitor.batch_details) == 1
-        batch_info = monitor.batch_details[0]
-        assert batch_info["batch_number"] == 1
-        assert batch_info["duration"] >= 0.1
-
-    def test_detailed_file_tracking(self):
-        """Test detailed file tracking"""
-        monitor = DetailedProgressMonitor(total_files=5)
-
-        import tempfile
-
-        with tempfile.NamedTemporaryFile() as tmp_file:
-            tmp_path = Path(tmp_file.name)
-            tmp_file.write(b"test content")
-            tmp_file.flush()
-
-            monitor.record_file_processed(tmp_path, operation_time=0.03)
-
-            assert len(monitor.file_details) == 1
-            file_info = monitor.file_details[0]
-            assert file_info["file_path"] == str(tmp_path)
-            assert file_info["operation_time"] == 0.03
-            assert file_info["size_bytes"] > 0
-
-
-class TestProgressMonitorFactory:
-    """Test the progress monitor factory function"""
-
-    def test_create_default_monitor(self):
-        """Test creating default monitor"""
-        monitor = create_progress_monitor(10, monitor_type="default")
-        assert isinstance(monitor, ProgressMonitor)
-        assert not isinstance(monitor, DetailedProgressMonitor)
-
-    def test_create_detailed_monitor(self):
-        """Test creating detailed monitor"""
-        monitor = create_progress_monitor(10, monitor_type="detailed")
-        assert isinstance(monitor, DetailedProgressMonitor)
-
-    def test_create_monitor_with_custom_params(self):
-        """Test creating monitor with custom parameters"""
-        monitor = create_progress_monitor(
-            15, monitor_type="default", update_interval=0.5
-        )
-        assert monitor.metrics.files_total == 15
-        assert monitor.update_interval == 0.5
-
-
-class TestProgressMonitorIntegration:
-    """Test progress monitor integration scenarios"""
-
-    def test_complete_simulation_workflow(self):
-        """Test a complete simulation workflow with monitoring"""
-        monitor = ProgressMonitor(total_files=5, update_interval=0.1)
-        monitor.set_batch_count(2)
-
-        # Simulate workflow
-        monitor.start()
-
-        # Batch 1
-        batch_start = monitor.start_batch()
-
-        # Process 3 files
-        import tempfile
-
-        for i in range(3):
-            with tempfile.NamedTemporaryFile() as tmp_file:
-                tmp_path = Path(tmp_file.name)
-                tmp_file.write(f"content {i}".encode())
-                tmp_file.flush()
-                monitor.record_file_processed(tmp_path, 0.01)
-
-        monitor.end_batch(batch_start)
-        monitor.add_wait_time(0.5)
-
-        # Batch 2
-        batch_start = monitor.start_batch()
-
-        # Process remaining 2 files
-        for i in range(2):
-            with tempfile.NamedTemporaryFile() as tmp_file:
-                tmp_path = Path(tmp_file.name)
-                tmp_file.write(f"content {i+3}".encode())
-                tmp_file.flush()
-                monitor.record_file_processed(tmp_path, 0.01)
-
-        monitor.end_batch(batch_start)
-
-        monitor.stop()
-
-        # Verify final state
-        final_metrics = monitor.get_metrics()
-        assert final_metrics.files_processed == 5
-        assert final_metrics.batches_processed == 2
-        assert final_metrics.is_complete is True
-        assert final_metrics.total_wait_time == 0.5
-        assert final_metrics.throughput_files_per_sec > 0
-
-    def test_error_handling_during_monitoring(self):
-        """Test error handling during monitoring"""
-        error_count = 0
-
-        def faulty_display(metrics):
-            nonlocal error_count
-            error_count += 1
-            if error_count <= 2:
-                raise ValueError("Display error")
-
-        monitor = ProgressMonitor(
-            total_files=5, update_interval=0.05, display_callback=faulty_display
-        )
-
-        # Should not crash even with faulty display callback
-        monitor.start()
-        time.sleep(0.15)  # Let it try a few updates
-        monitor.stop()
-
-        # Should have attempted multiple calls
-        assert error_count > 1
-
-    def test_monitor_performance(self):
-        """Test monitor performance with many updates"""
-        monitor = ProgressMonitor(total_files=1000, update_interval=0.01)
-
-        start_time = time.time()
-
-        # Simulate processing many files quickly
-        for i in range(100):
-            monitor.record_file_processed(Path(f"file_{i}.txt"), 0.001)
-
-        elapsed = time.time() - start_time
-
-        # Should be very fast
-        assert elapsed < 0.1  # Less than 100ms for 100 file records
-
-        metrics = monitor.get_metrics()
-        assert metrics.files_processed == 100
-        assert metrics.throughput_files_per_sec > 100  # Should be very high
-
-
-class TestMonitoringEdgeCases:
-    """Test edge cases and error conditions"""
-
-    def test_zero_files_monitoring(self):
-        """Test monitoring with zero files"""
-        monitor = ProgressMonitor(total_files=0)
-
-        assert monitor.metrics.progress_percentage == 0.0
-        assert monitor.metrics.is_complete is True  # 0/0 is complete
-
-    def test_negative_timing_values(self):
-        """Test handling of negative timing values"""
-        monitor = ProgressMonitor(total_files=5)
-
-        # These should be handled gracefully
-        monitor.record_timing("test", -1.0)  # Negative timing
-        monitor.add_wait_time(-0.5)  # Negative wait time
-
-        # Monitor should still function
-        metrics = monitor.get_metrics()
-        assert isinstance(metrics, SimulationMetrics)
-
-    def test_monitor_without_start(self):
-        """Test monitor operations without starting"""
-        monitor = ProgressMonitor(total_files=5)
-
-        # Should work without starting the update thread
-        monitor.record_file_processed(Path("test.txt"), 0.1)
-        monitor.add_wait_time(1.0)
-
-        metrics = monitor.get_metrics()
-        assert metrics.files_processed == 1
-        assert metrics.total_wait_time == 1.0
-
-    def test_multiple_start_stop_cycles(self):
-        """Test multiple start/stop cycles"""
-        monitor = ProgressMonitor(total_files=5, update_interval=0.05)
-
-        # Multiple start/stop cycles
-        for _ in range(3):
-            monitor.start()
-            time.sleep(0.1)
-            monitor.stop()
-
-        # Should handle multiple cycles gracefully
-        metrics = monitor.get_metrics()
-        assert isinstance(metrics, SimulationMetrics)
+    def test_monitor_without_resource_tracking(self) -> None:
+        mon = ProgressMonitor(total_files=10, enable_resources=False)
+        mon.update()
+        metrics = mon.get_metrics()
+        assert metrics.resource_cpu_percent is None
+        assert metrics.resource_memory_mb is None
