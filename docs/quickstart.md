@@ -92,19 +92,19 @@ nanorunner generate --genomes genome.fa -t /watch/output --interval 5
 1. NanoRunner reads the genome FASTA file(s)
 2. A read generation backend (builtin, badread, or nanosim) produces simulated FASTQ reads
 3. Reads are written to output files and delivered with the configured timing model
-4. In multiplex mode, each genome is assigned to a barcode directory (`barcode01/`, `barcode02/`, ...)
+4. In multiplex mode, each genome is assigned to a barcode directory (`barcode01/`, `barcode02/`, ...). Assignment order is deterministic: individual `--genomes` flags are assigned in argument order; when a directory is passed, files within it are sorted alphabetically before assignment.
 
 ### Generate Mode Examples
 
 ```bash
 # Multiple genomes in multiplex mode (each genome gets a barcode directory)
-nanorunner generate --genomes genome1.fa genome2.fa -t /watch/output --interval 5
+nanorunner generate --genomes genome1.fa --genomes genome2.fa -t /watch/output --interval 5
 
 # Singleplex output (all files in target root)
 nanorunner generate --genomes genome.fa -t /watch/output --force-structure singleplex
 
 # Mix reads from multiple genomes into shared files
-nanorunner generate --genomes g1.fa g2.fa -t /watch/output \
+nanorunner generate --genomes g1.fa --genomes g2.fa -t /watch/output \
   --force-structure singleplex \
   --mix-reads
 

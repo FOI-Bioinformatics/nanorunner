@@ -744,7 +744,8 @@ class TestNoArgs:
 
     def test_no_args_shows_help(self):
         result = runner.invoke(app, [])
-        assert result.exit_code == 0
+        # Typer with no_args_is_help=True shows help with exit code 2
+        assert result.exit_code in (0, 2)
         assert "Usage" in result.output or "replay" in result.output
 
 

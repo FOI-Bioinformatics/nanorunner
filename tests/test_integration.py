@@ -348,7 +348,7 @@ class TestGenerateMultipleGenomes:
     """Multiple-genome generation through the CLI."""
 
     def test_multiple_genomes_singleplex(self, tmp_path: Path):
-        """Two genomes produce separate output files in singleplex mode."""
+        """Two genomes with --force-structure singleplex produce files in root."""
         genome_a = tmp_path / "genome_a.fa"
         genome_b = tmp_path / "genome_b.fa"
         genome_a.write_text(">chr1\nACGTACGTACGTACGT\n")
@@ -366,6 +366,7 @@ class TestGenerateMultipleGenomes:
                 "--read-count", "200",
                 "--reads-per-file", "100",
                 "--output-format", "fastq",
+                "--force-structure", "singleplex",
                 "--no-wait",
                 "--quiet",
             ],
@@ -432,6 +433,7 @@ class TestGenerateAbundanceWeighting:
                 "--output-format", "fastq",
                 "--abundances", "0.9",
                 "--abundances", "0.1",
+                "--force-structure", "singleplex",
                 "--no-wait",
                 "--quiet",
             ],
@@ -770,6 +772,7 @@ class TestGenerateWithGenomeDirectory:
                 "--read-count", "100",
                 "--reads-per-file", "50",
                 "--output-format", "fastq",
+                "--force-structure", "singleplex",
                 "--no-wait",
                 "--quiet",
             ],

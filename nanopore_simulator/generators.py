@@ -468,6 +468,11 @@ class SubprocessGenerator(ReadGenerator):
     Parameterized by ``backend`` ("badread" or "nanosim"). Command
     construction and output handling are selected based on the backend
     name. Shared subprocess error handling applies to both.
+
+    Note on read counts: badread generates reads until a total base count
+    is reached (``num_reads * mean_read_length``), so the actual number of
+    reads per output file will be approximate due to read length variation.
+    The builtin generator always produces exactly the requested read count.
     """
 
     def __init__(self, config: GeneratorConfig, *, backend: str) -> None:

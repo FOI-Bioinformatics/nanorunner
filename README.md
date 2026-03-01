@@ -46,14 +46,14 @@ Both modes support singleplex and multiplex (barcoded) output structures, multip
 ### From GitHub
 
 ```bash
-# Latest stable release (v2.0.2)
-pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2
+# Latest stable release (v3.0.0)
+pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v3.0.0
 
 # Development version (main branch)
 pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@main
 
 # With enhanced monitoring features
-pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2"
+pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@v3.0.0"
 ```
 
 ### For Development
@@ -67,7 +67,7 @@ pip install -e .[enhanced,dev]
 ### Verify Installation
 
 ```bash
-nanorunner --version  # Should output: nanorunner 2.0.2
+nanorunner --version  # Should output: nanorunner 3.0.0
 nanorunner --help     # Display all available subcommands
 nanorunner check-deps       # Check all dependencies and show install hints
 nanorunner list-profiles    # Show built-in configuration profiles
@@ -119,13 +119,13 @@ nanorunner generate --genomes <fasta_files...> --target <target_dir> [options]
 
 ```bash
 # Generate reads from two genomes (multiplex: each genome gets a barcode directory)
-nanorunner generate --genomes genome1.fa genome2.fa -t /watch/output --interval 5
+nanorunner generate --genomes genome1.fa --genomes genome2.fa -t /watch/output --interval 5
 
 # Singleplex output (flat directory)
 nanorunner generate --genomes genome.fa -t /watch/output --force-structure singleplex
 
 # Mix reads from multiple genomes into shared files
-nanorunner generate --genomes g1.fa g2.fa -t /watch/output --force-structure singleplex --mix-reads
+nanorunner generate --genomes g1.fa --genomes g2.fa -t /watch/output --force-structure singleplex --mix-reads
 
 # Specify generation parameters
 nanorunner generate --genomes genome.fa -t /watch/output \
@@ -157,6 +157,10 @@ target_dir/
     └── genome2_reads_0001.fastq.gz
 ```
 
+Barcode directory assignment is determined by genome order:
+- When genomes are specified as individual `--genomes` flags, assignment follows argument order: first `--genomes` argument maps to `barcode01`, second to `barcode02`, and so on.
+- When a directory is passed to `--genomes`, genome files within that directory are sorted alphabetically before assignment. The alphabetically first filename maps to `barcode01`, the second to `barcode02`, and so on.
+
 **Singleplex** (`--force-structure singleplex`):
 ```
 target_dir/
@@ -170,8 +174,8 @@ target_dir/
 
 | Backend | Dependencies | Description |
 |---------|-------------|-------------|
-| `builtin` | None | Error-free random subsequences with log-normal length distribution. No error model; suitable for testing pipeline structure and connectivity. |
-| `badread` | [badread](https://github.com/rrwick/Badread) | Nanopore read simulation with error models |
+| `builtin` | None | Error-free random subsequences with log-normal length distribution. No error model; suitable for testing pipeline structure and connectivity. Produces exact read counts. |
+| `badread` | [badread](https://github.com/rrwick/Badread) | Nanopore read simulation with error models. Read count per file is approximate (based on total bases, not exact count). |
 | `nanosim` | [NanoSim](https://github.com/bcgsc/NanoSim) | Statistical read simulation from training data |
 | `auto` | Varies | Selects the best available backend (badread > nanosim > builtin) |
 
@@ -413,7 +417,7 @@ Use `nanorunner check-deps` to see the status of all dependencies and install in
 - **Enhanced features**: Optional psutil dependency for resource monitoring
 - **Optional read generators**: badread and/or NanoSim for higher-fidelity read simulation
 - **Platform compatibility**: POSIX-compliant operating systems (Linux, macOS, Unix)
-- **Testing**: 902 tests across 40 test files
+- **Testing**: 721 tests across 20 test files
 
 ## Development and Contribution
 
@@ -434,13 +438,13 @@ pytest
 pytest -m "not slow"
 
 # Run specific test modules
-pytest tests/test_cli.py                    # CLI interface tests
-pytest tests/test_timing_models.py          # Timing model validation
-pytest tests/test_generators.py             # Read generation backends
-pytest tests/test_generate_integration.py   # Generate mode end-to-end
-pytest tests/test_mocks.py                  # Mock community definitions
-pytest tests/test_species.py                # Species name resolution
-pytest tests/test_practical.py              # Practical tests with real NCBI genomes
+pytest tests/test_cli.py          # CLI interface tests
+pytest tests/test_timing.py       # Timing model validation
+pytest tests/test_generators.py   # Read generation backends
+pytest tests/test_integration.py  # End-to-end integration tests
+pytest tests/test_mocks.py        # Mock community definitions
+pytest tests/test_species.py      # Species name resolution
+pytest tests/test_runner.py       # Runner orchestration tests
 
 # Generate coverage report
 pytest --cov=nanopore_simulator --cov-report=html --cov-report=term-missing

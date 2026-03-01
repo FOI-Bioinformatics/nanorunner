@@ -612,10 +612,12 @@ def generate(
         worker_count if worker_count != 4
         else params.get("worker_count", 4)
     )
-    struct = (
-        force_structure.value if force_structure
-        else "singleplex"
-    )
+    if force_structure:
+        struct = force_structure.value
+    elif genomes and len(genomes) > 1:
+        struct = "multiplex"
+    else:
+        struct = "singleplex"
     monitor_type = _resolve_monitor(monitor, quiet)
 
     # Species / mock / taxid resolution
