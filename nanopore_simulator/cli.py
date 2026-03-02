@@ -211,6 +211,111 @@ def _expand_genome_paths(paths: List[Path]) -> List[Path]:
     return expanded
 
 
+def _resolve_and_download_genomes(
+    mock_name: Optional[str],
+    species_inputs: Optional[List[str]],
+    taxid_inputs: Optional[List[str]],
+    offline: bool = False,
+) -> tuple:
+    """Resolve mock/species/taxid inputs to downloaded genome paths.
+
+    Downloads genomes as needed via NCBI datasets CLI and returns
+    a list of local FASTA file paths ready for read generation,
+    along with any abundance information from mock communities.
+
+    Args:
+        mock_name: Preset mock community name, or None.
+        species_inputs: Species names to resolve, or None.
+        taxid_inputs: NCBI taxonomy IDs as strings, or None.
+        offline: If True, use only cached genomes.
+
+    Returns:
+        Tuple of (genome_paths, abundances) where abundances may be None.
+
+    Raises:
+        typer.Exit: If resolution or download fails completely.
+    """
+    from nanopore_simulator.species import (
+        GenomeCache, GenomeRef, download_genome, resolve_species, resolve_taxid,
+    )
+    from nanopore_simulator.mocks import get_mock
+
+    cache = GenomeCache()
+    genome_downloads: List[tuple] = []  # (name, ref, abundance) triples
+    abundances_map: List[float] = []
+
+    if mock_name:
+        mock_community = get_mock(mock_name)
+        if mock_community is None:
+            typer.echo(f"Error: Unknown mock community: {mock_name}", err=True)
+            raise typer.Exit(code=1)
+        for org in mock_community.organisms:
+            if org.accession:
+                domain = org.domain or (
+                    "eukaryota" if org.resolver == "ncbi" else "bacteria"
+                )
+                ref = GenomeRef(
+                    name=org.name,
+                    accession=org.accession,
+                    source=org.resolver,
+                    domain=domain,
+                )
+            else:
+                ref = resolve_species(org.name)
+            if ref:
+                genome_downloads.append((org.name, ref))
+                abundances_map.append(org.abundance)
+            else:
+                typer.echo(f"Warning: Could not resolve: {org.name}", err=True)
+
+    if species_inputs:
+        for sp in species_inputs:
+            ref = resolve_species(sp)
+            if ref:
+                genome_downloads.append((sp, ref))
+            else:
+                typer.echo(f"Warning: Could not resolve: {sp}", err=True)
+
+    if taxid_inputs:
+        for tid in taxid_inputs:
+            ref = resolve_taxid(tid)
+            if ref:
+                genome_downloads.append((f"taxid:{tid}", ref))
+            else:
+                typer.echo(f"Warning: Could not resolve taxid: {tid}", err=True)
+
+    if not genome_downloads:
+        typer.echo("Error: No genomes could be resolved", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Downloading {len(genome_downloads)} genome(s)...")
+    successful_paths: List[Path] = []
+    successful_abundances: List[float] = []
+
+    for idx, (name, ref) in enumerate(genome_downloads):
+        try:
+            path = download_genome(ref, cache=cache)
+            typer.echo(f"  Ready: {name} -> {path}")
+            successful_paths.append(Path(path))
+            if abundances_map:
+                successful_abundances.append(abundances_map[idx])
+        except Exception as exc:
+            typer.echo(f"  Failed: {name} - {exc}", err=True)
+
+    if not successful_paths:
+        typer.echo("Error: No genomes downloaded successfully", err=True)
+        raise typer.Exit(code=1)
+
+    # Renormalize abundances if some genomes failed
+    final_abundances = None
+    if successful_abundances:
+        total = sum(successful_abundances)
+        if total > 0:
+            final_abundances = [a / total for a in successful_abundances]
+
+    return successful_paths, final_abundances
+
+
 # -------------------------------------------------------------------
 # Core commands
 # -------------------------------------------------------------------
@@ -669,6 +774,45 @@ def generate(
         for err in errors:
             typer.echo(f"Error: {err}", err=True)
         raise typer.Exit(code=1)
+
+    # Resolve mock/species/taxid to genome paths if needed
+    if needs_download or (mock_name and offline):
+        genome_paths, mock_abundances = _resolve_and_download_genomes(
+            mock_name, species_inputs, taxid_inputs, offline=offline,
+        )
+        # Determine structure for multi-genome inputs
+        resolved_struct = struct
+        if len(genome_paths) > 1 and force_structure is None:
+            resolved_struct = "multiplex"
+        # Rebuild config with resolved genome paths (GenerateConfig is frozen)
+        config = GenerateConfig(
+            target_dir=config.target_dir,
+            genome_inputs=genome_paths,
+            species_inputs=None,
+            mock_name=None,
+            taxid_inputs=None,
+            abundances=mock_abundances if not abundances else config.abundances,
+            read_count=config.read_count,
+            interval=config.interval,
+            batch_size=config.batch_size,
+            generator_backend=config.generator_backend,
+            mean_length=config.mean_length,
+            std_length=config.std_length,
+            min_length=config.min_length,
+            mean_quality=config.mean_quality,
+            std_quality=config.std_quality,
+            reads_per_file=config.reads_per_file,
+            output_format=config.output_format,
+            mix_reads=config.mix_reads,
+            timing_model=config.timing_model,
+            timing_params=config.timing_params,
+            parallel=config.parallel,
+            workers=config.workers,
+            monitor_type=config.monitor_type,
+            adapter=config.adapter,
+            structure=resolved_struct,
+            offline_mode=config.offline_mode,
+        )
 
     try:
         run_generate(config)
