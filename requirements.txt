@@ -1,2 +1,2 @@
-# No external dependencies required
-# nanopore-simulator uses only Python standard library modules
+# Runtime dependencies (canonical source: pyproject.toml [project.dependencies])
+typer>=0.9.0
