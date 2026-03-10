@@ -17,7 +17,7 @@ from nanopore_simulator.detection import (
     find_barcode_dirs,
     find_sequencing_files,
 )
-from nanopore_simulator.fastq import count_reads, iter_reads, write_reads
+from nanopore_simulator.fastq import count_reads
 
 
 # -------------------------------------------------------------------

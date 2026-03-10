@@ -15,9 +15,6 @@ Usage::
 """
 
 import logging
-import os
-import signal
-import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -146,6 +143,7 @@ class _ResourceCollector:
             memory_mb = rss / (1024 * 1024)
             return (cpu, memory_mb)
         except Exception:
+            logger.debug("Resource collection failed", exc_info=True)
             return (None, None)
 
 

@@ -164,11 +164,12 @@ def _resolve_monitor(monitor: MonitorLevel, quiet: bool) -> str:
         except ImportError:
             from nanopore_simulator.deps import get_install_hint
 
-            print(
+            typer.echo(
                 "Warning: Enhanced monitoring requires psutil. "
-                f"Install with: {get_install_hint('psutil')}"
+                f"Install with: {get_install_hint('psutil')}",
+                err=True,
             )
-            print("Falling back to basic monitoring mode.")
+            typer.echo("Falling back to basic monitoring mode.", err=True)
             return "basic"
         return "enhanced"
     # "default" and "detailed" both map to "basic"
@@ -278,7 +279,7 @@ def _resolve_and_download_genomes(
 
     if taxid_inputs:
         for tid in taxid_inputs:
-            ref = resolve_taxid(tid)
+            ref = resolve_taxid(int(tid))
             if ref:
                 genome_downloads.append((f"taxid:{tid}", ref))
             else:
@@ -500,7 +501,7 @@ def replay(
     try:
         run_replay(config)
     except KeyboardInterrupt:
-        print("\nSimulation interrupted by user")
+        typer.echo("\nSimulation interrupted by user", err=True)
         raise typer.Exit(code=1)
     except Exception as exc:
         typer.echo(f"Error: {exc}", err=True)
@@ -817,7 +818,7 @@ def generate(
     try:
         run_generate(config)
     except KeyboardInterrupt:
-        print("\nSimulation interrupted by user")
+        typer.echo("\nSimulation interrupted by user", err=True)
         raise typer.Exit(code=1)
     except Exception as exc:
         typer.echo(f"Error: {exc}", err=True)
@@ -1151,7 +1152,7 @@ def download(
             if ref:
                 genome_downloads.append((org.name, ref))
             else:
-                print(f"Warning: Could not resolve: {org.name}")
+                typer.echo(f"Warning: Could not resolve: {org.name}", err=True)
 
     if species:
         for sp in species:
@@ -1159,7 +1160,7 @@ def download(
             if ref:
                 genome_downloads.append((sp, ref))
             else:
-                print(f"Warning: Could not resolve: {sp}")
+                typer.echo(f"Warning: Could not resolve: {sp}", err=True)
 
     if taxid:
         for tid in taxid:
@@ -1167,24 +1168,24 @@ def download(
             if ref:
                 genome_downloads.append((f"taxid:{tid}", ref))
             else:
-                print(f"Warning: Could not resolve taxid: {tid}")
+                typer.echo(f"Warning: Could not resolve taxid: {tid}", err=True)
 
     if not genome_downloads:
         typer.echo("No genomes to download", err=True)
         raise typer.Exit(code=1)
 
-    print(f"Downloading {len(genome_downloads)} genome(s)...")
+    typer.echo(f"Downloading {len(genome_downloads)} genome(s)...")
     successful: List[tuple] = []  # (name, ref, path)
 
     for name, ref in genome_downloads:
         try:
             path = download_genome(ref, cache=cache)
-            print(f"  Downloaded: {name} -> {path}")
+            typer.echo(f"  Downloaded: {name} -> {path}")
             successful.append((name, ref, path))
         except Exception as exc:
-            print(f"  Failed: {name} - {exc}")
+            typer.echo(f"  Failed: {name} - {exc}", err=True)
 
-    print("Download complete")
+    typer.echo("Download complete")
 
     # Optionally generate reads if target provided
     if target is not None:
@@ -1214,9 +1215,9 @@ def download(
                 parallel=parallel,
                 workers=worker_count,
             )
-            print(f"\nGenerating reads into {target}...")
+            typer.echo(f"\nGenerating reads into {target}...")
             run_generate(config)
-            print("Read generation complete")
+            typer.echo("Read generation complete")
         except Exception as exc:
             typer.echo(f"Error during read generation: {exc}", err=True)
             raise typer.Exit(code=1)
