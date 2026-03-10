@@ -20,6 +20,7 @@ import random
 import shutil
 import subprocess
 import tempfile
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -256,6 +257,7 @@ class BuiltinGenerator(ReadGenerator):
     def __init__(self, config: GeneratorConfig) -> None:
         super().__init__(config)
         self._genome_cache: Dict[Path, str] = {}
+        self._cache_lock = threading.Lock()
         self._np_rng: Optional["np.random.Generator"] = None
         if _HAS_NUMPY:
             self._np_rng = np.random.default_rng()
@@ -267,13 +269,16 @@ class BuiltinGenerator(ReadGenerator):
     def _get_genome_sequence(self, genome: GenomeInput) -> str:
         """Return the concatenated genome sequence, caching by resolved path.
 
+        Thread-safe: uses a lock to protect concurrent cache access.
+
         Raises:
             ValueError: If the FASTA file contains no sequences or the
                 concatenated sequence is empty.
         """
         key = genome.fasta_path.resolve()
-        if key in self._genome_cache:
-            return self._genome_cache[key]
+        with self._cache_lock:
+            if key in self._genome_cache:
+                return self._genome_cache[key]
 
         sequences = parse_fasta(genome.fasta_path)
         if not sequences:
@@ -283,7 +288,8 @@ class BuiltinGenerator(ReadGenerator):
         if len(full_seq) == 0:
             raise ValueError(f"Empty genome sequence in {genome.fasta_path}")
 
-        self._genome_cache[key] = full_seq
+        with self._cache_lock:
+            self._genome_cache[key] = full_seq
         return full_seq
 
     def generate_reads(
@@ -379,8 +385,12 @@ class BuiltinGenerator(ReadGenerator):
         mu: float,
         sigma: float,
     ) -> List[Tuple[str, str, str]]:
-        """Vectorized read sampling using numpy for batch random generation."""
-        rng = self._np_rng
+        """Vectorized read sampling using numpy for batch random generation.
+
+        Creates a per-call RNG instance via ``spawn`` to avoid sharing
+        mutable numpy random state across threads.
+        """
+        rng = self._np_rng.spawn(1)[0]
         min_len = self.config.min_read_length
         mean_q = self.config.mean_quality
         std_q = self.config.std_quality
@@ -425,8 +435,9 @@ class BuiltinGenerator(ReadGenerator):
     def _generate_quality_string(self, length: int) -> str:
         """Generate a Phred+33 quality string."""
         if self._np_rng is not None:
+            rng = self._np_rng.spawn(1)[0]
             return _generate_quality_string_numpy(
-                self._np_rng,
+                rng,
                 self.config.mean_quality,
                 self.config.std_quality,
                 length,
