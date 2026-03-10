@@ -53,11 +53,6 @@ class GeneratorBackend(str, Enum):
     nanosim = "nanosim"
 
 
-class SampleType(str, Enum):
-    pure = "pure"
-    mixed = "mixed"
-
-
 class ForceStructure(str, Enum):
     singleplex = "singleplex"
     multiplex = "multiplex"
@@ -242,8 +237,11 @@ def _resolve_and_download_genomes(
     from nanopore_simulator.mocks import get_mock
 
     cache = GenomeCache()
-    genome_downloads: List[tuple] = []  # (name, ref, abundance) triples
-    abundances_map: List[float] = []
+    # Each entry is (name, ref, abundance_or_none).  The abundance
+    # value is only set for mock-community organisms; species and
+    # taxid inputs get None so that index alignment is maintained
+    # even when different input types are combined.
+    genome_downloads: List[tuple] = []
 
     if mock_name:
         mock_community = get_mock(mock_name)
@@ -264,8 +262,7 @@ def _resolve_and_download_genomes(
             else:
                 ref = resolve_species(org.name)
             if ref:
-                genome_downloads.append((org.name, ref))
-                abundances_map.append(org.abundance)
+                genome_downloads.append((org.name, ref, org.abundance))
             else:
                 typer.echo(f"Warning: Could not resolve: {org.name}", err=True)
 
@@ -273,7 +270,7 @@ def _resolve_and_download_genomes(
         for sp in species_inputs:
             ref = resolve_species(sp)
             if ref:
-                genome_downloads.append((sp, ref))
+                genome_downloads.append((sp, ref, None))
             else:
                 typer.echo(f"Warning: Could not resolve: {sp}", err=True)
 
@@ -281,7 +278,7 @@ def _resolve_and_download_genomes(
         for tid in taxid_inputs:
             ref = resolve_taxid(int(tid))
             if ref:
-                genome_downloads.append((f"taxid:{tid}", ref))
+                genome_downloads.append((f"taxid:{tid}", ref, None))
             else:
                 typer.echo(f"Warning: Could not resolve taxid: {tid}", err=True)
 
@@ -292,14 +289,15 @@ def _resolve_and_download_genomes(
     typer.echo(f"Downloading {len(genome_downloads)} genome(s)...")
     successful_paths: List[Path] = []
     successful_abundances: List[float] = []
+    has_abundance_info = any(ab is not None for _, _, ab in genome_downloads)
 
-    for idx, (name, ref) in enumerate(genome_downloads):
+    for name, ref, abundance in genome_downloads:
         try:
             path = download_genome(ref, cache=cache)
             typer.echo(f"  Ready: {name} -> {path}")
             successful_paths.append(Path(path))
-            if abundances_map:
-                successful_abundances.append(abundances_map[idx])
+            if abundance is not None:
+                successful_abundances.append(abundance)
         except Exception as exc:
             typer.echo(f"  Failed: {name} - {exc}", err=True)
 
@@ -309,7 +307,7 @@ def _resolve_and_download_genomes(
 
     # Renormalize abundances if some genomes failed
     final_abundances = None
-    if successful_abundances:
+    if has_abundance_info and successful_abundances:
         total = sum(successful_abundances)
         if total > 0:
             final_abundances = [a / total for a in successful_abundances]
@@ -572,10 +570,6 @@ def generate(
         rich_help_panel="Read Generation",
     ),
     # Species/Mock Options
-    sample_type: Optional[SampleType] = typer.Option(
-        None, help="Sample type: pure (per-species barcodes) or mixed.",
-        rich_help_panel="Species/Mock Options",
-    ),
     abundances: Optional[List[float]] = typer.Option(
         None, help="Custom abundances for mixed samples (must sum to 1.0).",
         rich_help_panel="Species/Mock Options",
@@ -1081,10 +1075,6 @@ def download(
     ),
     batch_size: int = typer.Option(
         1, help="Number of files to process per interval.",
-        rich_help_panel="Generation Options",
-    ),
-    sample_type: Optional[SampleType] = typer.Option(
-        None, help="Sample type: pure (per-species barcodes) or mixed.",
         rich_help_panel="Generation Options",
     ),
     mix_reads: bool = typer.Option(

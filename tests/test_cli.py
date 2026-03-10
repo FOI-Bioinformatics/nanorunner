@@ -145,9 +145,10 @@ class TestGenerateHelp:
         result = runner.invoke(app, ["generate", "--help"])
         assert "--offline" in result.output
 
-    def test_generate_help_contains_sample_type(self):
+    def test_generate_help_no_sample_type(self):
+        """Verify --sample-type was removed (was non-functional dead code)."""
         result = runner.invoke(app, ["generate", "--help"])
-        assert "--sample-type" in result.output
+        assert "--sample-type" not in result.output
 
     def test_generate_help_contains_abundances(self):
         result = runner.invoke(app, ["generate", "--help"])
