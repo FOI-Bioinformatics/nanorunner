@@ -541,24 +541,24 @@ def generate(
         GeneratorBackend.auto, help="Read generation backend.",
         rich_help_panel="Read Generation",
     ),
-    read_count: int = typer.Option(
-        1000, help="Total number of reads to generate across all genomes.",
+    read_count: Optional[int] = typer.Option(
+        None, help="Total number of reads to generate across all genomes. [default: 1000]",
         rich_help_panel="Read Generation",
     ),
-    mean_read_length: int = typer.Option(
-        5000, help="Mean read length in bases.",
+    mean_read_length: Optional[int] = typer.Option(
+        None, help="Mean read length in bases. [default: 5000]",
         rich_help_panel="Read Generation",
     ),
-    mean_quality: float = typer.Option(
-        20.0, help="Mean Phred quality score.",
+    mean_quality: Optional[float] = typer.Option(
+        None, help="Mean Phred quality score. [default: 20.0]",
         rich_help_panel="Read Generation",
     ),
-    std_quality: float = typer.Option(
-        4.0, help="Standard deviation of quality scores.",
+    std_quality: Optional[float] = typer.Option(
+        None, help="Standard deviation of quality scores. [default: 4.0]",
         rich_help_panel="Read Generation",
     ),
-    reads_per_file: int = typer.Option(
-        100, help="Number of reads per output file.",
+    reads_per_file: Optional[int] = typer.Option(
+        None, help="Number of reads per output file. [default: 100]",
         rich_help_panel="Read Generation",
     ),
     output_format: OutputFormat = typer.Option(
@@ -583,16 +583,16 @@ def generate(
         None, help="Use a predefined configuration profile.",
         rich_help_panel="Simulation Configuration",
     ),
-    interval: float = typer.Option(
-        5.0, help="Seconds between file operations.",
+    interval: Optional[float] = typer.Option(
+        None, help="Seconds between file operations. [default: 5.0]",
         rich_help_panel="Simulation Configuration",
     ),
     force_structure: Optional[ForceStructure] = typer.Option(
         None, help="Force specific structure instead of auto-detection.",
         rich_help_panel="Simulation Configuration",
     ),
-    batch_size: int = typer.Option(
-        1, help="Number of files to process per interval.",
+    batch_size: Optional[int] = typer.Option(
+        None, help="Number of files to process per interval. [default: 1]",
         rich_help_panel="Simulation Configuration",
     ),
     no_wait: bool = typer.Option(
@@ -630,8 +630,8 @@ def generate(
         False, help="Enable parallel processing within batches.",
         rich_help_panel="Parallel Processing",
     ),
-    worker_count: int = typer.Option(
-        4, help="Number of worker threads for parallel processing.",
+    worker_count: Optional[int] = typer.Option(
+        None, help="Number of worker threads for parallel processing. [default: 4]",
         rich_help_panel="Parallel Processing",
     ),
     # Monitoring
@@ -654,8 +654,20 @@ def generate(
     ),
 ) -> None:
     """Generate simulated nanopore reads from genome FASTA files."""
+    # Apply defaults for sentinel-valued CLI options. Explicit CLI values
+    # take priority; None means the user did not pass the option, so we
+    # fall back to profile values (resolved below) or built-in defaults.
+    _read_count = read_count
+    _mean_read_length = mean_read_length
+    _mean_quality = mean_quality
+    _std_quality = std_quality
+    _reads_per_file = reads_per_file
+    _interval = interval
+    _batch_size = batch_size
+    _worker_count = worker_count
+
     if no_wait:
-        interval = 0.0
+        _interval = 0.0
 
     # Mutual exclusivity validation
     sources = sum([
@@ -706,12 +718,19 @@ def generate(
         "timing_model", "uniform"
     )
     tp = timing_params or params.get("timing_model_params", {})
-    bs = batch_size if batch_size != 1 else params.get("batch_size", 1)
+    # Resolve sentinel defaults: explicit CLI values (not None) take
+    # priority over profile values, which take priority over built-in
+    # defaults. This avoids the ambiguity where a user explicitly passing
+    # the default value would be indistinguishable from not passing it.
+    rc = _read_count if _read_count is not None else params.get("read_count", 1000)
+    mrl = _mean_read_length if _mean_read_length is not None else params.get("mean_read_length", 5000)
+    mq = _mean_quality if _mean_quality is not None else params.get("mean_quality", 20.0)
+    sq = _std_quality if _std_quality is not None else params.get("std_quality", 4.0)
+    rpf = _reads_per_file if _reads_per_file is not None else params.get("reads_per_file", 100)
+    iv = _interval if _interval is not None else params.get("interval", 5.0)
+    bs = _batch_size if _batch_size is not None else params.get("batch_size", 1)
     par = parallel or params.get("parallel_processing", False)
-    wk = (
-        worker_count if worker_count != 4
-        else params.get("worker_count", 4)
-    )
+    wk = _worker_count if _worker_count is not None else params.get("worker_count", 4)
     if force_structure:
         struct = force_structure.value
     elif genomes and len(genomes) > 1:
@@ -734,14 +753,14 @@ def generate(
             mock_name=mock_name,
             taxid_inputs=taxid_inputs,
             abundances=list(abundances) if abundances else None,
-            read_count=read_count,
-            interval=interval,
+            read_count=rc,
+            interval=iv,
             batch_size=bs,
             generator_backend=generator_backend.value,
-            mean_length=mean_read_length,
-            mean_quality=mean_quality,
-            std_quality=std_quality,
-            reads_per_file=reads_per_file,
+            mean_length=mrl,
+            mean_quality=mq,
+            std_quality=sq,
+            reads_per_file=rpf,
             output_format=output_format.value,
             mix_reads=mix_reads,
             timing_model=tm,

@@ -99,6 +99,10 @@ class ResolutionCache:
     network lookups. Keys are lowercased species names; values are
     serialized GenomeRef dictionaries.
 
+    Note: This class is not thread-safe. Thread safety is not required
+    because it is only used synchronously within CLI resolution functions
+    (resolve_species_name, resolve_taxid), which run on the main thread.
+
     Attributes:
         cache_path: Path to the JSON cache file.
     """
