@@ -12,6 +12,9 @@ execution within batches uses ``ThreadPoolExecutor``.
 """
 
 import logging
+import os
+import shutil
+import signal
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -33,10 +36,131 @@ from nanopore_simulator.monitoring import (
     NullMonitor,
     ProgressMonitor,
     create_monitor,
+    format_bytes,
 )
 from nanopore_simulator.timing import TimingModel, create_timing_model
 
 logger = logging.getLogger(__name__)
+
+
+# -------------------------------------------------------------------
+# Signal handling
+# -------------------------------------------------------------------
+
+
+def _signal_handler(signum: int, frame: object) -> None:
+    """Convert SIGTERM/SIGHUP into KeyboardInterrupt for clean shutdown."""
+    sig_name = signal.Signals(signum).name
+    logger.info("Received %s, initiating graceful shutdown", sig_name)
+    raise KeyboardInterrupt(f"Received {sig_name}")
+
+
+def _install_signal_handlers() -> Dict[int, object]:
+    """Install SIGTERM/SIGHUP handlers and return the previous handlers."""
+    previous = {}
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        try:
+            previous[sig] = signal.signal(sig, _signal_handler)
+        except (OSError, ValueError):
+            # Not all signals can be caught on all platforms
+            pass
+    return previous
+
+
+def _restore_signal_handlers(previous: Dict[int, object]) -> None:
+    """Restore signal handlers saved by _install_signal_handlers."""
+    for sig, handler in previous.items():
+        try:
+            signal.signal(sig, handler)
+        except (OSError, ValueError):
+            pass
+
+
+def _estimate_output_size(
+    manifest: List[FileEntry],
+    config: Union[ReplayConfig, GenerateConfig],
+) -> int:
+    """Estimate total output size in bytes based on manifest and config.
+
+    For generate mode, the estimate is derived from the number of reads,
+    mean read length, and an approximate compression ratio for gzipped
+    output.  For replay mode, source file sizes are summed directly.
+
+    Args:
+        manifest: Planned file entries.
+        config: Simulation configuration.
+
+    Returns:
+        Estimated output size in bytes.
+    """
+    if isinstance(config, GenerateConfig):
+        # Approximate bytes per read: header (~50) + sequence + quality + newlines
+        # A FASTQ record is roughly (mean_length * 2 + 80) bytes uncompressed.
+        bytes_per_read = config.mean_length * 2 + 80
+        total_reads = sum(e.read_count or 0 for e in manifest)
+        raw_size = total_reads * bytes_per_read
+        if config.output_format == "fastq.gz":
+            # Typical gzip compression ratio for FASTQ is ~0.25-0.35
+            return int(raw_size * 0.30)
+        return raw_size
+
+    # Replay mode: estimate from source file sizes
+    total = 0
+    for entry in manifest:
+        if entry.source is not None:
+            try:
+                total += entry.source.stat().st_size
+            except OSError:
+                pass
+    return total
+
+
+def _check_disk_space(
+    manifest: List[FileEntry],
+    config: Union[ReplayConfig, GenerateConfig],
+) -> None:
+    """Log a warning if estimated output may approach available disk space.
+
+    This check is advisory only and does not prevent execution.
+
+    Args:
+        manifest: Planned file entries.
+        config: Simulation configuration.
+    """
+    try:
+        estimated = _estimate_output_size(manifest, config)
+        usage = shutil.disk_usage(config.target_dir)
+    except OSError:
+        return
+
+    if estimated > usage.free * 0.8:
+        logger.warning(
+            "Estimated output size (%s) may approach available disk space (%s)",
+            format_bytes(estimated),
+            format_bytes(usage.free),
+        )
+    else:
+        logger.debug(
+            "Disk space check: estimated %s, available %s",
+            format_bytes(estimated),
+            format_bytes(usage.free),
+        )
+
+
+def _cleanup_tmp_files(target_dir: Path) -> None:
+    """Remove orphaned .tmp files left by interrupted atomic writes.
+
+    Atomic writes use the naming pattern ``.original_name.tmp``, so
+    this matches any file ending in ``.tmp`` whose name starts with a dot.
+    """
+    if not target_dir.exists():
+        return
+    for tmp_file in target_dir.rglob("*.tmp"):
+        try:
+            tmp_file.unlink()
+            logger.debug("Cleaned up partial file: %s", tmp_file)
+        except OSError:
+            pass
 
 
 # -------------------------------------------------------------------
@@ -126,9 +250,12 @@ def _execute_manifest(
     )
     monitor.start()
 
+    previous_handlers = _install_signal_handlers()
     try:
         # Ensure target directory exists
         config.target_dir.mkdir(parents=True, exist_ok=True)
+
+        _check_disk_space(manifest, config)
 
         batches = _group_by_batch(manifest)
         total_batches = len(batches)
@@ -155,6 +282,8 @@ def _execute_manifest(
                     time.sleep(interval)
     finally:
         monitor.stop()
+        _cleanup_tmp_files(config.target_dir)
+        _restore_signal_handlers(previous_handlers)
 
 
 def _group_by_batch(manifest: List[FileEntry]) -> List[List[FileEntry]]:
