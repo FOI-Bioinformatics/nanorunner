@@ -35,6 +35,15 @@ except ImportError:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
+
+def _atomic_tmp_path(target: Path) -> Path:
+    """Return a temporary path that preserves the original file extension.
+
+    For example, ``reads.fastq.gz`` becomes ``.reads.fastq.gz.tmp`` so
+    that format-detection logic (which checks the suffix) still works.
+    """
+    return target.parent / f".{target.name}.tmp"
+
 # Module-level genome cache for ProcessPoolExecutor workers.
 # Populated by _init_worker_genomes() which is passed as the
 # ``initializer`` argument when the pool is created, so each worker
@@ -307,7 +316,16 @@ class BuiltinGenerator(ReadGenerator):
 
         actual_reads = num_reads if num_reads is not None else self.config.reads_per_file
         reads = self._sample_reads(full_seq, genome, actual_reads)
-        self._write_fastq(reads, output_path)
+
+        use_gz = output_path.suffix == ".gz"
+        tmp_path = _atomic_tmp_path(output_path)
+        try:
+            self._write_fastq(reads, tmp_path, compress=use_gz)
+            tmp_path.rename(output_path)
+        except BaseException:
+            if tmp_path.exists():
+                tmp_path.unlink()
+            raise
 
         return output_path
 
@@ -450,10 +468,18 @@ class BuiltinGenerator(ReadGenerator):
         return "".join(quals)
 
     def _write_fastq(
-        self, reads: List[Tuple[str, str, str]], output_path: Path
+        self, reads: List[Tuple[str, str, str]], output_path: Path,
+        compress: Optional[bool] = None,
     ) -> None:
-        """Write reads to a FASTQ file (plain or gzipped)."""
-        if output_path.suffix == ".gz":
+        """Write reads to a FASTQ file (plain or gzipped).
+
+        Args:
+            reads: List of (read_id, sequence, quality) tuples.
+            output_path: Destination file path.
+            compress: Force gzip compression. If None, infer from suffix.
+        """
+        use_gz = compress if compress is not None else output_path.suffix == ".gz"
+        if use_gz:
             fh = gzip.open(output_path, "wt", compresslevel=1)
         else:
             fh = open(output_path, "w")
@@ -538,12 +564,20 @@ class SubprocessGenerator(ReadGenerator):
         output_dir.mkdir(parents=True, exist_ok=True)
         filename = self._output_filename(genome, file_index)
         output_path = output_dir / filename
+        use_gz = output_path.suffix == ".gz"
+        tmp_path = _atomic_tmp_path(output_path)
         actual_reads = num_reads if num_reads is not None else self.config.reads_per_file
 
-        if self.backend == "badread":
-            self._run_badread(genome, output_path, actual_reads)
-        else:
-            self._run_nanosim(genome, output_path, output_dir, file_index, actual_reads)
+        try:
+            if self.backend == "badread":
+                self._run_badread(genome, tmp_path, actual_reads, compress=use_gz)
+            else:
+                self._run_nanosim(genome, tmp_path, output_dir, file_index, actual_reads)
+            tmp_path.rename(output_path)
+        except BaseException:
+            if tmp_path.exists():
+                tmp_path.unlink()
+            raise
 
         return output_path
 
@@ -561,7 +595,8 @@ class SubprocessGenerator(ReadGenerator):
     # -- badread specifics ------------------------------------------
 
     def _run_badread(
-        self, genome: GenomeInput, output_path: Path, num_reads: int
+        self, genome: GenomeInput, output_path: Path, num_reads: int,
+        compress: bool = False,
     ) -> None:
         total_bases = num_reads * self.config.mean_read_length
         cmd = [
@@ -574,7 +609,7 @@ class SubprocessGenerator(ReadGenerator):
         logger.info("Running badread: %s", " ".join(cmd))
         result = self._run_subprocess(cmd, "badread")
 
-        if output_path.suffix == ".gz":
+        if compress:
             with gzip.open(output_path, "wt", compresslevel=1) as fh:
                 fh.write(result.stdout)
         else:

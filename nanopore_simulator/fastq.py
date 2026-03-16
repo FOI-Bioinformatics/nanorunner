@@ -6,7 +6,7 @@ Supports both plain text and gzip-compressed files.
 
 import gzip
 from pathlib import Path
-from typing import Iterator, List, Tuple
+from typing import Iterator, List, Optional, Tuple
 
 
 def count_reads(path: Path) -> int:
@@ -75,18 +75,22 @@ def iter_reads(path: Path) -> Iterator[Tuple[str, str, str, str]]:
 
 
 def write_reads(
-    reads: List[Tuple[str, str, str, str]], path: Path
+    reads: List[Tuple[str, str, str, str]], path: Path,
+    compress: Optional[bool] = None,
 ) -> None:
     """Write FASTQ records to a file.
 
     Each record is a (header, sequence, separator, quality) tuple.
-    Output is gzipped when the path ends in .gz.
+    Output is gzipped when the path ends in .gz, unless *compress*
+    is explicitly set.
 
     Args:
         reads: List of 4-tuples representing FASTQ records.
         path: Output file path.
+        compress: Force gzip compression. If None, infer from path suffix.
     """
-    if str(path).endswith(".gz"):
+    use_gz = compress if compress is not None else str(path).endswith(".gz")
+    if use_gz:
         fh = gzip.open(path, "wt", compresslevel=1)
     else:
         fh = open(path, "w")

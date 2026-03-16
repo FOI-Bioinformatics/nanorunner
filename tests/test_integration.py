@@ -783,6 +783,65 @@ class TestGenerateWithGenomeDirectory:
         assert len(output_files) == 2
 
 
+class TestStress96Barcodes:
+    """Stress test: 96 barcodes x 5 files x 100 reads."""
+
+    def test_96_barcode_stress(self, tmp_path: Path):
+        """Generate 96 barcodes with 5 files each, verifying scale."""
+        # Create 96 genome files
+        genome_dir = tmp_path / "genomes"
+        genome_dir.mkdir()
+        for i in range(96):
+            seq = "ACGTACGT" * 10  # 80bp genome
+            (genome_dir / f"species_{i:03d}.fa").write_text(
+                f">chr1\n{seq}\n"
+            )
+        genomes = sorted(genome_dir.glob("*.fa"))
+
+        target = tmp_path / "target"
+        # Build CLI args: 96 genomes, each gets a barcode dir
+        args = [
+            "generate",
+            "--target", str(target),
+            "--generator-backend", "builtin",
+            "--read-count", str(96 * 500),  # 500 reads per genome
+            "--reads-per-file", "100",       # 5 files per barcode
+            "--output-format", "fastq",
+            "--force-structure", "multiplex",
+            "--no-wait",
+            "--quiet",
+        ]
+        for g in genomes:
+            args.extend(["--genomes", str(g)])
+
+        result = runner.invoke(app, args)
+        assert result.exit_code == 0, result.output
+
+        # Verify all 96 barcode directories created
+        barcode_dirs = sorted(
+            d for d in target.iterdir() if d.is_dir() and d.name.startswith("barcode")
+        )
+        assert len(barcode_dirs) == 96, (
+            f"Expected 96 barcode dirs, got {len(barcode_dirs)}"
+        )
+
+        # Verify total file count: 96 barcodes x 5 files = 480
+        all_files = list(target.rglob("*.fastq"))
+        assert len(all_files) == 480, (
+            f"Expected 480 files, got {len(all_files)}"
+        )
+
+        # Verify no filename collisions (all paths unique)
+        paths = [str(f) for f in all_files]
+        assert len(paths) == len(set(paths)), "File path collision detected"
+
+        # Verify no leftover .tmp files
+        tmp_files = list(target.rglob("*.tmp"))
+        assert len(tmp_files) == 0, (
+            f"Found {len(tmp_files)} orphaned .tmp files"
+        )
+
+
 class TestErrorHandling:
     """CLI reports errors cleanly for invalid inputs."""
 

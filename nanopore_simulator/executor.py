@@ -22,6 +22,11 @@ from nanopore_simulator.manifest import FileEntry
 logger = logging.getLogger(__name__)
 
 
+def _atomic_tmp_path(target: Path) -> Path:
+    """Return a temporary sibling path for atomic writes."""
+    return target.parent / f".{target.name}.tmp"
+
+
 def execute_entry(
     entry: FileEntry,
     generator: Optional[ReadGenerator] = None,
@@ -62,10 +67,20 @@ def execute_entry(
 
 
 def _copy_file(source: Path, target: Path) -> Path:
-    """Copy a source file to target, preserving metadata."""
+    """Copy a source file to target, preserving metadata.
+
+    Uses atomic write: copies to a .tmp file first, then renames.
+    """
     if not source.exists():
         raise FileNotFoundError(f"Source file not found: {source}")
-    shutil.copy2(source, target)
+    tmp_target = _atomic_tmp_path(target)
+    try:
+        shutil.copy2(source, tmp_target)
+        tmp_target.rename(target)
+    except BaseException:
+        if tmp_target.exists():
+            tmp_target.unlink()
+        raise
     return target
 
 
@@ -148,7 +163,15 @@ def _rechunk_file(entry: FileEntry) -> Path:
         if len(collected) >= reads_per_chunk:
             break
 
-    write_reads(collected, entry.target)
+    use_gz = str(entry.target).endswith(".gz")
+    tmp_target = _atomic_tmp_path(entry.target)
+    try:
+        write_reads(collected, tmp_target, compress=use_gz)
+        tmp_target.rename(entry.target)
+    except BaseException:
+        if tmp_target.exists():
+            tmp_target.unlink()
+        raise
     return entry.target
 
 
@@ -173,5 +196,13 @@ def _generate_mixed_file(
 
     output_dir = entry.target.parent
     output_dir.mkdir(parents=True, exist_ok=True)
-    write_reads(all_reads, entry.target)
+    use_gz = str(entry.target).endswith(".gz")
+    tmp_target = _atomic_tmp_path(entry.target)
+    try:
+        write_reads(all_reads, tmp_target, compress=use_gz)
+        tmp_target.rename(entry.target)
+    except BaseException:
+        if tmp_target.exists():
+            tmp_target.unlink()
+        raise
     return entry.target
