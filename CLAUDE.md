@@ -130,9 +130,12 @@ nanorunner list-generators
 nanorunner list-mocks
 nanorunner check-deps
 nanorunner replay --source /source --target /target --profile bursty --monitor enhanced
+nanorunner replay --source /source --target /target --reads-per-file 50 --interval 1
 nanorunner generate --genomes genome.fa --target /target --interval 2
 nanorunner generate --mock zymo_d6300 --target /target --read-count 1000 --interval 1
 nanorunner generate --genomes genome.fa --target /target --mean-quality 25 --std-quality 3
+nanorunner validate --pipeline nanometa --target /path/to/output
+nanorunner recommend --source /path/to/data
 ```
 
 ## Architecture
@@ -271,7 +274,7 @@ Flat layout -- all source modules in `nanopore_simulator/` with no subdirectorie
 
 **Coverage Standards:**
 - Minimum coverage threshold: 90%
-- 721 tests across 18 test files
+- 722 tests across 18 test files
 - Comprehensive integration testing with multiple timing models and configurations
 
 ## Integration Context
