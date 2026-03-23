@@ -180,7 +180,7 @@ class TestGenerateErrorPaths:
         fasta = tmp_path / "g.fa"
         fasta.write_text(">chr1\nACGTACGTACGTACGT\n")
         with patch(
-            "nanopore_simulator.cli.run_generate",
+            "nanopore_simulator.cli_generate.run_generate",
             side_effect=RuntimeError("test error"),
         ):
             result = runner.invoke(
@@ -203,7 +203,7 @@ class TestGenerateErrorPaths:
         source.mkdir()
         (source / "r.fastq").write_text("@r1\nACGT\n+\nIIII\n")
         with patch(
-            "nanopore_simulator.cli.run_replay",
+            "nanopore_simulator.cli_replay.run_replay",
             side_effect=RuntimeError("test error"),
         ):
             result = runner.invoke(
