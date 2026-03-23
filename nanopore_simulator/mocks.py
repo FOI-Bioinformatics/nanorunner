@@ -40,7 +40,7 @@ class MockOrganism:
         valid_domains = {"bacteria", "archaea", "eukaryota", None}
         if self.domain not in valid_domains:
             raise ValueError(
-                f"domain must be one of {{'bacteria', 'archaea', 'eukaryota'}} or None"
+                "domain must be one of {'bacteria', 'archaea', 'eukaryota'} or None"
             )
 
 
@@ -64,9 +64,7 @@ class MockCommunity:
             raise ValueError("MockCommunity must have at least one organism")
         total = sum(org.abundance for org in self.organisms)
         if not 0.99 <= total <= 1.01:
-            raise ValueError(
-                f"Organism abundances must sum to 1.0 (got {total:.3f})"
-            )
+            raise ValueError(f"Organism abundances must sum to 1.0 (got {total:.3f})")
 
 
 # ---------------------------------------------------------------------------
@@ -78,9 +76,7 @@ _ZYMO_D6300_ORGANISMS = [
     MockOrganism(
         "Pseudomonas aeruginosa", "ncbi", 0.1, "GCF_000006765.1", domain="bacteria"
     ),
-    MockOrganism(
-        "Escherichia coli", "ncbi", 0.1, "GCF_000005845.2", domain="bacteria"
-    ),
+    MockOrganism("Escherichia coli", "ncbi", 0.1, "GCF_000005845.2", domain="bacteria"),
     MockOrganism(
         "Salmonella enterica", "ncbi", 0.1, "GCF_000006945.2", domain="bacteria"
     ),
@@ -120,7 +116,11 @@ _ZYMO_D6310_ORGANISMS = [
         "Bacillus subtilis", "ncbi", 0.0089, "GCF_000009045.1", domain="bacteria"
     ),
     MockOrganism(
-        "Saccharomyces cerevisiae", "ncbi", 0.0089, "GCF_000146045.2", domain="eukaryota"
+        "Saccharomyces cerevisiae",
+        "ncbi",
+        0.0089,
+        "GCF_000146045.2",
+        domain="eukaryota",
     ),
     MockOrganism(
         "Escherichia coli", "ncbi", 0.00089, "GCF_000005845.2", domain="bacteria"
@@ -129,16 +129,28 @@ _ZYMO_D6310_ORGANISMS = [
         "Salmonella enterica", "ncbi", 0.00089, "GCF_000006945.2", domain="bacteria"
     ),
     MockOrganism(
-        "Lactobacillus fermentum", "ncbi", 0.000089, "GCF_000159215.1", domain="bacteria"
+        "Lactobacillus fermentum",
+        "ncbi",
+        0.000089,
+        "GCF_000159215.1",
+        domain="bacteria",
     ),
     MockOrganism(
         "Enterococcus faecalis", "ncbi", 0.0000089, "GCF_000007785.1", domain="bacteria"
     ),
     MockOrganism(
-        "Staphylococcus aureus", "ncbi", 0.00000089, "GCF_000013425.1", domain="bacteria"
+        "Staphylococcus aureus",
+        "ncbi",
+        0.00000089,
+        "GCF_000013425.1",
+        domain="bacteria",
     ),
     MockOrganism(
-        "Cryptococcus neoformans", "ncbi", 0.000000089, "GCF_000149245.1", domain="eukaryota"
+        "Cryptococcus neoformans",
+        "ncbi",
+        0.000000089,
+        "GCF_000149245.1",
+        domain="eukaryota",
     ),
 ]
 
@@ -146,7 +158,11 @@ _ZYMO_D6310_ORGANISMS = [
 _ZYMO_D6331_ORGANISMS = [
     # High abundance (14%)
     MockOrganism(
-        "Faecalibacterium prausnitzii", "ncbi", 0.14, "GCF_000162015.1", domain="bacteria"
+        "Faecalibacterium prausnitzii",
+        "ncbi",
+        0.14,
+        "GCF_000162015.1",
+        domain="bacteria",
     ),
     MockOrganism(
         "Veillonella rogosae", "ncbi", 0.14, "GCF_001312485.1", domain="bacteria"
@@ -178,7 +194,11 @@ _ZYMO_D6331_ORGANISMS = [
         "Prevotella corporis", "ncbi", 0.06, "GCF_000430525.1", domain="bacteria"
     ),
     MockOrganism(
-        "Bifidobacterium adolescentis", "ncbi", 0.06, "GCF_000010425.1", domain="bacteria"
+        "Bifidobacterium adolescentis",
+        "ncbi",
+        0.06,
+        "GCF_000010425.1",
+        domain="bacteria",
     ),
     MockOrganism(
         "Fusobacterium nucleatum", "ncbi", 0.06, "GCF_000007325.1", domain="bacteria"
@@ -210,7 +230,11 @@ _ZYMO_D6331_ORGANISMS = [
         "Enterococcus faecalis", "ncbi", 0.00001, "GCF_000007785.1", domain="bacteria"
     ),
     MockOrganism(
-        "Clostridium perfringens", "ncbi", 0.000001, "GCF_000009685.1", domain="bacteria"
+        "Clostridium perfringens",
+        "ncbi",
+        0.000001,
+        "GCF_000009685.1",
+        domain="bacteria",
     ),
 ]
 
@@ -226,7 +250,11 @@ _ATCC_MSA1002_ORGANISMS = [
         "Phocaeicola vulgatus", "ncbi", 0.05, "GCF_000012825.1", domain="bacteria"
     ),
     MockOrganism(
-        "Bifidobacterium adolescentis", "ncbi", 0.05, "GCF_000010425.1", domain="bacteria"
+        "Bifidobacterium adolescentis",
+        "ncbi",
+        0.05,
+        "GCF_000010425.1",
+        domain="bacteria",
     ),
     MockOrganism(
         "Clostridium beijerinckii", "ncbi", 0.05, "GCF_000016965.1", domain="bacteria"
@@ -333,7 +361,11 @@ _ATCC_MSA1003_ORGANISMS = [
         "Phocaeicola vulgatus", "ncbi", 0.0002, "GCF_000012825.1", domain="bacteria"
     ),
     MockOrganism(
-        "Bifidobacterium adolescentis", "ncbi", 0.0002, "GCF_000010425.1", domain="bacteria"
+        "Bifidobacterium adolescentis",
+        "ncbi",
+        0.0002,
+        "GCF_000010425.1",
+        domain="bacteria",
     ),
     MockOrganism(
         "Deinococcus radiodurans", "ncbi", 0.0002, "GCF_000008565.1", domain="bacteria"
@@ -423,9 +455,7 @@ _WHO_CRITICAL_ORGANISMS = [
     MockOrganism(
         "Klebsiella pneumoniae", "ncbi", 0.2, "GCF_000240185.1", domain="bacteria"
     ),
-    MockOrganism(
-        "Escherichia coli", "ncbi", 0.2, "GCF_000005845.2", domain="bacteria"
-    ),
+    MockOrganism("Escherichia coli", "ncbi", 0.2, "GCF_000005845.2", domain="bacteria"),
     MockOrganism(
         "Enterobacter cloacae", "ncbi", 0.2, "GCF_000025565.1", domain="bacteria"
     ),
@@ -446,7 +476,11 @@ _BLOODSTREAM_ORGANISMS = [
         "Enterococcus faecalis", "ncbi", 1 / 6, "GCF_000007785.1", domain="bacteria"
     ),
     MockOrganism(
-        "Staphylococcus epidermidis", "ncbi", 1 / 6, "GCF_000007645.1", domain="bacteria"
+        "Staphylococcus epidermidis",
+        "ncbi",
+        1 / 6,
+        "GCF_000007645.1",
+        domain="bacteria",
     ),
     MockOrganism(
         "Candida albicans", "ncbi", 1 / 6, "GCF_000182965.3", domain="eukaryota"
@@ -477,9 +511,7 @@ _WASTEWATER_ORGANISMS = [
 
 # Quick / testing mocks
 _QUICK_SINGLE_ORGANISMS = [
-    MockOrganism(
-        "Escherichia coli", "ncbi", 1.0, "GCF_000005845.2", domain="bacteria"
-    ),
+    MockOrganism("Escherichia coli", "ncbi", 1.0, "GCF_000005845.2", domain="bacteria"),
 ]
 
 _QUICK_3SPECIES_ORGANISMS = [
@@ -499,11 +531,13 @@ _QUICK_GUT5_ORGANISMS = [
         "Bacteroides fragilis", "ncbi", 0.2, "GCF_000025985.1", domain="bacteria"
     ),
     MockOrganism(
-        "Faecalibacterium prausnitzii", "ncbi", 0.2, "GCF_000162015.1", domain="bacteria"
+        "Faecalibacterium prausnitzii",
+        "ncbi",
+        0.2,
+        "GCF_000162015.1",
+        domain="bacteria",
     ),
-    MockOrganism(
-        "Escherichia coli", "ncbi", 0.2, "GCF_000005845.2", domain="bacteria"
-    ),
+    MockOrganism("Escherichia coli", "ncbi", 0.2, "GCF_000005845.2", domain="bacteria"),
     MockOrganism(
         "Bifidobacterium longum", "ncbi", 0.2, "GCF_000007525.1", domain="bacteria"
     ),
@@ -516,9 +550,7 @@ _QUICK_PATHOGENS_ORGANISMS = [
     MockOrganism(
         "Staphylococcus aureus", "ncbi", 0.2, "GCF_000013425.1", domain="bacteria"
     ),
-    MockOrganism(
-        "Escherichia coli", "ncbi", 0.2, "GCF_000005845.2", domain="bacteria"
-    ),
+    MockOrganism("Escherichia coli", "ncbi", 0.2, "GCF_000005845.2", domain="bacteria"),
     MockOrganism(
         "Klebsiella pneumoniae", "ncbi", 0.2, "GCF_000240185.1", domain="bacteria"
     ),
@@ -592,8 +624,7 @@ BUILTIN_MOCKS: Dict[str, MockCommunity] = {
     "wastewater": MockCommunity(
         name="wastewater",
         description=(
-            "Wastewater surveillance indicators"
-            " and waterborne pathogens - 6 species"
+            "Wastewater surveillance indicators" " and waterborne pathogens - 6 species"
         ),
         organisms=_WASTEWATER_ORGANISMS,
     ),

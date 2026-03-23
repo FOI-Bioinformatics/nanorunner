@@ -57,9 +57,7 @@ def _resolve_name(name: str) -> str:
     return key
 
 
-def _find_matching_files(
-    target: Path, patterns: List[str]
-) -> List[Path]:
+def _find_matching_files(target: Path, patterns: List[str]) -> List[Path]:
     """Collect all files under *target* matching any of the glob patterns.
 
     Searches both the root directory and one level of subdirectories to
@@ -120,9 +118,7 @@ def validate_output(target: Path, adapter_name: str) -> List[str]:
     matched = _find_matching_files(target, patterns)
 
     if not matched:
-        issues.append(
-            f"No files matching {patterns} found in {target}"
-        )
+        issues.append(f"No files matching {patterns} found in {target}")
 
     return issues
 

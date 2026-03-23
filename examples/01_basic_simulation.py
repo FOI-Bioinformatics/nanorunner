@@ -1,87 +1,87 @@
 #!/usr/bin/env python3
 """
-Example 1: Basic Simulation
+Example 1: Basic Replay Simulation
 
+Level: Beginner
+Time: ~1 minute
 Description:
-    Minimal working example of NanoRunner showing basic file simulation
-    from singleplex data structure to a target directory.
+    Minimal working example of nanorunner showing basic file replay
+    from a singleplex source directory to a target directory.
+    Uses ReplayConfig and run_replay -- the two fundamental building
+    blocks of replay mode.
 
 Usage:
     python examples/01_basic_simulation.py
 
 Requirements:
-    - nanorunner installed
+    - nanorunner installed (pip install -e .)
     - Sample data in examples/sample_data/
 
 Expected Output:
-    - Creates /tmp/nanorunner_basic_output/
-    - Copies 2 FASTQ files with 1-second intervals
-    - Shows progress: "2/2 files | 100.0%"
+    - Creates a temporary output directory
+    - Copies 2 FASTQ files with 1-second uniform intervals
+    - Reports the number of files produced
     - Completes in ~2-3 seconds
 """
 
-from pathlib import Path
-import tempfile
 import shutil
-from nanopore_simulator import SimulationConfig, NanoporeSimulator
+import tempfile
+from pathlib import Path
+
+from nanopore_simulator import ReplayConfig, run_replay
 
 
-def main():
+def main() -> int:
     print("=" * 60)
-    print("Example 1: Basic Simulation")
+    print("Example 1: Basic Replay Simulation")
     print("=" * 60)
     print()
 
-    # Define source and target directories
-    source_dir = Path("examples/sample_data/singleplex")
-    target_dir = Path(tempfile.gettempdir()) / "nanorunner_basic_output"
+    # Source directory ships with the repository.
+    source_dir = Path(__file__).parent / "sample_data" / "singleplex"
+    target_dir = Path(tempfile.mkdtemp(prefix="nanorunner_basic_"))
 
-    # Clean up any previous runs
-    if target_dir.exists():
-        shutil.rmtree(target_dir)
-
-    # Check source data exists
     if not source_dir.exists():
-        print(f"Error: Sample data not found at {source_dir}")
-        print("Please run this script from the repository root directory")
+        print(f"Error: sample data not found at {source_dir}")
+        print("Run this script from the repository root directory.")
         return 1
 
     print(f"Source: {source_dir}")
     print(f"Target: {target_dir}")
     print()
 
-    # Create simulation configuration
-    # - interval=1.0: 1 second between file operations
-    # - operation="copy": copy files (not symlinks)
-    # - timing_model="uniform": constant intervals (deterministic)
-    config = SimulationConfig(
+    # Build a replay configuration.
+    #
+    # Key parameters:
+    #   interval=1.0      -- 1 second between batch operations
+    #   operation="copy"  -- copy files rather than create symlinks
+    #   timing_model="uniform" -- constant interval (deterministic)
+    #   monitor_type="basic"   -- print progress to stdout
+    config = ReplayConfig(
         source_dir=source_dir,
         target_dir=target_dir,
         interval=1.0,
         operation="copy",
         timing_model="uniform",
+        monitor_type="basic",
     )
 
-    # Create and run simulator
-    print("Starting simulation...")
+    print("Starting replay simulation...")
     print("-" * 60)
-    simulator = NanoporeSimulator(config, enable_monitoring=True)
-    simulator.run_simulation()
+    run_replay(config)
     print("-" * 60)
     print()
 
-    # Verify results
-    copied_files = list(target_dir.glob("*.fastq"))
-    print(f"✓ Success! Copied {len(copied_files)} files to {target_dir}")
-    print()
-    print("Output files:")
-    for file_path in sorted(copied_files):
-        print(f"  - {file_path.name}")
+    # Verify output.
+    produced = sorted(target_dir.glob("*.fastq"))
+    print(f"Produced {len(produced)} file(s) in {target_dir}:")
+    for p in produced:
+        print(f"  {p.name}")
     print()
 
-    # Cleanup instructions
-    print("To clean up:")
-    print(f"  rm -rf {target_dir}")
+    # Clean up.
+    shutil.rmtree(target_dir, ignore_errors=True)
+    print("Temporary output directory removed.")
     print()
 
     return 0
@@ -89,10 +89,10 @@ def main():
 
 if __name__ == "__main__":
     try:
-        exit(main())
+        raise SystemExit(main())
     except KeyboardInterrupt:
         print("\nInterrupted by user")
-        exit(1)
-    except Exception as e:
-        print(f"\nError: {e}")
-        exit(1)
+        raise SystemExit(1)
+    except Exception as exc:
+        print(f"\nError: {exc}")
+        raise SystemExit(1)

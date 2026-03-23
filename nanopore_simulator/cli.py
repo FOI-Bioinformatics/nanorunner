@@ -5,6 +5,7 @@ dataclass, and call the appropriate runner or utility function.
 Validation lives in the config dataclasses, not here.
 """
 
+import logging
 import sys
 from enum import Enum
 from pathlib import Path
@@ -36,9 +37,15 @@ class OperationChoice(str, Enum):
 
 class MonitorLevel(str, Enum):
     default = "default"
-    detailed = "detailed"
     enhanced = "enhanced"
     none = "none"
+
+
+class LogLevel(str, Enum):
+    debug = "DEBUG"
+    info = "INFO"
+    warning = "WARNING"
+    error = "ERROR"
 
 
 class OutputFormat(str, Enum):
@@ -87,8 +94,18 @@ def _app_callback(
         callback=_version_callback,
         is_eager=True,
     ),
+    log_level: LogLevel = typer.Option(
+        LogLevel.warning,
+        "--log-level",
+        help="Set logging verbosity.",
+    ),
 ) -> None:
     """Nanopore sequencing run simulator for testing bioinformatics pipelines."""
+    logging.basicConfig(
+        level=getattr(logging, log_level.value),
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        datefmt="%H:%M:%S",
+    )
 
 
 # -------------------------------------------------------------------
@@ -132,17 +149,13 @@ def _validate_timing_params(
         typer.echo("Error: Random factor must be between 0.0 and 1.0", err=True)
         raise typer.Exit(code=2)
     if burst_probability is not None and not (0.0 <= burst_probability <= 1.0):
-        typer.echo(
-            "Error: Burst probability must be between 0.0 and 1.0", err=True
-        )
+        typer.echo("Error: Burst probability must be between 0.0 and 1.0", err=True)
         raise typer.Exit(code=2)
     if burst_rate_multiplier is not None and burst_rate_multiplier <= 0:
         typer.echo("Error: Burst rate multiplier must be positive", err=True)
         raise typer.Exit(code=2)
     if adaptation_rate is not None and not (0.0 <= adaptation_rate <= 1.0):
-        typer.echo(
-            "Error: Adaptation rate must be between 0.0 and 1.0", err=True
-        )
+        typer.echo("Error: Adaptation rate must be between 0.0 and 1.0", err=True)
         raise typer.Exit(code=2)
     if history_size is not None and history_size < 1:
         typer.echo("Error: History size must be at least 1", err=True)
@@ -167,7 +180,7 @@ def _resolve_monitor(monitor: MonitorLevel, quiet: bool) -> str:
             typer.echo("Falling back to basic monitoring mode.", err=True)
             return "basic"
         return "enhanced"
-    # "default" and "detailed" both map to "basic"
+    # "default" maps to "basic"
     return "basic"
 
 
@@ -198,9 +211,7 @@ def _expand_genome_paths(paths: List[Path]) -> List[Path]:
                     err=True,
                 )
                 raise typer.Exit(code=2)
-            typer.echo(
-                f"Expanded directory {p.name}/ -> {len(found)} genome file(s)"
-            )
+            typer.echo(f"Expanded directory {p.name}/ -> {len(found)} genome file(s)")
             expanded.extend(found)
         else:
             expanded.append(p)
@@ -232,7 +243,11 @@ def _resolve_and_download_genomes(
         typer.Exit: If resolution or download fails completely.
     """
     from nanopore_simulator.species import (
-        GenomeCache, GenomeRef, download_genome, resolve_species, resolve_taxid,
+        GenomeCache,
+        GenomeRef,
+        download_genome,
+        resolve_species,
+        resolve_taxid,
     )
     from nanopore_simulator.mocks import get_mock
 
@@ -249,6 +264,7 @@ def _resolve_and_download_genomes(
             typer.echo(f"Error: Unknown mock community: {mock_name}", err=True)
             raise typer.Exit(code=1)
         for org in mock_community.organisms:
+            ref: Optional[GenomeRef] = None
             if org.accession:
                 domain = org.domain or (
                     "eukaryota" if org.resolver == "ncbi" else "bacteria"
@@ -268,17 +284,17 @@ def _resolve_and_download_genomes(
 
     if species_inputs:
         for sp in species_inputs:
-            ref = resolve_species(sp)
-            if ref:
-                genome_downloads.append((sp, ref, None))
+            sp_ref: Optional[GenomeRef] = resolve_species(sp)
+            if sp_ref:
+                genome_downloads.append((sp, sp_ref, None))
             else:
                 typer.echo(f"Warning: Could not resolve: {sp}", err=True)
 
     if taxid_inputs:
         for tid in taxid_inputs:
-            ref = resolve_taxid(int(tid))
-            if ref:
-                genome_downloads.append((f"taxid:{tid}", ref, None))
+            tid_ref: Optional[GenomeRef] = resolve_taxid(int(tid))
+            if tid_ref:
+                genome_downloads.append((f"taxid:{tid}", tid_ref, None))
             else:
                 typer.echo(f"Warning: Could not resolve taxid: {tid}", err=True)
 
@@ -324,23 +340,31 @@ def _resolve_and_download_genomes(
 def replay(
     # Required
     source: Path = typer.Option(
-        ..., "--source", "-s",
+        ...,
+        "--source",
+        "-s",
         help="Source directory containing FASTQ/POD5 files.",
-        exists=True, file_okay=False, resolve_path=True,
+        exists=True,
+        file_okay=False,
+        resolve_path=True,
         rich_help_panel="Required",
     ),
     target: Path = typer.Option(
-        ..., "--target", "-t",
+        ...,
+        "--target",
+        "-t",
         help="Target directory for pipeline to watch.",
         rich_help_panel="Required",
     ),
     # Simulation Configuration
     profile: Optional[str] = typer.Option(
-        None, help="Use a predefined configuration profile.",
+        None,
+        help="Use a predefined configuration profile.",
         rich_help_panel="Simulation Configuration",
     ),
     interval: float = typer.Option(
-        5.0, help="Seconds between file operations.",
+        5.0,
+        help="Seconds between file operations.",
         rich_help_panel="Simulation Configuration",
     ),
     operation: OperationChoice = typer.Option(
@@ -349,11 +373,13 @@ def replay(
         rich_help_panel="Simulation Configuration",
     ),
     force_structure: Optional[ForceStructure] = typer.Option(
-        None, help="Force specific structure instead of auto-detection.",
+        None,
+        help="Force specific structure instead of auto-detection.",
         rich_help_panel="Simulation Configuration",
     ),
     batch_size: int = typer.Option(
-        1, help="Number of files to process per interval.",
+        1,
+        help="Number of files to process per interval.",
         rich_help_panel="Simulation Configuration",
     ),
     no_wait: bool = typer.Option(
@@ -371,54 +397,64 @@ def replay(
     ),
     # Timing Models
     timing_model: Optional[TimingModelChoice] = typer.Option(
-        None, help="Timing model (overrides profile setting).",
+        None,
+        help="Timing model (overrides profile setting).",
         rich_help_panel="Timing Models",
     ),
     burst_probability: Optional[float] = typer.Option(
-        None, help="Burst probability for Poisson model (0.0-1.0).",
+        None,
+        help="Burst probability for Poisson model (0.0-1.0).",
         rich_help_panel="Timing Models",
     ),
     burst_rate_multiplier: Optional[float] = typer.Option(
-        None, help="Burst rate multiplier for Poisson model.",
+        None,
+        help="Burst rate multiplier for Poisson model.",
         rich_help_panel="Timing Models",
     ),
     random_factor: Optional[float] = typer.Option(
-        None, help="Randomness factor for random timing model (0.0-1.0).",
+        None,
+        help="Randomness factor for random timing model (0.0-1.0).",
         rich_help_panel="Timing Models",
     ),
     adaptation_rate: Optional[float] = typer.Option(
-        None, help="Adaptation rate for adaptive timing model (0.0-1.0).",
+        None,
+        help="Adaptation rate for adaptive timing model (0.0-1.0).",
         rich_help_panel="Timing Models",
     ),
     history_size: Optional[int] = typer.Option(
-        None, help="History size for adaptive timing model.",
+        None,
+        help="History size for adaptive timing model.",
         rich_help_panel="Timing Models",
     ),
     # Parallel Processing
     parallel: bool = typer.Option(
-        False, help="Enable parallel processing within batches.",
+        False,
+        help="Enable parallel processing within batches.",
         rich_help_panel="Parallel Processing",
     ),
     worker_count: int = typer.Option(
-        4, help="Number of worker threads for parallel processing.",
+        4,
+        help="Number of worker threads for parallel processing.",
         rich_help_panel="Parallel Processing",
     ),
     # Monitoring
     monitor: MonitorLevel = typer.Option(
         MonitorLevel.default,
         help=(
-            "Progress monitoring level: default (basic), detailed (verbose "
-            "logging), enhanced (resource monitoring + interactive controls), "
+            "Progress monitoring level: default (basic), "
+            "enhanced (resource monitoring + interactive controls), "
             "none (silent)."
         ),
         rich_help_panel="Monitoring",
     ),
     quiet: bool = typer.Option(
-        False, help="Suppress progress output.",
+        False,
+        help="Suppress progress output.",
         rich_help_panel="Monitoring",
     ),
     pipeline: Optional[str] = typer.Option(
-        None, help="Validate output for specific pipeline compatibility.",
+        None,
+        help="Validate output for specific pipeline compatibility.",
         rich_help_panel="Monitoring",
     ),
 ) -> None:
@@ -427,8 +463,11 @@ def replay(
         interval = 0.0
 
     _validate_timing_params(
-        burst_probability, burst_rate_multiplier, random_factor,
-        adaptation_rate, history_size,
+        burst_probability,
+        burst_rate_multiplier,
+        random_factor,
+        adaptation_rate,
+        history_size,
     )
 
     if reads_per_file is not None and operation == OperationChoice.link:
@@ -440,13 +479,17 @@ def replay(
 
     # Build params -- start from profile if provided, then overlay CLI args.
     timing_params = _build_timing_params(
-        burst_probability, burst_rate_multiplier, random_factor,
-        adaptation_rate, history_size,
+        burst_probability,
+        burst_rate_multiplier,
+        random_factor,
+        adaptation_rate,
+        history_size,
     )
 
     params: Dict = {}
     if profile:
         from nanopore_simulator.profiles import apply_profile
+
         try:
             params = apply_profile(profile)
         except ValueError as exc:
@@ -454,17 +497,12 @@ def replay(
             raise typer.Exit(code=2)
 
     # Map profile field names to config field names
-    tm = timing_model.value if timing_model else params.get(
-        "timing_model", "uniform"
-    )
+    tm = timing_model.value if timing_model else params.get("timing_model", "uniform")
     tp = timing_params or params.get("timing_model_params", {})
     op = operation.value
     bs = batch_size if batch_size != 1 else params.get("batch_size", 1)
     par = parallel or params.get("parallel_processing", False)
-    wk = (
-        worker_count if worker_count != 4
-        else params.get("worker_count", 4)
-    )
+    wk = worker_count if worker_count != 4 else params.get("worker_count", 4)
     struct = force_structure.value if force_structure else "auto"
     monitor_type = _resolve_monitor(monitor, quiet)
 
@@ -490,6 +528,7 @@ def replay(
 
     # Pre-flight validation
     from nanopore_simulator.deps import check_preflight
+
     errors = check_preflight(operation=config.operation)
     if errors:
         for err in errors:
@@ -507,7 +546,6 @@ def replay(
 
     # Post-run pipeline validation
     if pipeline:
-        from nanopore_simulator.adapters import validate_output
         _run_pipeline_validation(pipeline, target)
 
 
@@ -515,84 +553,104 @@ def replay(
 def generate(
     # Required
     target: Path = typer.Option(
-        ..., "--target", "-t",
+        ...,
+        "--target",
+        "-t",
         help="Target directory for generated reads.",
         rich_help_panel="Required",
     ),
     # Genome Source
     genomes: Optional[List[Path]] = typer.Option(
-        None, help="Input genome FASTA files.",
+        None,
+        help="Input genome FASTA files.",
         rich_help_panel="Genome Source",
     ),
     species: Optional[List[str]] = typer.Option(
-        None, help="Species names to resolve via GTDB/NCBI.",
+        None,
+        help="Species names to resolve via GTDB/NCBI.",
         rich_help_panel="Genome Source",
     ),
     mock: Optional[str] = typer.Option(
-        None, help="Preset mock community name (e.g. zymo_d6300).",
+        None,
+        help="Preset mock community name (e.g. zymo_d6300).",
         rich_help_panel="Genome Source",
     ),
     taxid: Optional[List[int]] = typer.Option(
-        None, help="Direct NCBI taxonomy IDs.",
+        None,
+        help="Direct NCBI taxonomy IDs.",
         rich_help_panel="Genome Source",
     ),
     # Read Generation
     generator_backend: GeneratorBackend = typer.Option(
-        GeneratorBackend.auto, help="Read generation backend.",
+        GeneratorBackend.auto,
+        help="Read generation backend.",
         rich_help_panel="Read Generation",
     ),
     read_count: Optional[int] = typer.Option(
-        None, help="Total number of reads to generate across all genomes. [default: 1000]",
+        None,
+        help="Total number of reads to generate across all genomes. [default: 1000]",
         rich_help_panel="Read Generation",
     ),
     mean_read_length: Optional[int] = typer.Option(
-        None, help="Mean read length in bases. [default: 5000]",
+        None,
+        help="Mean read length in bases. [default: 5000]",
         rich_help_panel="Read Generation",
     ),
     mean_quality: Optional[float] = typer.Option(
-        None, help="Mean Phred quality score. [default: 20.0]",
+        None,
+        help="Mean Phred quality score. [default: 20.0]",
         rich_help_panel="Read Generation",
     ),
     std_quality: Optional[float] = typer.Option(
-        None, help="Standard deviation of quality scores. [default: 4.0]",
+        None,
+        help="Standard deviation of quality scores. [default: 4.0]",
         rich_help_panel="Read Generation",
     ),
     reads_per_file: Optional[int] = typer.Option(
-        None, help="Number of reads per output file. [default: 100]",
+        None,
+        help="Number of reads per output file. [default: 100]",
         rich_help_panel="Read Generation",
     ),
     output_format: OutputFormat = typer.Option(
-        OutputFormat.fastq_gz, help="Output file format.",
+        OutputFormat.fastq_gz,
+        help="Output file format.",
         rich_help_panel="Read Generation",
     ),
     mix_reads: bool = typer.Option(
-        False, help="Mix reads from all genomes into shared files.",
+        False,
+        help="Mix reads from all genomes into shared files.",
         rich_help_panel="Read Generation",
     ),
     # Species/Mock Options
     abundances: Optional[List[float]] = typer.Option(
-        None, help="Custom abundances for mixed samples (must sum to 1.0).",
+        None,
+        help="Custom abundances for mixed samples (must sum to 1.0).",
         rich_help_panel="Species/Mock Options",
     ),
     offline: bool = typer.Option(
-        False, help="Use only cached genomes, no network requests.",
+        False,
+        help="Use only cached genomes, no network requests.",
         rich_help_panel="Species/Mock Options",
     ),
     # Simulation Configuration
     profile: Optional[str] = typer.Option(
-        None, help="Use a predefined configuration profile.",
+        None,
+        help="Use a predefined configuration profile.",
         rich_help_panel="Simulation Configuration",
     ),
     interval: Optional[float] = typer.Option(
-        None, help="Seconds between file operations. [default: 5.0]",
+        None,
+        help="Seconds between file operations. [default: 5.0]",
         rich_help_panel="Simulation Configuration",
     ),
     force_structure: Optional[ForceStructure] = typer.Option(
-        None, help="Force specific structure instead of auto-detection.",
+        None,
+        help="Force specific structure instead of auto-detection.",
         rich_help_panel="Simulation Configuration",
     ),
     batch_size: Optional[int] = typer.Option(
-        None, help="Number of files to process per interval. [default: 1]",
+        None,
+        help="Number of files to process per interval. [default: 1]",
         rich_help_panel="Simulation Configuration",
     ),
     no_wait: bool = typer.Option(
@@ -602,54 +660,64 @@ def generate(
     ),
     # Timing Models
     timing_model: Optional[TimingModelChoice] = typer.Option(
-        None, help="Timing model (overrides profile setting).",
+        None,
+        help="Timing model (overrides profile setting).",
         rich_help_panel="Timing Models",
     ),
     burst_probability: Optional[float] = typer.Option(
-        None, help="Burst probability for Poisson model (0.0-1.0).",
+        None,
+        help="Burst probability for Poisson model (0.0-1.0).",
         rich_help_panel="Timing Models",
     ),
     burst_rate_multiplier: Optional[float] = typer.Option(
-        None, help="Burst rate multiplier for Poisson model.",
+        None,
+        help="Burst rate multiplier for Poisson model.",
         rich_help_panel="Timing Models",
     ),
     random_factor: Optional[float] = typer.Option(
-        None, help="Randomness factor for random timing model (0.0-1.0).",
+        None,
+        help="Randomness factor for random timing model (0.0-1.0).",
         rich_help_panel="Timing Models",
     ),
     adaptation_rate: Optional[float] = typer.Option(
-        None, help="Adaptation rate for adaptive timing model (0.0-1.0).",
+        None,
+        help="Adaptation rate for adaptive timing model (0.0-1.0).",
         rich_help_panel="Timing Models",
     ),
     history_size: Optional[int] = typer.Option(
-        None, help="History size for adaptive timing model.",
+        None,
+        help="History size for adaptive timing model.",
         rich_help_panel="Timing Models",
     ),
     # Parallel Processing
     parallel: bool = typer.Option(
-        False, help="Enable parallel processing within batches.",
+        False,
+        help="Enable parallel processing within batches.",
         rich_help_panel="Parallel Processing",
     ),
     worker_count: Optional[int] = typer.Option(
-        None, help="Number of worker threads for parallel processing. [default: 4]",
+        None,
+        help="Number of worker threads for parallel processing. [default: 4]",
         rich_help_panel="Parallel Processing",
     ),
     # Monitoring
     monitor: MonitorLevel = typer.Option(
         MonitorLevel.default,
         help=(
-            "Progress monitoring level: default (basic), detailed (verbose "
-            "logging), enhanced (resource monitoring + interactive controls), "
+            "Progress monitoring level: default (basic), "
+            "enhanced (resource monitoring + interactive controls), "
             "none (silent)."
         ),
         rich_help_panel="Monitoring",
     ),
     quiet: bool = typer.Option(
-        False, help="Suppress progress output.",
+        False,
+        help="Suppress progress output.",
         rich_help_panel="Monitoring",
     ),
     pipeline: Optional[str] = typer.Option(
-        None, help="Validate output for specific pipeline compatibility.",
+        None,
+        help="Validate output for specific pipeline compatibility.",
         rich_help_panel="Monitoring",
     ),
 ) -> None:
@@ -670,12 +738,14 @@ def generate(
         _interval = 0.0
 
     # Mutual exclusivity validation
-    sources = sum([
-        genomes is not None,
-        species is not None,
-        mock is not None,
-        taxid is not None,
-    ])
+    sources = sum(
+        [
+            genomes is not None,
+            species is not None,
+            mock is not None,
+            taxid is not None,
+        ]
+    )
     if sources == 0:
         typer.echo(
             "Error: specify one of --genomes, --species, --mock, or --taxid",
@@ -695,38 +765,53 @@ def generate(
         genomes = _expand_genome_paths(genomes)
 
     _validate_timing_params(
-        burst_probability, burst_rate_multiplier, random_factor,
-        adaptation_rate, history_size,
+        burst_probability,
+        burst_rate_multiplier,
+        random_factor,
+        adaptation_rate,
+        history_size,
     )
 
     timing_params = _build_timing_params(
-        burst_probability, burst_rate_multiplier, random_factor,
-        adaptation_rate, history_size,
+        burst_probability,
+        burst_rate_multiplier,
+        random_factor,
+        adaptation_rate,
+        history_size,
     )
 
     # Profile overlay
     params: Dict = {}
     if profile:
         from nanopore_simulator.profiles import apply_profile
+
         try:
             params = apply_profile(profile)
         except ValueError as exc:
             typer.echo(f"Error: {exc}", err=True)
             raise typer.Exit(code=2)
 
-    tm = timing_model.value if timing_model else params.get(
-        "timing_model", "uniform"
-    )
+    tm = timing_model.value if timing_model else params.get("timing_model", "uniform")
     tp = timing_params or params.get("timing_model_params", {})
     # Resolve sentinel defaults: explicit CLI values (not None) take
     # priority over profile values, which take priority over built-in
     # defaults. This avoids the ambiguity where a user explicitly passing
     # the default value would be indistinguishable from not passing it.
     rc = _read_count if _read_count is not None else params.get("read_count", 1000)
-    mrl = _mean_read_length if _mean_read_length is not None else params.get("mean_read_length", 5000)
-    mq = _mean_quality if _mean_quality is not None else params.get("mean_quality", 20.0)
+    mrl = (
+        _mean_read_length
+        if _mean_read_length is not None
+        else params.get("mean_read_length", 5000)
+    )
+    mq = (
+        _mean_quality if _mean_quality is not None else params.get("mean_quality", 20.0)
+    )
     sq = _std_quality if _std_quality is not None else params.get("std_quality", 4.0)
-    rpf = _reads_per_file if _reads_per_file is not None else params.get("reads_per_file", 100)
+    rpf = (
+        _reads_per_file
+        if _reads_per_file is not None
+        else params.get("reads_per_file", 100)
+    )
     iv = _interval if _interval is not None else params.get("interval", 5.0)
     bs = _batch_size if _batch_size is not None else params.get("batch_size", 1)
     par = parallel or params.get("parallel_processing", False)
@@ -778,6 +863,7 @@ def generate(
 
     # Pre-flight validation
     from nanopore_simulator.deps import check_preflight
+
     needs_download = bool(species_inputs or mock_name or taxid_inputs) and not offline
     errors = check_preflight(
         operation="generate",
@@ -792,7 +878,10 @@ def generate(
     # Resolve mock/species/taxid to genome paths if needed
     if needs_download or (mock_name and offline):
         genome_paths, mock_abundances = _resolve_and_download_genomes(
-            mock_name, species_inputs, taxid_inputs, offline=offline,
+            mock_name,
+            species_inputs,
+            taxid_inputs,
+            offline=offline,
         )
         # Determine structure for multi-genome inputs
         resolved_struct = struct
@@ -945,8 +1034,7 @@ def check_deps_cmd() -> None:
     else:
         print(f"{missing_count} optional dependency(ies) not found.")
         print(
-            "Core functionality (builtin generator, replay mode) "
-            "works without them."
+            "Core functionality (builtin generator, replay mode) " "works without them."
         )
 
 
@@ -958,11 +1046,14 @@ def check_deps_cmd() -> None:
 @app.command("recommend")
 def recommend_cmd(
     source: Optional[Path] = typer.Option(
-        None, "--source", "-s",
+        None,
+        "--source",
+        "-s",
         help="Source directory to analyse (omit for an overview of all profiles).",
     ),
     file_count: Optional[int] = typer.Option(
-        None, "--file-count",
+        None,
+        "--file-count",
         help="Number of files (use instead of --source for quick recommendations).",
     ),
 ) -> None:
@@ -984,6 +1075,7 @@ def recommend_cmd(
             raise typer.Exit(code=1)
         # Count files in source
         from nanopore_simulator.detection import find_sequencing_files
+
         files = find_sequencing_files(source)
         # Also check barcode subdirectories
         if not files:
@@ -1014,13 +1106,19 @@ def recommend_cmd(
 @app.command("validate")
 def validate_cmd(
     pipeline: str = typer.Option(
-        ..., "--pipeline", "-p",
+        ...,
+        "--pipeline",
+        "-p",
         help="Pipeline name to validate against.",
     ),
     target: Path = typer.Option(
-        ..., "--target", "-t",
+        ...,
+        "--target",
+        "-t",
         help="Target directory to validate.",
-        exists=True, file_okay=False, resolve_path=True,
+        exists=True,
+        file_okay=False,
+        resolve_path=True,
     ),
 ) -> None:
     """Validate directory structure for a pipeline."""
@@ -1043,74 +1141,92 @@ def validate_cmd(
 def download(
     # Genome Source
     species: Optional[List[str]] = typer.Option(
-        None, help="Species names to download.",
+        None,
+        help="Species names to download.",
         rich_help_panel="Genome Source",
     ),
     mock: Optional[str] = typer.Option(
-        None, help="Mock community to download genomes for.",
+        None,
+        help="Mock community to download genomes for.",
         rich_help_panel="Genome Source",
     ),
     taxid: Optional[List[int]] = typer.Option(
-        None, help="NCBI taxonomy IDs to download.",
+        None,
+        help="NCBI taxonomy IDs to download.",
         rich_help_panel="Genome Source",
     ),
     # Optional target for generation
     target: Optional[Path] = typer.Option(
-        None, "--target", "-t",
+        None,
+        "--target",
+        "-t",
         help="Target directory for read generation (omit for download only).",
     ),
     # Generation options
     read_count: int = typer.Option(
-        1000, help="Total number of reads to generate.",
+        1000,
+        help="Total number of reads to generate.",
         rich_help_panel="Generation Options",
     ),
     reads_per_file: int = typer.Option(
-        100, help="Number of reads per output file.",
+        100,
+        help="Number of reads per output file.",
         rich_help_panel="Generation Options",
     ),
     mean_read_length: int = typer.Option(
-        5000, help="Mean read length in bases.",
+        5000,
+        help="Mean read length in bases.",
         rich_help_panel="Generation Options",
     ),
     mean_quality: float = typer.Option(
-        20.0, help="Mean Phred quality score.",
+        20.0,
+        help="Mean Phred quality score.",
         rich_help_panel="Generation Options",
     ),
     std_quality: float = typer.Option(
-        4.0, help="Standard deviation of quality scores.",
+        4.0,
+        help="Standard deviation of quality scores.",
         rich_help_panel="Generation Options",
     ),
     output_format: OutputFormat = typer.Option(
-        OutputFormat.fastq_gz, help="Output file format.",
+        OutputFormat.fastq_gz,
+        help="Output file format.",
         rich_help_panel="Generation Options",
     ),
     generator_backend: GeneratorBackend = typer.Option(
-        GeneratorBackend.auto, help="Read generation backend.",
+        GeneratorBackend.auto,
+        help="Read generation backend.",
         rich_help_panel="Generation Options",
     ),
     interval: float = typer.Option(
-        5.0, help="Seconds between file operations.",
+        5.0,
+        help="Seconds between file operations.",
         rich_help_panel="Generation Options",
     ),
     batch_size: int = typer.Option(
-        1, help="Number of files to process per interval.",
+        1,
+        help="Number of files to process per interval.",
         rich_help_panel="Generation Options",
     ),
     mix_reads: bool = typer.Option(
-        False, help="Mix reads from all genomes into shared files.",
+        False,
+        help="Mix reads from all genomes into shared files.",
         rich_help_panel="Generation Options",
     ),
     no_wait: bool = typer.Option(
-        False, help="Skip timing delays during read generation.",
+        False,
+        help="Skip timing delays during read generation.",
         rich_help_panel="Generation Options",
     ),
     # Parallel Processing
     parallel: bool = typer.Option(
-        False, help="Download genomes in parallel.",
+        False,
+        help="Download genomes in parallel.",
         rich_help_panel="Parallel Processing",
     ),
     worker_count: int = typer.Option(
-        4, help="Number of concurrent downloads.",
+        4,
+        help="Number of concurrent downloads.",
         rich_help_panel="Parallel Processing",
     ),
 ) -> None:
@@ -1124,6 +1240,7 @@ def download(
 
     # Pre-flight: verify datasets CLI
     from nanopore_simulator.deps import check_preflight
+
     errors = check_preflight(operation="copy", needs_genome_download=True)
     if errors:
         for err in errors:
@@ -1132,7 +1249,11 @@ def download(
 
     # Resolve and download
     from nanopore_simulator.species import (
-        GenomeCache, GenomeRef, download_genome, resolve_species, resolve_taxid,
+        GenomeCache,
+        GenomeRef,
+        download_genome,
+        resolve_species,
+        resolve_taxid,
     )
     from nanopore_simulator.mocks import get_mock
 
@@ -1146,6 +1267,7 @@ def download(
             typer.echo(f"Error: Unknown mock community: {mock}", err=True)
             raise typer.Exit(code=1)
         for org in mock_community.organisms:
+            ref: Optional[GenomeRef] = None
             if org.accession:
                 domain = org.domain or (
                     "eukaryota" if org.resolver == "ncbi" else "bacteria"
@@ -1165,17 +1287,17 @@ def download(
 
     if species:
         for sp in species:
-            ref = resolve_species(sp)
-            if ref:
-                genome_downloads.append((sp, ref))
+            sp_ref: Optional[GenomeRef] = resolve_species(sp)
+            if sp_ref:
+                genome_downloads.append((sp, sp_ref))
             else:
                 typer.echo(f"Warning: Could not resolve: {sp}", err=True)
 
     if taxid:
         for tid in taxid:
-            ref = resolve_taxid(tid)
-            if ref:
-                genome_downloads.append((f"taxid:{tid}", ref))
+            tid_ref: Optional[GenomeRef] = resolve_taxid(tid)
+            if tid_ref:
+                genome_downloads.append((f"taxid:{tid}", tid_ref))
             else:
                 typer.echo(f"Warning: Could not resolve taxid: {tid}", err=True)
 

@@ -190,11 +190,11 @@ nanorunner generate --species "Escherichia coli" "Staphylococcus aureus" -t /out
 # Use a preset mock community
 nanorunner generate --mock zymo_d6300 -t /output
 
-# Pure samples (each species in separate barcode)
-nanorunner generate --species "E. coli" "S. aureus" --sample-type pure -t /output
+# Mix reads from all species into shared files
+nanorunner generate --species "E. coli" "S. aureus" --force-structure singleplex --mix-reads -t /output
 
-# Mixed samples with custom abundances
-nanorunner generate --species "E. coli" "S. aureus" --sample-type mixed --abundances 0.7 0.3 -t /output
+# Mixed community with custom abundances
+nanorunner generate --species "E. coli" "S. aureus" --abundances 0.7 0.3 -t /output
 
 # List available mock communities
 nanorunner list-mocks
@@ -230,9 +230,6 @@ Use `nanorunner list-mocks` to see all communities, aliases, and descriptions.
 ```bash
 # Enable comprehensive monitoring with resource tracking
 nanorunner replay -s /data/source -t /watch/output --monitor enhanced
-
-# Detailed monitoring with verbose logging
-nanorunner replay -s /data/source -t /watch/output --monitor detailed
 
 # Silent operation for automated testing
 nanorunner replay -s /data/source -t /watch/output --monitor none --quiet
@@ -297,7 +294,7 @@ Built-in profiles include: `development`, `steady`, `bursty`, `high_throughput`,
 - `--worker-count COUNT`: Number of parallel worker threads (default: 4)
 
 ### Monitoring Configuration
-- `--monitor {default,detailed,enhanced,none}`: Progress monitoring level
+- `--monitor {default,enhanced,none}`: Progress monitoring level (`detailed` is accepted as an alias for `default`)
 - `--quiet`: Suppress progress output for automated workflows
 
 ## Timing Models

@@ -189,12 +189,18 @@ class TestReplayBasic:
 
     def test_replay_copies_files(self, source_dir_singleplex, tmp_path):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--interval", "0",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+            ],
+        )
         assert result.exit_code == 0
         assert target.exists()
         # Source has 5 files, verify they were copied
@@ -203,36 +209,57 @@ class TestReplayBasic:
 
     def test_replay_with_profile(self, source_dir_singleplex, tmp_path):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--interval", "0",
-            "--profile", "development",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+                "--profile",
+                "development",
+            ],
+        )
         assert result.exit_code == 0
         assert target.exists()
 
     def test_replay_with_timing_model(self, source_dir_singleplex, tmp_path):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--interval", "0",
-            "--timing-model", "random",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+                "--timing-model",
+                "random",
+            ],
+        )
         assert result.exit_code == 0
 
     def test_replay_link_operation(self, source_dir_singleplex, tmp_path):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--interval", "0",
-            "--operation", "link",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+                "--operation",
+                "link",
+            ],
+        )
         assert result.exit_code == 0
         output_files = list(target.glob("*.fastq"))
         assert len(output_files) == 5
@@ -242,47 +269,71 @@ class TestReplayBasic:
 
     def test_replay_multiplex(self, source_dir_multiplex, tmp_path):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_multiplex),
-            "--target", str(target),
-            "--interval", "0",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_multiplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+            ],
+        )
         assert result.exit_code == 0
         assert (target / "barcode01").exists()
         assert (target / "barcode02").exists()
 
     def test_replay_no_wait(self, source_dir_singleplex, tmp_path):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--no-wait",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--no-wait",
+            ],
+        )
         assert result.exit_code == 0
 
     def test_replay_quiet(self, source_dir_singleplex, tmp_path):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--interval", "0",
-            "--quiet",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+                "--quiet",
+            ],
+        )
         assert result.exit_code == 0
 
     def test_replay_parallel(self, source_dir_singleplex, tmp_path):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--interval", "0",
-            "--parallel",
-            "--worker-count", "2",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+                "--parallel",
+                "--worker-count",
+                "2",
+            ],
+        )
         assert result.exit_code == 0
         output_files = list(target.glob("*.fastq"))
         assert len(output_files) == 5
@@ -295,90 +346,132 @@ class TestReplayValidation:
         self, source_dir_singleplex, tmp_path
     ):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--interval", "0",
-            "--operation", "link",
-            "--reads-per-file", "10",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+                "--operation",
+                "link",
+                "--reads-per-file",
+                "10",
+            ],
+        )
         assert result.exit_code == 2
 
     def test_replay_invalid_profile(self, source_dir_singleplex, tmp_path):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--interval", "0",
-            "--profile", "nonexistent_profile",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+                "--profile",
+                "nonexistent_profile",
+            ],
+        )
         assert result.exit_code == 2
 
-    def test_replay_invalid_random_factor(
-        self, source_dir_singleplex, tmp_path
-    ):
+    def test_replay_invalid_random_factor(self, source_dir_singleplex, tmp_path):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--interval", "0",
-            "--random-factor", "2.0",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+                "--random-factor",
+                "2.0",
+            ],
+        )
         assert result.exit_code == 2
 
-    def test_replay_invalid_burst_probability(
-        self, source_dir_singleplex, tmp_path
-    ):
+    def test_replay_invalid_burst_probability(self, source_dir_singleplex, tmp_path):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--interval", "0",
-            "--burst-probability", "1.5",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+                "--burst-probability",
+                "1.5",
+            ],
+        )
         assert result.exit_code == 2
 
-    def test_replay_invalid_adaptation_rate(
-        self, source_dir_singleplex, tmp_path
-    ):
+    def test_replay_invalid_adaptation_rate(self, source_dir_singleplex, tmp_path):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--interval", "0",
-            "--adaptation-rate", "-0.1",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+                "--adaptation-rate",
+                "-0.1",
+            ],
+        )
         assert result.exit_code == 2
 
-    def test_replay_invalid_history_size(
-        self, source_dir_singleplex, tmp_path
-    ):
+    def test_replay_invalid_history_size(self, source_dir_singleplex, tmp_path):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--interval", "0",
-            "--history-size", "0",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+                "--history-size",
+                "0",
+            ],
+        )
         assert result.exit_code == 2
 
     def test_replay_invalid_burst_rate_multiplier(
         self, source_dir_singleplex, tmp_path
     ):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--interval", "0",
-            "--burst-rate-multiplier", "-1",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+                "--burst-rate-multiplier",
+                "-1",
+            ],
+        )
         assert result.exit_code == 2
 
 
@@ -392,14 +485,22 @@ class TestGenerateBasic:
 
     def test_generate_with_genome(self, sample_fasta, tmp_path):
         target = tmp_path / "gen_output"
-        result = runner.invoke(app, [
-            "generate",
-            "--target", str(target),
-            "--genomes", str(sample_fasta),
-            "--read-count", "10",
-            "--interval", "0",
-            "--generator-backend", "builtin",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target",
+                str(target),
+                "--genomes",
+                str(sample_fasta),
+                "--read-count",
+                "10",
+                "--interval",
+                "0",
+                "--generator-backend",
+                "builtin",
+            ],
+        )
         assert result.exit_code == 0
         assert target.exists()
 
@@ -409,35 +510,58 @@ class TestGenerateBasic:
         g1.write_text(">chr1\nACGTACGTACGTACGT\n")
         g2.write_text(">chr1\nTTTTAAAACCCCGGGG\n")
         target = tmp_path / "gen_output"
-        result = runner.invoke(app, [
-            "generate",
-            "--target", str(target),
-            "--genomes", str(g1),
-            "--genomes", str(g2),
-            "--read-count", "10",
-            "--interval", "0",
-            "--generator-backend", "builtin",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target",
+                str(target),
+                "--genomes",
+                str(g1),
+                "--genomes",
+                str(g2),
+                "--read-count",
+                "10",
+                "--interval",
+                "0",
+                "--generator-backend",
+                "builtin",
+            ],
+        )
         assert result.exit_code == 0
 
     def test_generate_requires_genome_source(self, tmp_path):
         target = tmp_path / "gen_output"
-        result = runner.invoke(app, [
-            "generate",
-            "--target", str(target),
-            "--read-count", "10",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target",
+                str(target),
+                "--read-count",
+                "10",
+            ],
+        )
         assert result.exit_code == 1
-        assert "specify one of" in result.output.lower() or "error" in result.output.lower()
+        assert (
+            "specify one of" in result.output.lower()
+            or "error" in result.output.lower()
+        )
 
     def test_generate_mutual_exclusivity(self, sample_fasta, tmp_path):
         target = tmp_path / "gen_output"
-        result = runner.invoke(app, [
-            "generate",
-            "--target", str(target),
-            "--genomes", str(sample_fasta),
-            "--species", "Escherichia coli",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target",
+                str(target),
+                "--genomes",
+                str(sample_fasta),
+                "--species",
+                "Escherichia coli",
+            ],
+        )
         assert result.exit_code == 1
 
     def test_generate_directory_expansion(self, tmp_path):
@@ -446,14 +570,22 @@ class TestGenerateBasic:
         (genome_dir / "genome1.fa").write_text(">chr1\nACGTACGTACGTACGT\n")
         (genome_dir / "genome2.fa").write_text(">chr1\nTTTTAAAACCCCGGGG\n")
         target = tmp_path / "gen_output"
-        result = runner.invoke(app, [
-            "generate",
-            "--target", str(target),
-            "--genomes", str(genome_dir),
-            "--read-count", "10",
-            "--interval", "0",
-            "--generator-backend", "builtin",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target",
+                str(target),
+                "--genomes",
+                str(genome_dir),
+                "--read-count",
+                "10",
+                "--interval",
+                "0",
+                "--generator-backend",
+                "builtin",
+            ],
+        )
         assert result.exit_code == 0
         assert "Expanded directory" in result.output
 
@@ -461,60 +593,96 @@ class TestGenerateBasic:
         empty_dir = tmp_path / "empty"
         empty_dir.mkdir()
         target = tmp_path / "gen_output"
-        result = runner.invoke(app, [
-            "generate",
-            "--target", str(target),
-            "--genomes", str(empty_dir),
-            "--read-count", "10",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target",
+                str(target),
+                "--genomes",
+                str(empty_dir),
+                "--read-count",
+                "10",
+            ],
+        )
         assert result.exit_code == 2
 
     def test_generate_nonexistent_genome_fails(self, tmp_path):
         target = tmp_path / "gen_output"
-        result = runner.invoke(app, [
-            "generate",
-            "--target", str(target),
-            "--genomes", str(tmp_path / "nonexistent.fa"),
-            "--read-count", "10",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target",
+                str(target),
+                "--genomes",
+                str(tmp_path / "nonexistent.fa"),
+                "--read-count",
+                "10",
+            ],
+        )
         assert result.exit_code == 2
 
     def test_generate_with_profile(self, sample_fasta, tmp_path):
         target = tmp_path / "gen_output"
-        result = runner.invoke(app, [
-            "generate",
-            "--target", str(target),
-            "--genomes", str(sample_fasta),
-            "--read-count", "10",
-            "--interval", "0",
-            "--generator-backend", "builtin",
-            "--profile", "generate_test",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target",
+                str(target),
+                "--genomes",
+                str(sample_fasta),
+                "--read-count",
+                "10",
+                "--interval",
+                "0",
+                "--generator-backend",
+                "builtin",
+                "--profile",
+                "generate_test",
+            ],
+        )
         assert result.exit_code == 0
 
     def test_generate_no_wait(self, sample_fasta, tmp_path):
         target = tmp_path / "gen_output"
-        result = runner.invoke(app, [
-            "generate",
-            "--target", str(target),
-            "--genomes", str(sample_fasta),
-            "--read-count", "10",
-            "--no-wait",
-            "--generator-backend", "builtin",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target",
+                str(target),
+                "--genomes",
+                str(sample_fasta),
+                "--read-count",
+                "10",
+                "--no-wait",
+                "--generator-backend",
+                "builtin",
+            ],
+        )
         assert result.exit_code == 0
 
     def test_generate_quiet(self, sample_fasta, tmp_path):
         target = tmp_path / "gen_output"
-        result = runner.invoke(app, [
-            "generate",
-            "--target", str(target),
-            "--genomes", str(sample_fasta),
-            "--read-count", "10",
-            "--interval", "0",
-            "--generator-backend", "builtin",
-            "--quiet",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target",
+                str(target),
+                "--genomes",
+                str(sample_fasta),
+                "--read-count",
+                "10",
+                "--interval",
+                "0",
+                "--generator-backend",
+                "builtin",
+                "--quiet",
+            ],
+        )
         assert result.exit_code == 0
 
 
@@ -631,9 +799,14 @@ class TestRecommend:
         assert "Recommended" in result.output
 
     def test_recommend_with_source(self, source_dir_singleplex):
-        result = runner.invoke(app, [
-            "recommend", "--source", str(source_dir_singleplex),
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "recommend",
+                "--source",
+                str(source_dir_singleplex),
+            ],
+        )
         assert result.exit_code == 0
         assert "Recommended" in result.output
 
@@ -643,9 +816,14 @@ class TestRecommend:
         assert "Available" in result.output
 
     def test_recommend_nonexistent_source(self, tmp_path):
-        result = runner.invoke(app, [
-            "recommend", "--source", str(tmp_path / "nonexistent"),
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "recommend",
+                "--source",
+                str(tmp_path / "nonexistent"),
+            ],
+        )
         assert result.exit_code == 1
 
     def test_recommend_small_file_count(self):
@@ -672,33 +850,48 @@ class TestValidate:
         target = tmp_path / "valid"
         target.mkdir()
         (target / "reads.fastq").write_text("@read1\nACGT\n+\nIIII\n")
-        result = runner.invoke(app, [
-            "validate",
-            "--pipeline", "nanometa",
-            "--target", str(target),
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "validate",
+                "--pipeline",
+                "nanometa",
+                "--target",
+                str(target),
+            ],
+        )
         assert result.exit_code == 0
         assert "Valid: yes" in result.output
 
     def test_validate_empty_directory_fails(self, tmp_path):
         target = tmp_path / "empty"
         target.mkdir()
-        result = runner.invoke(app, [
-            "validate",
-            "--pipeline", "nanometa",
-            "--target", str(target),
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "validate",
+                "--pipeline",
+                "nanometa",
+                "--target",
+                str(target),
+            ],
+        )
         assert result.exit_code == 1
         assert "Valid: no" in result.output
 
     def test_validate_unknown_adapter(self, tmp_path):
         target = tmp_path / "valid"
         target.mkdir()
-        result = runner.invoke(app, [
-            "validate",
-            "--pipeline", "nonexistent",
-            "--target", str(target),
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "validate",
+                "--pipeline",
+                "nonexistent",
+                "--target",
+                str(target),
+            ],
+        )
         # Should fail with KeyError from the adapter module
         assert result.exit_code != 0
 
@@ -760,19 +953,28 @@ class TestMonitorLevelResolution:
 
     def test_quiet_returns_none(self):
         from nanopore_simulator.cli import _resolve_monitor, MonitorLevel
+
         assert _resolve_monitor(MonitorLevel.default, True) == "none"
 
     def test_none_returns_none(self):
         from nanopore_simulator.cli import _resolve_monitor, MonitorLevel
+
         assert _resolve_monitor(MonitorLevel.none, False) == "none"
 
     def test_default_returns_basic(self):
         from nanopore_simulator.cli import _resolve_monitor, MonitorLevel
+
         assert _resolve_monitor(MonitorLevel.default, False) == "basic"
 
-    def test_detailed_returns_basic(self):
+    def test_enhanced_without_psutil_falls_back(self):
+        """Enhanced without psutil should fall back to basic."""
+        import unittest.mock
+
         from nanopore_simulator.cli import _resolve_monitor, MonitorLevel
-        assert _resolve_monitor(MonitorLevel.detailed, False) == "basic"
+
+        with unittest.mock.patch.dict("sys.modules", {"psutil": None}):
+            result = _resolve_monitor(MonitorLevel.enhanced, False)
+            assert result == "basic"
 
 
 # -------------------------------------------------------------------
@@ -785,11 +987,13 @@ class TestBuildTimingParams:
 
     def test_all_none_returns_empty(self):
         from nanopore_simulator.cli import _build_timing_params
+
         result = _build_timing_params(None, None, None, None, None)
         assert result == {}
 
     def test_collects_provided_values(self):
         from nanopore_simulator.cli import _build_timing_params
+
         result = _build_timing_params(0.1, 3.0, 0.5, 0.2, 10)
         assert result == {
             "burst_probability": 0.1,
@@ -801,6 +1005,7 @@ class TestBuildTimingParams:
 
     def test_partial_values(self):
         from nanopore_simulator.cli import _build_timing_params
+
         result = _build_timing_params(None, None, 0.3, None, None)
         assert result == {"random_factor": 0.3}
 
@@ -815,42 +1020,66 @@ class TestReplayTimingParams:
 
     def test_replay_with_random_factor(self, source_dir_singleplex, tmp_path):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--interval", "0",
-            "--timing-model", "random",
-            "--random-factor", "0.3",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+                "--timing-model",
+                "random",
+                "--random-factor",
+                "0.3",
+            ],
+        )
         assert result.exit_code == 0
 
     def test_replay_with_poisson_params(self, source_dir_singleplex, tmp_path):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--interval", "0",
-            "--timing-model", "poisson",
-            "--burst-probability", "0.1",
-            "--burst-rate-multiplier", "5.0",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+                "--timing-model",
+                "poisson",
+                "--burst-probability",
+                "0.1",
+                "--burst-rate-multiplier",
+                "5.0",
+            ],
+        )
         assert result.exit_code == 0
 
-    def test_replay_with_adaptive_params(
-        self, source_dir_singleplex, tmp_path
-    ):
+    def test_replay_with_adaptive_params(self, source_dir_singleplex, tmp_path):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--interval", "0",
-            "--timing-model", "adaptive",
-            "--adaptation-rate", "0.2",
-            "--history-size", "10",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+                "--timing-model",
+                "adaptive",
+                "--adaptation-rate",
+                "0.2",
+                "--history-size",
+                "10",
+            ],
+        )
         assert result.exit_code == 0
 
 
@@ -862,34 +1091,46 @@ class TestReplayTimingParams:
 class TestEdgeCases:
     """Verify edge cases and error handling."""
 
-    def test_replay_batch_size_override(
-        self, source_dir_singleplex, tmp_path
-    ):
+    def test_replay_batch_size_override(self, source_dir_singleplex, tmp_path):
         target = tmp_path / "output"
-        result = runner.invoke(app, [
-            "replay",
-            "--source", str(source_dir_singleplex),
-            "--target", str(target),
-            "--interval", "0",
-            "--batch-size", "3",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
+                "--batch-size",
+                "3",
+            ],
+        )
         assert result.exit_code == 0
         output_files = list(target.glob("*.fastq"))
         assert len(output_files) == 5
 
-    def test_generate_with_force_structure_multiplex(
-        self, sample_fasta, tmp_path
-    ):
+    def test_generate_with_force_structure_multiplex(self, sample_fasta, tmp_path):
         target = tmp_path / "gen_output"
-        result = runner.invoke(app, [
-            "generate",
-            "--target", str(target),
-            "--genomes", str(sample_fasta),
-            "--read-count", "10",
-            "--interval", "0",
-            "--generator-backend", "builtin",
-            "--force-structure", "multiplex",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target",
+                str(target),
+                "--genomes",
+                str(sample_fasta),
+                "--read-count",
+                "10",
+                "--interval",
+                "0",
+                "--generator-backend",
+                "builtin",
+                "--force-structure",
+                "multiplex",
+            ],
+        )
         assert result.exit_code == 0
         # Should have barcode directories
         barcode_dirs = [d for d in target.iterdir() if d.is_dir()]
@@ -897,15 +1138,24 @@ class TestEdgeCases:
 
     def test_generate_output_format_fastq(self, sample_fasta, tmp_path):
         target = tmp_path / "gen_output"
-        result = runner.invoke(app, [
-            "generate",
-            "--target", str(target),
-            "--genomes", str(sample_fasta),
-            "--read-count", "10",
-            "--interval", "0",
-            "--generator-backend", "builtin",
-            "--output-format", "fastq",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target",
+                str(target),
+                "--genomes",
+                str(sample_fasta),
+                "--read-count",
+                "10",
+                "--interval",
+                "0",
+                "--generator-backend",
+                "builtin",
+                "--output-format",
+                "fastq",
+            ],
+        )
         assert result.exit_code == 0
         # Check for uncompressed fastq files
         output_files = list(target.rglob("*.fastq"))

@@ -7,47 +7,159 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-03-23
+
+This release is a substantial internal rewrite. The CLI contract is preserved — all
+subcommands, flags, and observable behaviour remain compatible with 2.x. Internal
+Python APIs have changed; see the migration guide below.
+
 ### Added
-- **Dependency Checking**: New `nanorunner check-deps` command that reports the status
-  of all required and optional dependencies with conda install instructions.
-- **Pre-flight Validation**: Automatic validation before long-running operations
-  (`generate`, `download`) catches missing tools (badread, nanosim, datasets CLI)
-  before work begins, with actionable error messages.
-- **Subprocess Error Wrapping**: External tool failures (badread, nanosim) now produce
-  clear error messages including exit codes, stderr output, and install hints instead
-  of bare tracebacks.
-- **Centralized Install Hints**: New `deps.py` module provides a single source of truth
-  for dependency install instructions, replacing scattered hardcoded strings.
-- **Robust Backend Detection**: `is_available()` for badread and nanosim now verifies
-  tools can actually start (catches broken installs where the binary exists but
-  dependencies like edlib are missing).
+- **Plan-Execute-Monitor Architecture**: Replaced the monolithic `NanoporeSimulator`
+  class (~1,400 lines) with three focused modules connected by a thin orchestrator:
+  `manifest.py` (plan), `executor.py` (execute), `runner.py` (~175 lines, orchestrate).
+- **`manifest.py`**: Pure data-transformation module. `build_replay_manifest()` and
+  `build_generate_manifest()` each accept a config dataclass and return a list of
+  `FileEntry` objects describing all planned file operations.
+- **`executor.py`**: Single `execute_entry()` dispatch function handling copy, link, and
+  generate operations with no orchestration logic.
+- **`runner.py`**: Thin orchestration loop with `run_replay()` and `run_generate()`
+  public functions replacing the previous class-based API.
+- **`species.py`**: Species name resolution via GTDB REST API (bacteria/archaea) and
+  NCBI datasets CLI (eukaryotes/fungi) with local disk caching.
+- **`mocks.py`**: Fifteen built-in mock communities for standardized microbiome testing,
+  including `zymo_d6300`, `zymo_d6310`, `zymo_d6331`, `atcc_msa1002`, `atcc_msa1003`,
+  `cdc_select_agents`, `eskape`, `respiratory`, `who_critical`, `bloodstream`,
+  `wastewater`, and four `quick_*` mocks for development use.
+- **`deps.py`**: Centralized dependency-checking module. `nanorunner check-deps` reports
+  status of all required and optional dependencies with conda install instructions.
+  Pre-flight validation in `generate` and `download` subcommands catches missing tools
+  before work begins.
+- **Rechunking Support**: `--reads-per-file` controls output file size in generate mode.
+  Files are created atomically (written to a temporary path, then renamed) to prevent
+  partial reads by downstream tools.
+- **Disk Space Pre-check**: Manifest execution estimates required disk space before
+  starting and raises a clear error if the target filesystem lacks capacity.
+- **Signal Handling**: `SIGINT` and `SIGTERM` trigger a clean shutdown sequence that
+  completes the current file before exiting, rather than terminating mid-write.
+- **Atomic Writes**: All output files are written via a temporary sibling file and
+  renamed on completion, eliminating truncated files from interrupted runs.
+- **Robust Backend Detection**: `is_available()` for badread and nanosim verifies the
+  tool can actually start (catches broken installs where the binary exists but a
+  required Python dependency such as edlib is absent).
 
 ### Changed
+- **Breaking: Configuration Split**: `SimulationConfig` (52 fields) replaced by two
+  mode-specific frozen dataclasses: `ReplayConfig` (~14 fields) and `GenerateConfig`
+  (~26 fields). Each validates only its own fields in `__post_init__`.
+- **Breaking: Module Layout Flattened**: Removed `core/` and `cli/` subdirectories.
+  All source modules now reside directly in `nanopore_simulator/`. The single CLI
+  module is `nanopore_simulator/cli.py` (was `nanopore_simulator/cli/main.py`).
+- **Breaking: Pipeline Adapters**: Removed `miniknife` adapter (no published tool).
+  Renamed `nanometanf` to `nanometa` to align with the published Nanometa Live tool.
+  The `PipelineAdapter` ABC and `GenericAdapter` class have been removed; adapters are
+  now plain dicts in `ADAPTERS`. A backward-compatible alias maps `nanometanf` to
+  `nanometa`.
+- **Breaking: Configuration Profiles**: Consolidated 11 built-in profiles to 7 with
+  distinct, clearly named behaviours:
+  - `development_testing` → `development`
+  - `accurate_mode` / `legacy_random` → `steady`
+  - `rapid_sequencing` / `long_read_nanopore` / `minion_simulation` → `bursty`
+  - `high_throughput` retained (parameters adjusted)
+  - `smoothed_timing` → `gradual_drift`
+  - `promethion_simulation` removed (no empirical basis)
+  - `generate_quick_test` → `generate_test`
+  - `generate_realistic` → `generate_standard`
+- **Read Generators**: `BadreadGenerator` and `NanoSimGenerator` merged into a single
+  `SubprocessGenerator` parameterized by backend name. `BuiltinGenerator` unchanged.
+- **Monitoring**: Removed unused `SimulationMetrics` fields and simplified ETA
+  estimation. `NullMonitor` used for headless and test execution.
 - **Install Instructions**: Standardized all install hints to use conda/bioconda
-  channels instead of pip (e.g., `conda install -c conda-forge -c bioconda badread`).
-- **Breaking: Pipeline Adapters**: Removed `miniknife` adapter (fictional pipeline
-  with no published tool). Renamed `nanometanf` adapter to `nanometa` to align with
-  the published Nanometa Live tool. Both built-in adapters (`nanometa`, `kraken`) are
-  now data-driven via `BUILTIN_ADAPTER_CONFIGS` using `GenericAdapter`, replacing the
-  previous concrete `NanometanfAdapter`, `KrackenAdapter`, and `MiniknifeAdapter`
-  classes. The `PipelineAdapter` ABC and `GenericAdapter` remain available for custom
-  adapters. A backward-compatible alias maps `nanometanf` to `nanometa`.
-- **Breaking: Configuration Profiles**: Consolidated 11 built-in profiles into 7
-  with clearer names and distinct timing behaviors.
-  - `development_testing` -> `development`
-  - `accurate_mode` / `legacy_random` -> `steady` (random timing, low variation)
-  - `rapid_sequencing` / `long_read_nanopore` / `minion_simulation` -> `bursty` (Poisson burst pattern)
-  - `high_throughput` -> `high_throughput` (parameters adjusted: bp=0.20, brm=8.0, batch=15)
-  - `smoothed_timing` -> `gradual_drift` (adaptive EMA timing)
-  - `promethion_simulation` removed (no empirical basis; `high_throughput` serves the same role)
-  - `generate_quick_test` -> `generate_test`
-  - `generate_realistic` -> `generate_standard`
-- **ProfileDefinition**: Extended with optional generate-mode fields (`read_count`,
-  `mean_read_length`, `mean_quality`, `reads_per_file`, `output_format`,
-  `generator_backend`). Generate profiles now set these parameters directly
-  instead of only describing them in the description string.
-- **Profile Recommendations**: Simplified recommendation engine to use new names
-  and removed device-specific use cases (minion/promethion) that had no empirical basis.
+  channels (e.g., `conda install -c conda-forge -c bioconda badread`).
+- **Test Suite**: Reorganized from 40 test files (~17,500 lines) to 18 test files
+  (~7,000 lines), one per source module plus integration tests.
+
+### Removed
+- `nanopore_simulator/core/` subdirectory and all modules within it
+- `nanopore_simulator/cli/` subdirectory and `cli/main.py`
+- `NanoporeSimulator` class (use `run_replay()` / `run_generate()` instead)
+- `SimulationConfig` class (use `ReplayConfig` or `GenerateConfig` instead)
+- `PipelineAdapter` ABC and `GenericAdapter` class
+- `NanometanfAdapter`, `KrackenAdapter`, `MiniknifeAdapter` concrete adapter classes
+- `miniknife` pipeline adapter
+- `promethion_simulation` configuration profile
+- `DetailedProgressMonitor` class (was unused; `--monitor detailed` maps to basic)
+- `BadreadGenerator` and `NanoSimGenerator` classes (replaced by `SubprocessGenerator`)
+- `--sample-type` CLI option (use `--force-structure` and `--mix-reads` instead)
+
+---
+
+## Migration Guide: 2.x to 3.0
+
+### Python API Changes
+
+**Old (2.x):**
+```python
+from nanopore_simulator import SimulationConfig, NanoporeSimulator
+
+config = SimulationConfig(
+    source_dir="/data/source",
+    target_dir="/data/target",
+    interval=5.0,
+    timing_model="random",
+)
+simulator = NanoporeSimulator(config)
+simulator.run()
+```
+
+**New (3.0):**
+```python
+from nanopore_simulator import ReplayConfig, run_replay
+
+config = ReplayConfig(
+    source_dir="/data/source",
+    target_dir="/data/target",
+    interval=5.0,
+    timing_model="random",
+)
+run_replay(config)
+```
+
+For generate mode, use `GenerateConfig` and `run_generate()` in the same pattern.
+
+### Import Path Changes
+
+| 2.x import | 3.0 import |
+|---|---|
+| `from nanopore_simulator.core.config import SimulationConfig` | `from nanopore_simulator.config import ReplayConfig, GenerateConfig` |
+| `from nanopore_simulator.cli.main import app` | `from nanopore_simulator.cli import app` |
+| `from nanopore_simulator.core.monitoring import ProgressMonitor` | `from nanopore_simulator.monitoring import ProgressMonitor` |
+| `from nanopore_simulator.core.timing import create_timing_model` | `from nanopore_simulator.timing import create_timing_model` |
+| `from nanopore_simulator.core.adapters import GenericAdapter` | Removed; use `nanopore_simulator.adapters.ADAPTERS` dict |
+
+### CLI Changes
+
+The CLI contract is fully preserved. All existing `nanorunner` commands, flags, and
+behaviours work identically. No changes to shell scripts or CI pipelines are required.
+
+One option has been removed: `--sample-type {pure,mixed}`. The same output structures
+are achievable with existing flags:
+- Former `--sample-type pure` (default): use `--force-structure multiplex` or let
+  structure detection assign each genome its own barcode directory.
+- Former `--sample-type mixed`: use `--force-structure singleplex --mix-reads`.
+
+### Profile Name Changes
+
+| 2.x profile | 3.0 profile |
+|---|---|
+| `development_testing` | `development` |
+| `accurate_mode` / `legacy_random` | `steady` |
+| `rapid_sequencing` | `bursty` |
+| `long_read_nanopore` | `bursty` |
+| `minion_simulation` | `bursty` |
+| `smoothed_timing` | `gradual_drift` |
+| `promethion_simulation` | `high_throughput` (closest equivalent) |
+| `generate_quick_test` | `generate_test` |
+| `generate_realistic` | `generate_standard` |
 
 ## [2.0.2] - 2025-10-27
 
@@ -206,6 +318,8 @@ nanorunner /source /target --interval 5 --timing-model random --random-factor 0.
    nanorunner /source /target --timing-model poisson
    ```
 
+[3.0.0]: https://github.com/FOI-Bioinformatics/nanorunner/releases/tag/v3.0.0
+[2.0.2]: https://github.com/FOI-Bioinformatics/nanorunner/releases/tag/v2.0.2
 [2.0.1]: https://github.com/FOI-Bioinformatics/nanorunner/releases/tag/v2.0.1
 [2.0.0]: https://github.com/FOI-Bioinformatics/nanorunner/releases/tag/v2.0.0
 [1.0.0]: https://github.com/FOI-Bioinformatics/nanorunner/releases/tag/v1.0.0

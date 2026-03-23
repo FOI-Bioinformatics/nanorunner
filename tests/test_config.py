@@ -41,31 +41,23 @@ class TestReplayConfig:
         source = tmp_path / "source"
         source.mkdir()
         with pytest.raises(ValueError, match="interval"):
-            ReplayConfig(
-                source_dir=source, target_dir=tmp_path / "t", interval=-1.0
-            )
+            ReplayConfig(source_dir=source, target_dir=tmp_path / "t", interval=-1.0)
 
     def test_zero_interval_allowed(self, tmp_path):
         source = tmp_path / "source"
         source.mkdir()
-        cfg = ReplayConfig(
-            source_dir=source, target_dir=tmp_path / "t", interval=0.0
-        )
+        cfg = ReplayConfig(source_dir=source, target_dir=tmp_path / "t", interval=0.0)
         assert cfg.interval == 0.0
 
     def test_invalid_batch_size(self, tmp_path):
         source = tmp_path / "source"
         source.mkdir()
         with pytest.raises(ValueError, match="batch_size"):
-            ReplayConfig(
-                source_dir=source, target_dir=tmp_path / "t", batch_size=0
-            )
+            ReplayConfig(source_dir=source, target_dir=tmp_path / "t", batch_size=0)
 
     def test_source_dir_must_exist(self, tmp_path):
         with pytest.raises(ValueError, match="source_dir"):
-            ReplayConfig(
-                source_dir=tmp_path / "nonexistent", target_dir=tmp_path / "t"
-            )
+            ReplayConfig(source_dir=tmp_path / "nonexistent", target_dir=tmp_path / "t")
 
     def test_invalid_timing_model(self, tmp_path):
         source = tmp_path / "source"
@@ -101,9 +93,7 @@ class TestReplayConfig:
         source = tmp_path / "source"
         source.mkdir()
         with pytest.raises(ValueError, match="workers"):
-            ReplayConfig(
-                source_dir=source, target_dir=tmp_path / "t", workers=0
-            )
+            ReplayConfig(source_dir=source, target_dir=tmp_path / "t", workers=0)
 
     def test_rechunking_config(self, tmp_path):
         source = tmp_path / "source"

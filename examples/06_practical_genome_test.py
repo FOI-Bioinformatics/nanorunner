@@ -1,27 +1,34 @@
 #!/usr/bin/env python3
 """
-Example 6: Practical Genome Test
+Example 6: Generate Mode with Real Genomes
 
+Level: Advanced
+Time: ~5 minutes (first run downloads genomes; subsequent runs use cache)
 Description:
-    Downloads real genomes from NCBI and exercises nanorunner's generate mode
-    end-to-end. Demonstrates singleplex, multiplex, mixed-read, and
-    timing-model scenarios using actual microbial reference sequences.
+    Downloads three microbial reference genomes from NCBI and exercises
+    nanorunner's generate mode end-to-end. Covers five progressive
+    scenarios:
+
+      1. Quick Lambda phage test    -- 50 reads, uniform timing, singleplex
+      2. Singleplex multiple genomes -- separate output files per genome
+      3. Multiplex barcodes          -- barcode01..03 directory layout
+      4. Mixed reads                 -- reads from two genomes in shared files
+      5. Poisson timing              -- irregular burst timing on E. coli
+
+    The builtin generator is used in all scenarios (no external tools
+    required). Generated reads are error-free random subsequences from
+    the reference sequence with log-normal length distribution.
 
 Usage:
     python examples/06_practical_genome_test.py
 
 Requirements:
-    - nanorunner installed
-    - NCBI datasets CLI (https://www.ncbi.nlm.nih.gov/datasets/docs/v2/download-and-install/)
-
-Expected Output:
-    - Downloads Lambda phage, S. aureus, and E. coli genomes (cached)
-    - Runs 5 progressive scenarios validating generate mode
-    - Prints summary statistics for each scenario
+    - nanorunner installed (pip install -e .)
+    - NCBI datasets CLI: https://www.ncbi.nlm.nih.gov/datasets/docs/v2/download-and-install/
 
 Cleanup:
-    - Genome cache: rm -rf ~/.cache/nanorunner_genomes/
-    - Output files are cleaned up automatically between scenarios
+    Genome cache:  rm -rf ~/.cache/nanorunner_genomes/
+    Work directory is removed automatically after each run.
 """
 
 import gzip
@@ -31,13 +38,14 @@ import sys
 import tempfile
 import zipfile
 from pathlib import Path
+from typing import Dict
 
 
 # ---------------------------------------------------------------------------
-# Genome download helper
+# Genome catalogue
 # ---------------------------------------------------------------------------
 
-GENOMES = {
+GENOMES: Dict[str, Dict] = {
     "lambda": {
         "accession": "GCF_000840245.1",
         "name": "Lambda phage",
@@ -58,28 +66,38 @@ GENOMES = {
 CACHE_DIR = Path.home() / ".cache" / "nanorunner_genomes"
 
 
-class GenomeDownloader:
-    """Downloads and caches reference genomes from NCBI using the datasets CLI."""
+# ---------------------------------------------------------------------------
+# Genome downloader
+# ---------------------------------------------------------------------------
 
-    def __init__(self, cache_dir: Path = CACHE_DIR):
+
+class GenomeDownloader:
+    """Download and cache reference genomes from NCBI using the datasets CLI."""
+
+    def __init__(self, cache_dir: Path = CACHE_DIR) -> None:
         self.cache_dir = cache_dir
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _find_fna(self, extract_dir: Path) -> Path:
-        """Locate the .fna file inside an extracted datasets zip."""
+        """Locate the first .fna file inside an extracted datasets archive."""
         fna_files = list(extract_dir.rglob("*.fna"))
         if not fna_files:
-            raise FileNotFoundError(
-                f"No .fna file found in {extract_dir}"
-            )
+            raise FileNotFoundError(f"No .fna file found in {extract_dir}")
         return fna_files[0]
 
     def download(self, key: str) -> Path:
-        """Return path to a genome FASTA, downloading if necessary."""
+        """Return path to a genome FASTA, downloading from NCBI if necessary.
+
+        Args:
+            key: A key in the GENOMES catalogue.
+
+        Returns:
+            Path to the cached FASTA file.
+        """
         info = GENOMES[key]
         cached = self.cache_dir / f"{key}.fna"
         if cached.exists():
-            print(f"  [cached] {info['name']} ({cached})")
+            print(f"  [cached] {info['name']} ({cached.name})")
             return cached
 
         accession = info["accession"]
@@ -113,7 +131,6 @@ class GenomeDownloader:
         fna = self._find_fna(extract_dir)
         shutil.copy2(fna, cached)
 
-        # Clean up intermediate files
         zip_path.unlink(missing_ok=True)
         shutil.rmtree(extract_dir, ignore_errors=True)
 
@@ -121,9 +138,9 @@ class GenomeDownloader:
         print(f"  Saved {info['name']}: {size_kb:.0f} KB")
         return cached
 
-    def download_all(self) -> dict:
-        """Download all configured genomes. Returns {key: Path}."""
-        paths = {}
+    def download_all(self) -> Dict[str, Path]:
+        """Download all genomes in the catalogue. Returns {key: Path}."""
+        paths: Dict[str, Path] = {}
         for key in GENOMES:
             paths[key] = self.download(key)
         return paths
@@ -134,59 +151,66 @@ class GenomeDownloader:
 # ---------------------------------------------------------------------------
 
 
-def validate_fastq_format(path: Path) -> dict:
-    """Validate FASTQ file and return basic statistics.
+def validate_fastq(path: Path) -> Dict:
+    """Validate a FASTQ file and return basic statistics.
 
-    Returns dict with keys: valid, read_count, error (if invalid).
+    Returns a dict with keys: valid (bool), read_count (int),
+    and error (str, only present when valid is False).
     """
-    if path.suffix == ".gz":
-        opener = gzip.open
-    else:
-        opener = open
-
+    opener = gzip.open if path.suffix == ".gz" else open
     read_count = 0
     try:
         with opener(path, "rt") as fh:
             lines = fh.read().strip().split("\n")
 
         if len(lines) % 4 != 0:
-            return {"valid": False, "read_count": 0,
-                    "error": f"Line count {len(lines)} not divisible by 4"}
+            return {
+                "valid": False,
+                "read_count": 0,
+                "error": f"Line count {len(lines)} not divisible by 4",
+            }
 
         for i in range(0, len(lines), 4):
-            header = lines[i]
-            seq = lines[i + 1]
-            sep = lines[i + 2]
-            qual = lines[i + 3]
-
+            header, seq, sep, qual = (
+                lines[i], lines[i + 1], lines[i + 2], lines[i + 3]
+            )
             if not header.startswith("@"):
-                return {"valid": False, "read_count": read_count,
-                        "error": f"Line {i+1}: header does not start with @"}
+                return {
+                    "valid": False,
+                    "read_count": read_count,
+                    "error": f"Line {i + 1}: header does not start with @",
+                }
             if not sep.startswith("+"):
-                return {"valid": False, "read_count": read_count,
-                        "error": f"Line {i+3}: separator does not start with +"}
+                return {
+                    "valid": False,
+                    "read_count": read_count,
+                    "error": f"Line {i + 3}: separator does not start with +",
+                }
             if len(seq) != len(qual):
-                return {"valid": False, "read_count": read_count,
-                        "error": f"Read {read_count+1}: seq/qual length mismatch"}
+                return {
+                    "valid": False,
+                    "read_count": read_count,
+                    "error": f"Read {read_count + 1}: seq/qual length mismatch",
+                }
             read_count += 1
 
-    except Exception as e:
-        return {"valid": False, "read_count": read_count, "error": str(e)}
+    except Exception as exc:
+        return {"valid": False, "read_count": read_count, "error": str(exc)}
 
     return {"valid": True, "read_count": read_count}
 
 
 # ---------------------------------------------------------------------------
-# Prerequisite checks
+# Prerequisite check
 # ---------------------------------------------------------------------------
 
 
 def check_prerequisites() -> bool:
-    """Verify that nanorunner and datasets CLI are available."""
+    """Verify that nanorunner and the NCBI datasets CLI are available."""
     ok = True
 
     try:
-        from nanopore_simulator import SimulationConfig, NanoporeSimulator  # noqa: F401
+        from nanopore_simulator import GenerateConfig, run_generate  # noqa: F401
     except ImportError:
         print("ERROR: nanorunner is not installed. Run: pip install -e .")
         ok = False
@@ -196,7 +220,10 @@ def check_prerequisites() -> bool:
     )
     if result.returncode != 0:
         print("ERROR: NCBI datasets CLI not found.")
-        print("Install from: https://www.ncbi.nlm.nih.gov/datasets/docs/v2/download-and-install/")
+        print(
+            "Install from: "
+            "https://www.ncbi.nlm.nih.gov/datasets/docs/v2/download-and-install/"
+        )
         ok = False
 
     return ok
@@ -207,190 +234,195 @@ def check_prerequisites() -> bool:
 # ---------------------------------------------------------------------------
 
 
-def scenario_1_lambda_quick(genome_paths: dict, work_dir: Path):
-    """Quick Lambda phage test: 50 reads, uniform timing, singleplex."""
-    from nanopore_simulator import SimulationConfig, NanoporeSimulator
+def scenario_1_lambda_quick(genome_paths: Dict[str, Path], work_dir: Path) -> None:
+    """Quick Lambda phage test: 50 reads, uniform timing, singleplex output."""
+    from nanopore_simulator import GenerateConfig, run_generate
 
-    print("\n--- Scenario 1: Quick Lambda phage test ---")
+    print("\n--- Scenario 1: Lambda phage quick test ---")
 
     target = work_dir / "scenario1"
-    config = SimulationConfig(
+    config = GenerateConfig(
         target_dir=target,
-        operation="generate",
         genome_inputs=[genome_paths["lambda"]],
-        force_structure="singleplex",
+        structure="singleplex",
         read_count=50,
         reads_per_file=25,
-        mean_read_length=500,
-        std_read_length=200,
-        min_read_length=100,
+        mean_length=500,
+        std_length=200,
+        min_length=100,
         output_format="fastq",
         interval=0.0,
         timing_model="uniform",
+        monitor_type="none",
+        generator_backend="builtin",
     )
-    sim = NanoporeSimulator(config, enable_monitoring=False)
-    sim.run_simulation()
+    run_generate(config)
 
     fq_files = list(target.glob("*.fastq"))
     total_reads = 0
     for fq in fq_files:
-        result = validate_fastq_format(fq)
-        assert result["valid"], f"Invalid FASTQ: {result['error']}"
+        result = validate_fastq(fq)
+        assert result["valid"], f"Invalid FASTQ {fq.name}: {result.get('error')}"
         total_reads += result["read_count"]
 
     print(f"  Files: {len(fq_files)}, Total reads: {total_reads}")
+    assert total_reads == 50, f"Expected 50 reads, got {total_reads}"
     print("  PASSED")
 
 
-def scenario_2_singleplex_multiple(genome_paths: dict, work_dir: Path):
-    """Singleplex with two genomes, separate files."""
-    from nanopore_simulator import SimulationConfig, NanoporeSimulator
+def scenario_2_singleplex_multiple(
+    genome_paths: Dict[str, Path], work_dir: Path
+) -> None:
+    """Singleplex with two genomes: separate output files, no barcode dirs."""
+    from nanopore_simulator import GenerateConfig, run_generate
 
-    print("\n--- Scenario 2: Singleplex multiple genomes ---")
+    print("\n--- Scenario 2: Singleplex, two genomes ---")
 
     target = work_dir / "scenario2"
-    config = SimulationConfig(
+    config = GenerateConfig(
         target_dir=target,
-        operation="generate",
         genome_inputs=[genome_paths["lambda"], genome_paths["saureus"]],
-        force_structure="singleplex",
+        structure="singleplex",
         read_count=30,
         reads_per_file=15,
-        mean_read_length=500,
-        std_read_length=200,
-        min_read_length=100,
+        mean_length=500,
+        std_length=200,
+        min_length=100,
         output_format="fastq",
         mix_reads=False,
         interval=0.0,
         timing_model="uniform",
+        monitor_type="none",
+        generator_backend="builtin",
     )
-    sim = NanoporeSimulator(config, enable_monitoring=False)
-    sim.run_simulation()
+    run_generate(config)
 
     fq_files = list(target.glob("*.fastq"))
-    # No barcode directories in singleplex
     barcode_dirs = [d for d in target.iterdir() if d.is_dir() and d.name.startswith("barcode")]
-    assert len(barcode_dirs) == 0, "Unexpected barcode directories in singleplex mode"
+    assert not barcode_dirs, "Unexpected barcode directories in singleplex mode"
 
     total_reads = 0
     for fq in fq_files:
-        result = validate_fastq_format(fq)
-        assert result["valid"], f"Invalid FASTQ: {result['error']}"
+        result = validate_fastq(fq)
+        assert result["valid"], f"Invalid FASTQ {fq.name}: {result.get('error')}"
         total_reads += result["read_count"]
 
     print(f"  Files: {len(fq_files)}, Total reads: {total_reads}")
     print("  PASSED")
 
 
-def scenario_3_multiplex(genome_paths: dict, work_dir: Path):
-    """Multiplex with all three genomes in barcode directories."""
-    from nanopore_simulator import SimulationConfig, NanoporeSimulator
+def scenario_3_multiplex(genome_paths: Dict[str, Path], work_dir: Path) -> None:
+    """Multiplex with three genomes: one barcode directory per genome."""
+    from nanopore_simulator import GenerateConfig, run_generate
 
     print("\n--- Scenario 3: Multiplex barcodes ---")
 
     target = work_dir / "scenario3"
-    config = SimulationConfig(
+    config = GenerateConfig(
         target_dir=target,
-        operation="generate",
         genome_inputs=[
             genome_paths["lambda"],
             genome_paths["saureus"],
             genome_paths["ecoli"],
         ],
+        structure="multiplex",
         read_count=20,
         reads_per_file=10,
-        mean_read_length=500,
-        std_read_length=200,
-        min_read_length=100,
+        mean_length=500,
+        std_length=200,
+        min_length=100,
         output_format="fastq",
         interval=0.0,
         timing_model="uniform",
+        monitor_type="none",
+        generator_backend="builtin",
     )
-    sim = NanoporeSimulator(config, enable_monitoring=False)
-    sim.run_simulation()
+    run_generate(config)
 
     for i in range(1, 4):
         bdir = target / f"barcode{i:02d}"
-        assert bdir.is_dir(), f"Missing {bdir.name}"
+        assert bdir.is_dir(), f"Missing expected directory {bdir.name}"
         fq_files = list(bdir.glob("*.fastq"))
-        assert len(fq_files) >= 1, f"No FASTQ files in {bdir.name}"
+        assert fq_files, f"No FASTQ files found in {bdir.name}"
         for fq in fq_files:
-            result = validate_fastq_format(fq)
-            assert result["valid"], f"Invalid FASTQ in {bdir.name}: {result['error']}"
-        print(f"  {bdir.name}: {len(fq_files)} files")
+            result = validate_fastq(fq)
+            assert result["valid"], (
+                f"Invalid FASTQ in {bdir.name}: {result.get('error')}"
+            )
+        print(f"  {bdir.name}: {len(fq_files)} file(s)")
 
     print("  PASSED")
 
 
-def scenario_4_mixed(genome_paths: dict, work_dir: Path):
-    """Mixed reads from Lambda + S. aureus in singleplex mode."""
-    from nanopore_simulator import SimulationConfig, NanoporeSimulator
+def scenario_4_mixed(genome_paths: Dict[str, Path], work_dir: Path) -> None:
+    """Mixed reads: Lambda + S. aureus reads interleaved in shared files."""
+    from nanopore_simulator import GenerateConfig, run_generate
 
     print("\n--- Scenario 4: Mixed reads ---")
 
     target = work_dir / "scenario4"
-    config = SimulationConfig(
+    config = GenerateConfig(
         target_dir=target,
-        operation="generate",
         genome_inputs=[genome_paths["lambda"], genome_paths["saureus"]],
-        force_structure="singleplex",
+        structure="singleplex",
         read_count=20,
         reads_per_file=10,
-        mean_read_length=500,
-        std_read_length=200,
-        min_read_length=100,
+        mean_length=500,
+        std_length=200,
+        min_length=100,
         output_format="fastq",
         mix_reads=True,
         interval=0.0,
         timing_model="uniform",
+        monitor_type="none",
+        generator_backend="builtin",
     )
-    sim = NanoporeSimulator(config, enable_monitoring=False)
-    sim.run_simulation()
+    run_generate(config)
 
     fq_files = list(target.glob("*.fastq"))
     total_reads = 0
     for fq in fq_files:
-        result = validate_fastq_format(fq)
-        assert result["valid"], f"Invalid FASTQ: {result['error']}"
+        result = validate_fastq(fq)
+        assert result["valid"], f"Invalid FASTQ {fq.name}: {result.get('error')}"
         total_reads += result["read_count"]
 
     print(f"  Files: {len(fq_files)}, Total reads: {total_reads}")
     print("  PASSED")
 
 
-def scenario_5_poisson(genome_paths: dict, work_dir: Path):
-    """E. coli with Poisson timing model."""
-    from nanopore_simulator import SimulationConfig, NanoporeSimulator
+def scenario_5_poisson(genome_paths: Dict[str, Path], work_dir: Path) -> None:
+    """E. coli with Poisson timing model: irregular burst intervals."""
+    from nanopore_simulator import GenerateConfig, run_generate
 
     print("\n--- Scenario 5: Poisson timing ---")
 
     target = work_dir / "scenario5"
-    config = SimulationConfig(
+    config = GenerateConfig(
         target_dir=target,
-        operation="generate",
         genome_inputs=[genome_paths["ecoli"]],
-        force_structure="singleplex",
+        structure="singleplex",
         read_count=30,
         reads_per_file=15,
-        mean_read_length=1000,
-        std_read_length=400,
-        min_read_length=200,
+        mean_length=1000,
+        std_length=400,
+        min_length=200,
         output_format="fastq",
         interval=0.01,
         timing_model="poisson",
-        timing_model_params={
+        timing_params={
             "burst_probability": 0.2,
             "burst_rate_multiplier": 3.0,
         },
+        monitor_type="none",
+        generator_backend="builtin",
     )
-    sim = NanoporeSimulator(config, enable_monitoring=False)
-    sim.run_simulation()
+    run_generate(config)
 
     fq_files = list(target.rglob("*.fastq"))
     total_reads = 0
     for fq in fq_files:
-        result = validate_fastq_format(fq)
-        assert result["valid"], f"Invalid FASTQ: {result['error']}"
+        result = validate_fastq(fq)
+        assert result["valid"], f"Invalid FASTQ {fq.name}: {result.get('error')}"
         total_reads += result["read_count"]
 
     print(f"  Files: {len(fq_files)}, Total reads: {total_reads}")
@@ -402,19 +434,19 @@ def scenario_5_poisson(genome_paths: dict, work_dir: Path):
 # ---------------------------------------------------------------------------
 
 
-def main():
+def main() -> int:
     print("=" * 60)
-    print("Example 6: Practical Genome Test")
+    print("Example 6: Generate Mode with Real Genomes")
     print("=" * 60)
 
     if not check_prerequisites():
         return 1
 
-    print("\nDownloading genomes...")
+    print("\nPreparing genomes...")
     downloader = GenomeDownloader()
     genome_paths = downloader.download_all()
 
-    work_dir = Path(tempfile.mkdtemp(prefix="nanorunner_practical_"))
+    work_dir = Path(tempfile.mkdtemp(prefix="nanorunner_genome_test_"))
     print(f"\nWork directory: {work_dir}")
 
     try:
@@ -431,6 +463,7 @@ def main():
     print("=" * 60)
     print(f"\nGenome cache: {CACHE_DIR}")
     print("To remove cached genomes: rm -rf ~/.cache/nanorunner_genomes/")
+
     return 0
 
 

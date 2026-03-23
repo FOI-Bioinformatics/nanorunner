@@ -41,9 +41,7 @@ class UniformTimingModel(TimingModel):
 class RandomTimingModel(TimingModel):
     """Random timing model with symmetric variation around base interval."""
 
-    def __init__(
-        self, base_interval: float, random_factor: float = 0.3
-    ) -> None:
+    def __init__(self, base_interval: float, random_factor: float = 0.3) -> None:
         super().__init__(base_interval)
         if not 0.0 <= random_factor <= 1.0:
             raise ValueError("random_factor must be between 0.0 and 1.0")
@@ -80,9 +78,7 @@ class PoissonTimingModel(TimingModel):
 
         self.burst_probability = burst_probability
         self.burst_rate_multiplier = burst_rate_multiplier
-        self.base_rate = (
-            1.0 / base_interval if base_interval > 0 else float("inf")
-        )
+        self.base_rate = 1.0 / base_interval if base_interval > 0 else float("inf")
 
     def next_interval(self) -> float:
         """Generate next interval using Poisson process with burst mode."""
@@ -129,11 +125,7 @@ class AdaptiveTimingModel(TimingModel):
 
     def next_interval(self) -> float:
         """Generate next interval based on adaptive mean."""
-        rate = (
-            1.0 / self.current_mean
-            if self.current_mean > 0
-            else float("inf")
-        )
+        rate = 1.0 / self.current_mean if self.current_mean > 0 else float("inf")
 
         try:
             interval = random.expovariate(rate)
@@ -151,13 +143,10 @@ class AdaptiveTimingModel(TimingModel):
             self.interval_history.pop(0)
 
         if len(self.interval_history) > 1:
-            recent_mean = sum(self.interval_history) / len(
-                self.interval_history
-            )
+            recent_mean = sum(self.interval_history) / len(self.interval_history)
             self.current_mean = (
-                (1 - self.adaptation_rate) * self.current_mean
-                + self.adaptation_rate * recent_mean
-            )
+                1 - self.adaptation_rate
+            ) * self.current_mean + self.adaptation_rate * recent_mean
 
     def reset(self) -> None:
         """Reset the adaptive state."""
@@ -197,8 +186,6 @@ def create_timing_model(
     elif model_type == "adaptive":
         adaptation_rate = kwargs.get("adaptation_rate", 0.1)
         history_size = kwargs.get("history_size", 10)
-        return AdaptiveTimingModel(
-            base_interval, adaptation_rate, history_size
-        )
+        return AdaptiveTimingModel(base_interval, adaptation_rate, history_size)
     else:
         raise ValueError(f"Unknown timing model type: {model_type}")

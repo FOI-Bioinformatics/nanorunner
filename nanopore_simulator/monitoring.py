@@ -174,9 +174,7 @@ class ProgressMonitor:
         self._display_callback = display_callback
 
         # Resource collector
-        self._resource_collector = (
-            _ResourceCollector() if enable_resources else None
-        )
+        self._resource_collector = _ResourceCollector() if enable_resources else None
 
         # Pause / resume
         self._paused = threading.Event()
@@ -194,9 +192,7 @@ class ProgressMonitor:
         if self._update_thread is not None and self._update_thread.is_alive():
             return
         self._stop_event.clear()
-        self._update_thread = threading.Thread(
-            target=self._update_loop, daemon=True
-        )
+        self._update_thread = threading.Thread(target=self._update_loop, daemon=True)
         self._update_thread.start()
         logger.info("Progress monitoring started")
 

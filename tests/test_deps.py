@@ -125,24 +125,18 @@ class TestCheckPreflight:
 
     def test_generate_builtin_no_issues(self) -> None:
         """Generate mode with builtin backend requires nothing external."""
-        issues = check_preflight(
-            operation="generate", generator_backend="builtin"
-        )
+        issues = check_preflight(operation="generate", generator_backend="builtin")
         assert issues == []
 
     def test_generate_auto_no_issues(self) -> None:
         """Auto mode always has builtin as fallback."""
-        issues = check_preflight(
-            operation="generate", generator_backend="auto"
-        )
+        issues = check_preflight(operation="generate", generator_backend="auto")
         assert issues == []
 
     @patch("shutil.which", return_value=None)
     def test_generate_badread_missing(self, mock_which: object) -> None:
         """Request for missing badread backend should produce an issue."""
-        issues = check_preflight(
-            operation="generate", generator_backend="badread"
-        )
+        issues = check_preflight(operation="generate", generator_backend="badread")
         assert len(issues) >= 1
         assert any("badread" in msg for msg in issues)
 
@@ -158,9 +152,7 @@ class TestCheckPreflight:
         assert any("datasets" in msg for msg in issues)
 
     @patch("shutil.which", return_value="/usr/local/bin/datasets")
-    def test_genome_download_with_datasets_ok(
-        self, mock_which: object
-    ) -> None:
+    def test_genome_download_with_datasets_ok(self, mock_which: object) -> None:
         """When datasets CLI is found, no genome download issue."""
         issues = check_preflight(
             operation="generate",

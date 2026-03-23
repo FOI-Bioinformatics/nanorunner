@@ -206,9 +206,7 @@ class TestBuiltinMockIntegrity:
         """Each community's abundances should sum to approximately 1.0."""
         mock = BUILTIN_MOCKS[name]
         total = sum(org.abundance for org in mock.organisms)
-        assert 0.99 <= total <= 1.01, (
-            f"{name}: abundances sum to {total:.6f}"
-        )
+        assert 0.99 <= total <= 1.01, f"{name}: abundances sum to {total:.6f}"
 
     @pytest.mark.parametrize("name", EXPECTED_MOCKS)
     def test_name_matches_key(self, name: str) -> None:
@@ -269,6 +267,6 @@ class TestAliasIntegrity:
     @pytest.mark.parametrize("alias", EXPECTED_ALIASES)
     def test_alias_target_exists(self, alias: str) -> None:
         target = MOCK_ALIASES[alias]
-        assert target in BUILTIN_MOCKS, (
-            f"Alias '{alias}' points to non-existent mock '{target}'"
-        )
+        assert (
+            target in BUILTIN_MOCKS
+        ), f"Alias '{alias}' points to non-existent mock '{target}'"

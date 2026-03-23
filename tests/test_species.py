@@ -65,9 +65,7 @@ class TestGenomeRef:
 
     def test_invalid_domain_raises(self) -> None:
         with pytest.raises(ValueError, match="domain must be one of"):
-            GenomeRef(
-                name="Test", accession="GCF_123", source="gtdb", domain="virus"
-            )
+            GenomeRef(name="Test", accession="GCF_123", source="gtdb", domain="virus")
 
     def test_all_valid_sources(self) -> None:
         for src in VALID_SOURCES:
@@ -101,7 +99,10 @@ class TestGenomeCache:
     def test_get_cached_path(self, tmp_path: Path) -> None:
         cache = GenomeCache(cache_dir=tmp_path)
         ref = GenomeRef(
-            name="E. coli", accession="GCF_000005845.2", source="gtdb", domain="bacteria"
+            name="E. coli",
+            accession="GCF_000005845.2",
+            source="gtdb",
+            domain="bacteria",
         )
         path = cache.get_cached_path(ref)
         assert path == tmp_path / "gtdb" / "GCF_000005845.2.fna.gz"
@@ -109,14 +110,20 @@ class TestGenomeCache:
     def test_is_cached_false_when_missing(self, tmp_path: Path) -> None:
         cache = GenomeCache(cache_dir=tmp_path)
         ref = GenomeRef(
-            name="E. coli", accession="GCF_000005845.2", source="gtdb", domain="bacteria"
+            name="E. coli",
+            accession="GCF_000005845.2",
+            source="gtdb",
+            domain="bacteria",
         )
         assert cache.is_cached(ref) is False
 
     def test_is_cached_true_when_present(self, tmp_path: Path) -> None:
         cache = GenomeCache(cache_dir=tmp_path)
         ref = GenomeRef(
-            name="E. coli", accession="GCF_000005845.2", source="gtdb", domain="bacteria"
+            name="E. coli",
+            accession="GCF_000005845.2",
+            source="gtdb",
+            domain="bacteria",
         )
         cached_path = cache.get_cached_path(ref)
         cached_path.parent.mkdir(parents=True, exist_ok=True)
@@ -126,8 +133,10 @@ class TestGenomeCache:
     def test_ncbi_source_path(self, tmp_path: Path) -> None:
         cache = GenomeCache(cache_dir=tmp_path)
         ref = GenomeRef(
-            name="S. cerevisiae", accession="GCF_000146045.2",
-            source="ncbi", domain="eukaryota",
+            name="S. cerevisiae",
+            accession="GCF_000146045.2",
+            source="ncbi",
+            domain="eukaryota",
         )
         path = cache.get_cached_path(ref)
         assert "ncbi" in str(path)
@@ -144,8 +153,10 @@ class TestResolutionCache:
     def test_put_and_get(self, tmp_path: Path) -> None:
         cache = ResolutionCache(cache_dir=tmp_path)
         ref = GenomeRef(
-            name="E. coli", accession="GCF_000005845.2",
-            source="gtdb", domain="bacteria",
+            name="E. coli",
+            accession="GCF_000005845.2",
+            source="gtdb",
+            domain="bacteria",
         )
         cache.put("Escherichia coli", ref)
         result = cache.get("Escherichia coli")
@@ -159,8 +170,10 @@ class TestResolutionCache:
     def test_case_insensitive_lookup(self, tmp_path: Path) -> None:
         cache = ResolutionCache(cache_dir=tmp_path)
         ref = GenomeRef(
-            name="E. coli", accession="GCF_000005845.2",
-            source="gtdb", domain="bacteria",
+            name="E. coli",
+            accession="GCF_000005845.2",
+            source="gtdb",
+            domain="bacteria",
         )
         cache.put("Escherichia Coli", ref)
         result = cache.get("escherichia coli")
@@ -169,8 +182,10 @@ class TestResolutionCache:
 
     def test_persistence(self, tmp_path: Path) -> None:
         ref = GenomeRef(
-            name="E. coli", accession="GCF_000005845.2",
-            source="gtdb", domain="bacteria",
+            name="E. coli",
+            accession="GCF_000005845.2",
+            source="gtdb",
+            domain="bacteria",
         )
         cache1 = ResolutionCache(cache_dir=tmp_path)
         cache1.put("E. coli", ref)
@@ -184,8 +199,10 @@ class TestResolutionCache:
     def test_clear(self, tmp_path: Path) -> None:
         cache = ResolutionCache(cache_dir=tmp_path)
         ref = GenomeRef(
-            name="E. coli", accession="GCF_000005845.2",
-            source="gtdb", domain="bacteria",
+            name="E. coli",
+            accession="GCF_000005845.2",
+            source="gtdb",
+            domain="bacteria",
         )
         cache.put("E. coli", ref)
         cache.clear()
@@ -223,7 +240,10 @@ class TestResolveSpecies:
             mm.__exit__ = MagicMock(return_value=False)
             return mm
 
-        with patch("nanopore_simulator.species.urllib.request.urlopen", side_effect=mock_urlopen):
+        with patch(
+            "nanopore_simulator.species.urllib.request.urlopen",
+            side_effect=mock_urlopen,
+        ):
             ref = resolve_species(
                 "Escherichia coli",
                 cache=GenomeCache(cache_dir=tmp_path / "genomes"),
@@ -238,8 +258,10 @@ class TestResolveSpecies:
         # Pre-populate the resolution cache
         rc = ResolutionCache(cache_dir=tmp_path / "resolutions")
         ref = GenomeRef(
-            name="E. coli", accession="GCF_000005845.2",
-            source="gtdb", domain="bacteria",
+            name="E. coli",
+            accession="GCF_000005845.2",
+            source="gtdb",
+            domain="bacteria",
         )
         rc.put("Escherichia coli", ref)
 
@@ -263,8 +285,10 @@ class TestResolveSpecies:
     def test_resolve_species_offline_cache_hit(self, tmp_path: Path) -> None:
         rc = ResolutionCache(cache_dir=tmp_path / "resolutions")
         ref = GenomeRef(
-            name="E. coli", accession="GCF_000005845.2",
-            source="gtdb", domain="bacteria",
+            name="E. coli",
+            accession="GCF_000005845.2",
+            source="gtdb",
+            domain="bacteria",
         )
         rc.put("Escherichia coli", ref)
 
@@ -276,34 +300,44 @@ class TestResolveSpecies:
         )
         assert result is not None
 
-    def test_resolve_species_gtdb_not_found_falls_to_ncbi(
-        self, tmp_path: Path
-    ) -> None:
+    def test_resolve_species_gtdb_not_found_falls_to_ncbi(self, tmp_path: Path) -> None:
         """When GTDB returns nothing, NCBI is tried via datasets CLI."""
         import urllib.error
 
         def mock_urlopen(req, timeout=None):
             raise urllib.error.HTTPError(
-                url="http://gtdb", code=404, msg="Not found",
-                hdrs=None, fp=None,
+                url="http://gtdb",
+                code=404,
+                msg="Not found",
+                hdrs=None,
+                fp=None,
             )
 
-        ncbi_output = json.dumps({
-            "accession": "GCF_000146045.2",
-            "organism": {
-                "organism_name": "Saccharomyces cerevisiae",
-                "lineage": [{"tax_id": 2759}],
-            },
-            "assembly_info": {"assembly_level": "Complete Genome"},
-        })
-
-        mock_run_result = MagicMock(
-            returncode=0, stdout=ncbi_output, stderr=""
+        ncbi_output = json.dumps(
+            {
+                "accession": "GCF_000146045.2",
+                "organism": {
+                    "organism_name": "Saccharomyces cerevisiae",
+                    "lineage": [{"tax_id": 2759}],
+                },
+                "assembly_info": {"assembly_level": "Complete Genome"},
+            }
         )
 
-        with patch("nanopore_simulator.species.urllib.request.urlopen", side_effect=mock_urlopen):
-            with patch("nanopore_simulator.species.shutil.which", return_value="/usr/bin/datasets"):
-                with patch("nanopore_simulator.species.subprocess.run", return_value=mock_run_result):
+        mock_run_result = MagicMock(returncode=0, stdout=ncbi_output, stderr="")
+
+        with patch(
+            "nanopore_simulator.species.urllib.request.urlopen",
+            side_effect=mock_urlopen,
+        ):
+            with patch(
+                "nanopore_simulator.species.shutil.which",
+                return_value="/usr/bin/datasets",
+            ):
+                with patch(
+                    "nanopore_simulator.species.subprocess.run",
+                    return_value=mock_run_result,
+                ):
                     ref = resolve_species(
                         "Saccharomyces cerevisiae",
                         cache=GenomeCache(cache_dir=tmp_path / "genomes"),
@@ -316,18 +350,25 @@ class TestResolveSpecies:
 
     def test_resolve_species_domain_hint_skips_gtdb(self, tmp_path: Path) -> None:
         """When domain=eukaryota, GTDB is skipped and NCBI is used directly."""
-        ncbi_output = json.dumps({
-            "accession": "GCF_000146045.2",
-            "organism": {
-                "organism_name": "Saccharomyces cerevisiae",
-                "lineage": [{"tax_id": 2759}],
-            },
-            "assembly_info": {"assembly_level": "Complete Genome"},
-        })
+        ncbi_output = json.dumps(
+            {
+                "accession": "GCF_000146045.2",
+                "organism": {
+                    "organism_name": "Saccharomyces cerevisiae",
+                    "lineage": [{"tax_id": 2759}],
+                },
+                "assembly_info": {"assembly_level": "Complete Genome"},
+            }
+        )
         mock_run_result = MagicMock(returncode=0, stdout=ncbi_output, stderr="")
 
-        with patch("nanopore_simulator.species.shutil.which", return_value="/usr/bin/datasets"):
-            with patch("nanopore_simulator.species.subprocess.run", return_value=mock_run_result):
+        with patch(
+            "nanopore_simulator.species.shutil.which", return_value="/usr/bin/datasets"
+        ):
+            with patch(
+                "nanopore_simulator.species.subprocess.run",
+                return_value=mock_run_result,
+            ):
                 ref = resolve_species(
                     "Saccharomyces cerevisiae",
                     domain="eukaryota",
@@ -348,18 +389,24 @@ class TestResolveTaxid:
     """Taxonomy ID resolution with mocked NCBI."""
 
     def test_resolve_taxid_success(self, tmp_path: Path) -> None:
-        ncbi_output = json.dumps({
-            "accession": "GCF_000005845.2",
-            "organism": {
-                "organism_name": "Escherichia coli",
-                "lineage": [{"tax_id": 2}],
-            },
-            "assembly_info": {"assembly_level": "Complete Genome"},
-        })
+        ncbi_output = json.dumps(
+            {
+                "accession": "GCF_000005845.2",
+                "organism": {
+                    "organism_name": "Escherichia coli",
+                    "lineage": [{"tax_id": 2}],
+                },
+                "assembly_info": {"assembly_level": "Complete Genome"},
+            }
+        )
         mock_result = MagicMock(returncode=0, stdout=ncbi_output, stderr="")
 
-        with patch("nanopore_simulator.species.shutil.which", return_value="/usr/bin/datasets"):
-            with patch("nanopore_simulator.species.subprocess.run", return_value=mock_result):
+        with patch(
+            "nanopore_simulator.species.shutil.which", return_value="/usr/bin/datasets"
+        ):
+            with patch(
+                "nanopore_simulator.species.subprocess.run", return_value=mock_result
+            ):
                 ref = resolve_taxid(
                     562,
                     cache=GenomeCache(cache_dir=tmp_path / "genomes"),
@@ -391,8 +438,12 @@ class TestResolveTaxid:
     def test_resolve_taxid_subprocess_fails(self, tmp_path: Path) -> None:
         mock_result = MagicMock(returncode=1, stdout="", stderr="error")
 
-        with patch("nanopore_simulator.species.shutil.which", return_value="/usr/bin/datasets"):
-            with patch("nanopore_simulator.species.subprocess.run", return_value=mock_result):
+        with patch(
+            "nanopore_simulator.species.shutil.which", return_value="/usr/bin/datasets"
+        ):
+            with patch(
+                "nanopore_simulator.species.subprocess.run", return_value=mock_result
+            ):
                 result = resolve_taxid(
                     99999999,
                     cache=GenomeCache(cache_dir=tmp_path / "genomes"),
@@ -412,8 +463,10 @@ class TestDownloadGenome:
     def test_cache_hit_returns_existing(self, tmp_path: Path) -> None:
         cache = GenomeCache(cache_dir=tmp_path)
         ref = GenomeRef(
-            name="E. coli", accession="GCF_000005845.2",
-            source="gtdb", domain="bacteria",
+            name="E. coli",
+            accession="GCF_000005845.2",
+            source="gtdb",
+            domain="bacteria",
         )
         # Pre-populate the cache
         cached_path = cache.get_cached_path(ref)
@@ -426,8 +479,10 @@ class TestDownloadGenome:
     def test_offline_not_cached_raises(self, tmp_path: Path) -> None:
         cache = GenomeCache(cache_dir=tmp_path)
         ref = GenomeRef(
-            name="E. coli", accession="GCF_000005845.2",
-            source="gtdb", domain="bacteria",
+            name="E. coli",
+            accession="GCF_000005845.2",
+            source="gtdb",
+            domain="bacteria",
         )
         with pytest.raises(RuntimeError, match="not cached"):
             download_genome(ref, cache=cache, offline=True)
@@ -435,8 +490,10 @@ class TestDownloadGenome:
     def test_datasets_not_installed_raises(self, tmp_path: Path) -> None:
         cache = GenomeCache(cache_dir=tmp_path)
         ref = GenomeRef(
-            name="E. coli", accession="GCF_000005845.2",
-            source="gtdb", domain="bacteria",
+            name="E. coli",
+            accession="GCF_000005845.2",
+            source="gtdb",
+            domain="bacteria",
         )
         with patch("nanopore_simulator.species.shutil.which", return_value=None):
             with pytest.raises(RuntimeError, match="datasets"):
@@ -445,8 +502,10 @@ class TestDownloadGenome:
     def test_download_success(self, tmp_path: Path) -> None:
         cache = GenomeCache(cache_dir=tmp_path / "genomes")
         ref = GenomeRef(
-            name="E. coli", accession="GCF_000005845.2",
-            source="gtdb", domain="bacteria",
+            name="E. coli",
+            accession="GCF_000005845.2",
+            source="gtdb",
+            domain="bacteria",
         )
 
         import zipfile
@@ -468,8 +527,12 @@ class TestDownloadGenome:
                     )
             return MagicMock(returncode=0, stdout="", stderr="")
 
-        with patch("nanopore_simulator.species.shutil.which", return_value="/usr/bin/datasets"):
-            with patch("nanopore_simulator.species.subprocess.run", side_effect=run_side_effect):
+        with patch(
+            "nanopore_simulator.species.shutil.which", return_value="/usr/bin/datasets"
+        ):
+            with patch(
+                "nanopore_simulator.species.subprocess.run", side_effect=run_side_effect
+            ):
                 result = download_genome(ref, cache=cache)
 
         assert result.exists()
@@ -478,13 +541,19 @@ class TestDownloadGenome:
     def test_download_subprocess_failure(self, tmp_path: Path) -> None:
         cache = GenomeCache(cache_dir=tmp_path / "genomes")
         ref = GenomeRef(
-            name="E. coli", accession="GCF_000005845.2",
-            source="gtdb", domain="bacteria",
+            name="E. coli",
+            accession="GCF_000005845.2",
+            source="gtdb",
+            domain="bacteria",
         )
         mock_result = MagicMock(returncode=1, stdout="", stderr="download failed")
 
-        with patch("nanopore_simulator.species.shutil.which", return_value="/usr/bin/datasets"):
-            with patch("nanopore_simulator.species.subprocess.run", return_value=mock_result):
+        with patch(
+            "nanopore_simulator.species.shutil.which", return_value="/usr/bin/datasets"
+        ):
+            with patch(
+                "nanopore_simulator.species.subprocess.run", return_value=mock_result
+            ):
                 with pytest.raises(RuntimeError, match="Failed to download"):
                     download_genome(ref, cache=cache)
 
@@ -518,7 +587,9 @@ class TestDetectDomain:
     def test_detect_eukaryota_from_name_heuristic(self) -> None:
         from nanopore_simulator.species import _detect_domain
 
-        data = {"organism": {"organism_name": "Saccharomyces cerevisiae", "lineage": []}}
+        data = {
+            "organism": {"organism_name": "Saccharomyces cerevisiae", "lineage": []}
+        }
         assert _detect_domain(data) == "eukaryota"
 
     def test_defaults_to_bacteria(self) -> None:
@@ -539,7 +610,14 @@ class TestPickBestAssembly:
     def test_single_candidate(self) -> None:
         from nanopore_simulator.species import _pick_best_assembly
 
-        lines = [json.dumps({"accession": "GCF_001", "assembly_info": {"assembly_level": "Scaffold"}})]
+        lines = [
+            json.dumps(
+                {
+                    "accession": "GCF_001",
+                    "assembly_info": {"assembly_level": "Scaffold"},
+                }
+            )
+        ]
         result = _pick_best_assembly(lines)
         assert result is not None
         assert result["accession"] == "GCF_001"
@@ -548,8 +626,18 @@ class TestPickBestAssembly:
         from nanopore_simulator.species import _pick_best_assembly
 
         lines = [
-            json.dumps({"accession": "GCF_001", "assembly_info": {"assembly_level": "Scaffold"}}),
-            json.dumps({"accession": "GCF_002", "assembly_info": {"assembly_level": "Complete Genome"}}),
+            json.dumps(
+                {
+                    "accession": "GCF_001",
+                    "assembly_info": {"assembly_level": "Scaffold"},
+                }
+            ),
+            json.dumps(
+                {
+                    "accession": "GCF_002",
+                    "assembly_info": {"assembly_level": "Complete Genome"},
+                }
+            ),
         ]
         result = _pick_best_assembly(lines)
         assert result is not None

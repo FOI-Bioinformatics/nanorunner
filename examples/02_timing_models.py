@@ -2,127 +2,149 @@
 """
 Example 2: Timing Models Demonstration
 
+Level: Intermediate
+Time: ~3 minutes
 Description:
-    Demonstrates all four timing models available in NanoRunner:
-    1. Uniform - constant intervals (deterministic)
-    2. Random - symmetric variation around base interval
-    3. Poisson - exponential intervals with burst clusters
-    4. Adaptive - smoothly varying intervals via moving average
+    Demonstrates all four timing models available in nanorunner:
+      1. uniform  -- constant intervals (deterministic)
+      2. random   -- symmetric variation around a base interval
+      3. poisson  -- exponential intervals with burst clusters
+      4. adaptive -- smoothly varying intervals via exponential moving average
+
+    Each model is run against the same source data so that the only
+    observable difference is the temporal pattern between batches.
 
 Usage:
     python examples/02_timing_models.py
 
 Requirements:
-    - nanorunner installed
+    - nanorunner installed (pip install -e .)
     - Sample data in examples/sample_data/
 
 Expected Output:
-    - Four separate simulations, one for each timing model
-    - Observable differences in timing behavior
+    - Four sequential replay simulations
+    - A brief summary of recommended use cases for each model
     - Completes in ~15-20 seconds total
 """
 
-from pathlib import Path
-import tempfile
 import shutil
-from nanopore_simulator import SimulationConfig, NanoporeSimulator
+import tempfile
+from pathlib import Path
+from typing import Any, Dict
+
+from nanopore_simulator import ReplayConfig, run_replay
 
 
-def run_simulation_with_model(model_name, model_params, description):
-    """Helper function to run simulation with specific timing model"""
+def run_with_model(
+    model_name: str,
+    timing_params: Dict[str, Any],
+    description: str,
+    source_dir: Path,
+) -> None:
+    """Run a replay simulation with the specified timing model.
+
+    Args:
+        model_name: One of uniform, random, poisson, adaptive.
+        timing_params: Additional keyword arguments for the timing model.
+        description: Human-readable description printed before the run.
+        source_dir: Path to the source FASTQ directory.
+    """
     print(f"\n{'=' * 60}")
-    print(f"Timing Model: {model_name.upper()}")
+    print(f"Timing model: {model_name.upper()}")
     print(f"{'=' * 60}")
-    print(f"Description: {description}")
+    print(f"  {description}")
     print()
 
-    source_dir = Path("examples/sample_data/singleplex")
-    target_dir = Path(tempfile.gettempdir()) / f"nanorunner_timing_{model_name}"
+    target_dir = Path(tempfile.mkdtemp(prefix=f"nanorunner_timing_{model_name}_"))
 
-    # Clean up previous run
-    if target_dir.exists():
-        shutil.rmtree(target_dir)
-
-    # Create configuration with specific timing model
-    config = SimulationConfig(
-        source_dir=source_dir,
-        target_dir=target_dir,
-        interval=2.0,  # Base interval of 2 seconds
-        operation="copy",
-        timing_model=model_name,
-        timing_model_params=model_params,
-    )
-
-    # Run simulation
-    simulator = NanoporeSimulator(config, enable_monitoring=True)
-    simulator.run_simulation()
-
-    print(f"\n✓ Output: {target_dir}\n")
+    try:
+        config = ReplayConfig(
+            source_dir=source_dir,
+            target_dir=target_dir,
+            interval=2.0,
+            operation="copy",
+            timing_model=model_name,
+            timing_params=timing_params,
+            monitor_type="basic",
+        )
+        run_replay(config)
+        produced = list(target_dir.glob("*.fastq"))
+        print(f"  Produced {len(produced)} file(s).")
+    finally:
+        shutil.rmtree(target_dir, ignore_errors=True)
 
 
-def main():
+def main() -> int:
     print("=" * 60)
     print("Example 2: Timing Models Demonstration")
     print("=" * 60)
     print()
-    print("This example demonstrates the four timing models.")
-    print("Observe how intervals vary between each model.")
+    print("Each run uses a 2-second base interval.")
+    print("Observe how intervals vary across models.")
     print()
 
-    # 1. Uniform Model - Constant intervals
-    run_simulation_with_model(
+    source_dir = Path(__file__).parent / "sample_data" / "singleplex"
+    if not source_dir.exists():
+        print(f"Error: sample data not found at {source_dir}")
+        print("Run this script from the repository root directory.")
+        return 1
+
+    # 1. Uniform -- constant 2.0 s between every batch.
+    run_with_model(
         model_name="uniform",
-        model_params={},
-        description="Exactly 2.0 seconds between each file (deterministic)",
+        timing_params={},
+        description="Exactly 2.0 s between each batch (deterministic).",
+        source_dir=source_dir,
     )
 
-    # 2. Random Model - Symmetric variation
-    run_simulation_with_model(
+    # 2. Random -- symmetric variation; random_factor=0.3 gives ±30 %.
+    run_with_model(
         model_name="random",
-        model_params={"random_factor": 0.3},  # ±30% variation
-        description="Random intervals between 1.4-2.6 seconds (±30%)",
+        timing_params={"random_factor": 0.3},
+        description="Random intervals roughly 1.4-2.6 s (±30 % variation).",
+        source_dir=source_dir,
     )
 
-    # 3. Poisson Model - Exponential intervals with burst clusters
-    run_simulation_with_model(
+    # 3. Poisson -- exponential intervals with occasional burst clusters.
+    #    burst_probability and burst_rate_multiplier are not validated
+    #    against empirical nanopore data; they serve as robustness test
+    #    parameters only.
+    run_with_model(
         model_name="poisson",
-        model_params={
-            "burst_probability": 0.2,  # 20% chance of burst
-            "burst_rate_multiplier": 4.0,  # 4x faster during burst
+        timing_params={
+            "burst_probability": 0.2,
+            "burst_rate_multiplier": 4.0,
         },
-        description="Exponential intervals with 20% burst probability",
+        description=(
+            "Exponential inter-batch intervals with 20 % burst probability "
+            "and 4x burst rate."
+        ),
+        source_dir=source_dir,
     )
 
-    # 4. Adaptive Model - Smoothly varying intervals
-    run_simulation_with_model(
+    # 4. Adaptive -- interval drifts smoothly via exponential moving average.
+    run_with_model(
         model_name="adaptive",
-        model_params={
-            "adaptation_rate": 0.2,  # 20% adaptation
-            "history_size": 5,  # Remember last 5 intervals
+        timing_params={
+            "adaptation_rate": 0.2,
+            "history_size": 5,
         },
-        description="Smoothly varying intervals via exponential moving average",
+        description=(
+            "Smoothly varying interval via exponential moving average "
+            "(adaptation rate 0.2, history 5)."
+        ),
+        source_dir=source_dir,
     )
 
+    print()
     print("=" * 60)
     print("Summary")
     print("=" * 60)
     print()
-    print("All four timing models demonstrated:")
-    print("  1. Uniform:  Predictable, constant intervals")
-    print("  2. Random:   Controlled variation for robustness testing")
-    print("  3. Poisson:  Irregular timing with burst clusters")
-    print("  4. Adaptive: Smoothly varying intervals")
-    print()
-    print("Use case recommendations:")
-    print("  - Testing:           uniform")
-    print("  - Robustness:        random")
-    print("  - Irregular timing:  poisson")
-    print("  - Varying patterns:  adaptive")
-    print()
-
-    # Cleanup instructions
-    print("To clean up all outputs:")
-    print("  rm -rf /tmp/nanorunner_timing_*")
+    print("  uniform  -- deterministic; suitable for automated tests")
+    print("  random   -- controlled stochastic variation; robustness testing")
+    print("  poisson  -- irregular bursts; stress-tests pipeline batch handling")
+    print("  adaptive -- smooth drift; simulates gradual sequencer load change")
     print()
 
     return 0
@@ -130,10 +152,10 @@ def main():
 
 if __name__ == "__main__":
     try:
-        exit(main())
+        raise SystemExit(main())
     except KeyboardInterrupt:
         print("\nInterrupted by user")
-        exit(1)
-    except Exception as e:
-        print(f"\nError: {e}")
-        exit(1)
+        raise SystemExit(1)
+    except Exception as exc:
+        print(f"\nError: {exc}")
+        raise SystemExit(1)

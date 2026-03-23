@@ -33,16 +33,10 @@ try:
 except ImportError:  # pragma: no cover
     _HAS_NUMPY = False
 
+from nanopore_simulator.fastq import atomic_tmp_path as _atomic_tmp_path
+
 logger = logging.getLogger(__name__)
 
-
-def _atomic_tmp_path(target: Path) -> Path:
-    """Return a temporary path that preserves the original file extension.
-
-    For example, ``reads.fastq.gz`` becomes ``.reads.fastq.gz.tmp`` so
-    that format-detection logic (which checks the suffix) still works.
-    """
-    return target.parent / f".{target.name}.tmp"
 
 # Module-level genome cache for ProcessPoolExecutor workers.
 # Populated by _init_worker_genomes() which is passed as the
@@ -72,7 +66,7 @@ def _generate_quality_string_numpy(
     """Generate a Phred+33 quality string using numpy vectorized operations."""
     raw = rng.normal(mean, std, length) if std > 0 else np.full(length, mean)
     clipped = np.clip(raw, 0, 40).astype(np.int8)
-    return (clipped + 33).tobytes().decode("ascii")
+    return str((clipped + 33).tobytes().decode("ascii"))
 
 
 # -------------------------------------------------------------------
@@ -155,15 +149,13 @@ def parse_fasta(fasta_path: Path) -> List[Tuple[str, str]]:
     mode = "rt" if str(fasta_path).endswith(".gz") else "r"
 
     with open_fn(fasta_path, mode) as f:
-        for line in f:
-            line = line.strip()
+        for raw_line in f:
+            line: str = str(raw_line).strip()
             if not line:
                 continue
             if line.startswith(">"):
                 if current_header is not None:
-                    sequences.append(
-                        (current_header, "".join(current_seq).upper())
-                    )
+                    sequences.append((current_header, "".join(current_seq).upper()))
                 current_header = line[1:].split()[0]
                 current_seq = []
             else:
@@ -314,7 +306,9 @@ class BuiltinGenerator(ReadGenerator):
         filename = self._output_filename(genome, file_index)
         output_path = output_dir / filename
 
-        actual_reads = num_reads if num_reads is not None else self.config.reads_per_file
+        actual_reads = (
+            num_reads if num_reads is not None else self.config.reads_per_file
+        )
         reads = self._sample_reads(full_seq, genome, actual_reads)
 
         use_gz = output_path.suffix == ".gz"
@@ -337,10 +331,7 @@ class BuiltinGenerator(ReadGenerator):
         """Return reads as FASTQ 4-tuples without writing to disk."""
         full_seq = self._get_genome_sequence(genome)
         raw_reads = self._sample_reads(full_seq, genome, num_reads)
-        return [
-            (f"@{read_id}", seq, "+", quals)
-            for read_id, seq, quals in raw_reads
-        ]
+        return [(f"@{read_id}", seq, "+", quals) for read_id, seq, quals in raw_reads]
 
     # -- Sampling ---------------------------------------------------
 
@@ -359,9 +350,9 @@ class BuiltinGenerator(ReadGenerator):
         mean_len = self.config.mean_read_length
         std_len = self.config.std_read_length
         if std_len > 0:
-            variance = std_len ** 2
-            mu = math.log(mean_len ** 2 / math.sqrt(variance + mean_len ** 2))
-            sigma = math.sqrt(math.log(1 + variance / mean_len ** 2))
+            variance = std_len**2
+            mu = math.log(mean_len**2 / math.sqrt(variance + mean_len**2))
+            sigma = math.sqrt(math.log(1 + variance / mean_len**2))
         else:
             mu = math.log(mean_len)
             sigma = 0.0
@@ -408,6 +399,7 @@ class BuiltinGenerator(ReadGenerator):
         Creates a per-call RNG instance via ``spawn`` to avoid sharing
         mutable numpy random state across threads.
         """
+        assert self._np_rng is not None, "numpy RNG not initialized"
         rng = self._np_rng.spawn(1)[0]
         min_len = self.config.min_read_length
         mean_q = self.config.mean_quality
@@ -418,9 +410,7 @@ class BuiltinGenerator(ReadGenerator):
             raw_lengths = rng.lognormal(mu, sigma, num_reads)
             lengths = np.clip(raw_lengths.astype(int), min_len, genome_len)
         else:
-            lengths = np.full(
-                num_reads, min(self.config.mean_read_length, genome_len)
-            )
+            lengths = np.full(num_reads, min(self.config.mean_read_length, genome_len))
 
         # Batch-generate RC decisions
         rc_flags = rng.random(num_reads) < 0.5
@@ -468,7 +458,9 @@ class BuiltinGenerator(ReadGenerator):
         return "".join(quals)
 
     def _write_fastq(
-        self, reads: List[Tuple[str, str, str]], output_path: Path,
+        self,
+        reads: List[Tuple[str, str, str]],
+        output_path: Path,
         compress: Optional[bool] = None,
     ) -> None:
         """Write reads to a FASTQ file (plain or gzipped).
@@ -486,8 +478,7 @@ class BuiltinGenerator(ReadGenerator):
         with fh:
             fh.write(
                 "".join(
-                    f"@{read_id}\n{seq}\n+\n{quals}\n"
-                    for read_id, seq, quals in reads
+                    f"@{read_id}\n{seq}\n+\n{quals}\n" for read_id, seq, quals in reads
                 )
             )
 
@@ -535,9 +526,7 @@ class SubprocessGenerator(ReadGenerator):
         if cmd is None:
             return False
         try:
-            result = subprocess.run(
-                [cmd, "--help"], capture_output=True, timeout=10
-            )
+            result = subprocess.run([cmd, "--help"], capture_output=True, timeout=10)
             return result.returncode == 0
         except (subprocess.TimeoutExpired, OSError):
             return False
@@ -566,13 +555,17 @@ class SubprocessGenerator(ReadGenerator):
         output_path = output_dir / filename
         use_gz = output_path.suffix == ".gz"
         tmp_path = _atomic_tmp_path(output_path)
-        actual_reads = num_reads if num_reads is not None else self.config.reads_per_file
+        actual_reads = (
+            num_reads if num_reads is not None else self.config.reads_per_file
+        )
 
         try:
             if self.backend == "badread":
                 self._run_badread(genome, tmp_path, actual_reads, compress=use_gz)
             else:
-                self._run_nanosim(genome, tmp_path, output_dir, file_index, actual_reads)
+                self._run_nanosim(
+                    genome, tmp_path, output_dir, file_index, actual_reads
+                )
             tmp_path.rename(output_path)
         except BaseException:
             if tmp_path.exists():
@@ -595,14 +588,20 @@ class SubprocessGenerator(ReadGenerator):
     # -- badread specifics ------------------------------------------
 
     def _run_badread(
-        self, genome: GenomeInput, output_path: Path, num_reads: int,
+        self,
+        genome: GenomeInput,
+        output_path: Path,
+        num_reads: int,
         compress: bool = False,
     ) -> None:
         total_bases = num_reads * self.config.mean_read_length
         cmd = [
-            "badread", "simulate",
-            "--reference", str(genome.fasta_path),
-            "--quantity", str(total_bases),
+            "badread",
+            "simulate",
+            "--reference",
+            str(genome.fasta_path),
+            "--quantity",
+            str(total_bases),
             "--length",
             f"{self.config.mean_read_length},{self.config.std_read_length}",
         ]
@@ -620,9 +619,12 @@ class SubprocessGenerator(ReadGenerator):
     ) -> List[Tuple[str, str, str, str]]:
         total_bases = num_reads * self.config.mean_read_length
         cmd = [
-            "badread", "simulate",
-            "--reference", str(genome.fasta_path),
-            "--quantity", str(total_bases),
+            "badread",
+            "simulate",
+            "--reference",
+            str(genome.fasta_path),
+            "--quantity",
+            str(total_bases),
             "--length",
             f"{self.config.mean_read_length},{self.config.std_read_length}",
         ]
@@ -657,10 +659,15 @@ class SubprocessGenerator(ReadGenerator):
         prefix = str(output_dir / f"nanosim_temp_{file_index}")
 
         cmd = [
-            ns_cmd, "simulate", "linear",
-            "-r", str(genome.fasta_path),
-            "-n", str(num_reads),
-            "-o", prefix,
+            ns_cmd,
+            "simulate",
+            "linear",
+            "-r",
+            str(genome.fasta_path),
+            "-n",
+            str(num_reads),
+            "-o",
+            prefix,
         ]
         logger.info("Running NanoSim: %s", " ".join(cmd))
         self._run_subprocess(cmd, "nanosim")
@@ -694,9 +701,21 @@ class SubprocessGenerator(ReadGenerator):
                     )
                 else:
                     qual = "".join(
-                        chr(int(max(0, min(40, random.gauss(
-                            self.config.mean_quality, self.config.std_quality
-                        )))) + 33)
+                        chr(
+                            int(
+                                max(
+                                    0,
+                                    min(
+                                        40,
+                                        random.gauss(
+                                            self.config.mean_quality,
+                                            self.config.std_quality,
+                                        ),
+                                    ),
+                                )
+                            )
+                            + 33
+                        )
                         for _ in range(len(seq))
                     )
                 fh.write(f"@{header}\n{seq}\n+\n{qual}\n")
@@ -708,9 +727,7 @@ class SubprocessGenerator(ReadGenerator):
     ) -> subprocess.CompletedProcess:
         """Run a subprocess and handle errors uniformly."""
         try:
-            return subprocess.run(
-                cmd, capture_output=True, text=True, check=True
-            )
+            return subprocess.run(cmd, capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError as exc:
             from nanopore_simulator.deps import get_install_hint
 
@@ -740,9 +757,7 @@ def detect_available_backends() -> Dict[str, bool]:
     return result
 
 
-def create_generator(
-    backend: str, config: GeneratorConfig
-) -> ReadGenerator:
+def create_generator(backend: str, config: GeneratorConfig) -> ReadGenerator:
     """Factory function to create a read generator.
 
     Args:
@@ -775,12 +790,10 @@ def create_generator(
 
             hint = get_install_hint(backend)
             raise ValueError(
-                f"Backend '{backend}' is not available. "
-                f"Install with: {hint}"
+                f"Backend '{backend}' is not available. " f"Install with: {hint}"
             )
         return gen
 
     raise ValueError(
-        f"Unknown backend '{backend}'. "
-        f"Available: builtin, badread, nanosim"
+        f"Unknown backend '{backend}'. " f"Available: builtin, badread, nanosim"
     )

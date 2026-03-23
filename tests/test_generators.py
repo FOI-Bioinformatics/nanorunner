@@ -27,10 +27,7 @@ from nanopore_simulator.generators import (
 def simple_fasta(tmp_path: Path) -> Path:
     """Create a two-record FASTA file."""
     fasta = tmp_path / "genome.fa"
-    fasta.write_text(
-        ">chr1\nACGTACGTACGTACGTACGT\n"
-        ">chr2\nGCTAGCTAGCTAGCTAGCTA\n"
-    )
+    fasta.write_text(">chr1\nACGTACGTACGTACGTACGT\n" ">chr2\nGCTAGCTAGCTAGCTAGCTA\n")
     return fasta
 
 
@@ -246,15 +243,11 @@ class TestBuiltinGenerator:
     ) -> None:
         gen = BuiltinGenerator(default_config)
         genome = GenomeInput(fasta_path=simple_fasta)
-        out = gen.generate_reads(
-            genome, tmp_path / "out", file_index=0, num_reads=5
-        )
+        out = gen.generate_reads(genome, tmp_path / "out", file_index=0, num_reads=5)
         lines = out.read_text().strip().split("\n")
         assert len(lines) == 5 * 4
 
-    def test_generate_reads_gzipped(
-        self, simple_fasta: Path, tmp_path: Path
-    ) -> None:
+    def test_generate_reads_gzipped(self, simple_fasta: Path, tmp_path: Path) -> None:
         cfg = GeneratorConfig(
             num_reads=5,
             mean_read_length=10,
@@ -304,9 +297,7 @@ class TestBuiltinGenerator:
         assert "0003" in name
         assert name.endswith(".fastq")
 
-    def test_output_filename_gz(
-        self, simple_fasta: Path
-    ) -> None:
+    def test_output_filename_gz(self, simple_fasta: Path) -> None:
         cfg = GeneratorConfig(output_format="fastq.gz")
         gen = BuiltinGenerator(cfg)
         genome = GenomeInput(fasta_path=simple_fasta)
@@ -337,9 +328,7 @@ class TestBuiltinGenerator:
         assert BuiltinGenerator._reverse_complement("AAAA") == "TTTT"
         assert BuiltinGenerator._reverse_complement("GCTA") == "TAGC"
 
-    def test_zero_std_produces_constant_length(
-        self, simple_fasta: Path
-    ) -> None:
+    def test_zero_std_produces_constant_length(self, simple_fasta: Path) -> None:
         cfg = GeneratorConfig(
             num_reads=5,
             mean_read_length=10,
@@ -354,9 +343,7 @@ class TestBuiltinGenerator:
         for _, seq, _, _ in reads:
             assert len(seq) == 10
 
-    def test_min_read_length_enforced(
-        self, simple_fasta: Path
-    ) -> None:
+    def test_min_read_length_enforced(self, simple_fasta: Path) -> None:
         cfg = GeneratorConfig(
             num_reads=20,
             mean_read_length=5,
@@ -385,7 +372,10 @@ class TestSubprocessGenerator:
         assert SubprocessGenerator.is_available() is False
 
     def test_badread_backend_available_when_installed(self) -> None:
-        with patch("nanopore_simulator.generators.shutil.which", return_value="/usr/bin/badread"):
+        with patch(
+            "nanopore_simulator.generators.shutil.which",
+            return_value="/usr/bin/badread",
+        ):
             with patch("nanopore_simulator.generators.subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(returncode=0)
                 gen = SubprocessGenerator(GeneratorConfig(), backend="badread")
@@ -402,7 +392,9 @@ class TestSubprocessGenerator:
                 return "/usr/bin/nanosim"
             return None
 
-        with patch("nanopore_simulator.generators.shutil.which", side_effect=which_side_effect):
+        with patch(
+            "nanopore_simulator.generators.shutil.which", side_effect=which_side_effect
+        ):
             with patch("nanopore_simulator.generators.subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(returncode=0)
                 gen = SubprocessGenerator(GeneratorConfig(), backend="nanosim")
@@ -414,7 +406,9 @@ class TestSubprocessGenerator:
                 return "/usr/bin/simulator.py"
             return None
 
-        with patch("nanopore_simulator.generators.shutil.which", side_effect=which_side_effect):
+        with patch(
+            "nanopore_simulator.generators.shutil.which", side_effect=which_side_effect
+        ):
             with patch("nanopore_simulator.generators.subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(returncode=0)
                 gen = SubprocessGenerator(GeneratorConfig(), backend="nanosim")
@@ -425,13 +419,9 @@ class TestSubprocessGenerator:
             gen = SubprocessGenerator(GeneratorConfig(), backend="nanosim")
             assert gen._backend_available() is False
 
-    def test_badread_generate_reads(
-        self, simple_fasta: Path, tmp_path: Path
-    ) -> None:
+    def test_badread_generate_reads(self, simple_fasta: Path, tmp_path: Path) -> None:
         fastq_output = "@read1\nACGT\n+\nIIII\n@read2\nTTTT\n+\nIIII\n"
-        mock_result = MagicMock(
-            returncode=0, stdout=fastq_output, stderr=""
-        )
+        mock_result = MagicMock(returncode=0, stdout=fastq_output, stderr="")
         cfg = GeneratorConfig(
             num_reads=2,
             mean_read_length=10,
@@ -441,7 +431,9 @@ class TestSubprocessGenerator:
         gen = SubprocessGenerator(cfg, backend="badread")
         genome = GenomeInput(fasta_path=simple_fasta)
 
-        with patch("nanopore_simulator.generators.subprocess.run", return_value=mock_result):
+        with patch(
+            "nanopore_simulator.generators.subprocess.run", return_value=mock_result
+        ):
             out = gen.generate_reads(genome, tmp_path / "out", file_index=0)
 
         assert out.exists()
@@ -462,9 +454,7 @@ class TestSubprocessGenerator:
             with pytest.raises(RuntimeError, match="badread exited"):
                 gen.generate_reads(genome, tmp_path / "out", file_index=0)
 
-    def test_nanosim_generate_reads(
-        self, simple_fasta: Path, tmp_path: Path
-    ) -> None:
+    def test_nanosim_generate_reads(self, simple_fasta: Path, tmp_path: Path) -> None:
         """NanoSim produces FASTA output that must be converted to FASTQ."""
         cfg = GeneratorConfig(
             num_reads=2,
@@ -491,7 +481,8 @@ class TestSubprocessGenerator:
             return MagicMock(returncode=0, stdout="", stderr="")
 
         with patch(
-            "nanopore_simulator.generators.shutil.which", return_value="/usr/bin/nanosim"
+            "nanopore_simulator.generators.shutil.which",
+            return_value="/usr/bin/nanosim",
         ):
             with patch(
                 "nanopore_simulator.generators.subprocess.run",
@@ -507,9 +498,7 @@ class TestSubprocessGenerator:
 
     def test_badread_generate_reads_in_memory(self, simple_fasta: Path) -> None:
         fastq_output = "@read1\nACGT\n+\nIIII\n@read2\nTTTT\n+\nIIII\n"
-        mock_result = MagicMock(
-            returncode=0, stdout=fastq_output, stderr=""
-        )
+        mock_result = MagicMock(returncode=0, stdout=fastq_output, stderr="")
         cfg = GeneratorConfig(
             num_reads=2,
             mean_read_length=10,
@@ -519,7 +508,9 @@ class TestSubprocessGenerator:
         gen = SubprocessGenerator(cfg, backend="badread")
         genome = GenomeInput(fasta_path=simple_fasta)
 
-        with patch("nanopore_simulator.generators.subprocess.run", return_value=mock_result):
+        with patch(
+            "nanopore_simulator.generators.subprocess.run", return_value=mock_result
+        ):
             reads = gen.generate_reads_in_memory(genome, num_reads=2)
 
         assert len(reads) == 2
@@ -549,7 +540,10 @@ class TestCreateGenerator:
             assert isinstance(gen, BuiltinGenerator)
 
     def test_create_auto_prefers_badread(self) -> None:
-        with patch("nanopore_simulator.generators.shutil.which", return_value="/usr/bin/badread"):
+        with patch(
+            "nanopore_simulator.generators.shutil.which",
+            return_value="/usr/bin/badread",
+        ):
             with patch("nanopore_simulator.generators.subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(returncode=0)
                 gen = create_generator("auto", GeneratorConfig())

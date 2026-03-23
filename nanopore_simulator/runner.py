@@ -12,13 +12,13 @@ execution within batches uses ``ThreadPoolExecutor``.
 """
 
 import logging
-import os
 import shutil
 import signal
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from types import FrameType
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from nanopore_simulator.config import GenerateConfig, ReplayConfig
 from nanopore_simulator.executor import execute_entry
@@ -38,7 +38,7 @@ from nanopore_simulator.monitoring import (
     create_monitor,
     format_bytes,
 )
-from nanopore_simulator.timing import TimingModel, create_timing_model
+from nanopore_simulator.timing import create_timing_model
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +55,15 @@ def _signal_handler(signum: int, frame: object) -> None:
     raise KeyboardInterrupt(f"Received {sig_name}")
 
 
-def _install_signal_handlers() -> Dict[int, object]:
+# Type alias for signal handler values returned by signal.signal()
+_SignalHandler = Union[
+    Callable[[int, Optional[FrameType]], Any], int, signal.Handlers, None
+]
+
+
+def _install_signal_handlers() -> Dict[signal.Signals, _SignalHandler]:
     """Install SIGTERM/SIGHUP handlers and return the previous handlers."""
-    previous = {}
+    previous: Dict[signal.Signals, _SignalHandler] = {}
     for sig in (signal.SIGTERM, signal.SIGHUP):
         try:
             previous[sig] = signal.signal(sig, _signal_handler)
@@ -67,11 +73,11 @@ def _install_signal_handlers() -> Dict[int, object]:
     return previous
 
 
-def _restore_signal_handlers(previous: Dict[int, object]) -> None:
+def _restore_signal_handlers(previous: Dict[signal.Signals, _SignalHandler]) -> None:
     """Restore signal handlers saved by _install_signal_handlers."""
     for sig, handler in previous.items():
         try:
-            signal.signal(sig, handler)
+            signal.signal(sig, handler)  # type: ignore[arg-type]
         except (OSError, ValueError):
             pass
 
@@ -245,9 +251,7 @@ def _execute_manifest(
     )
 
     # Create monitor
-    monitor = create_monitor(
-        config.monitor_type, total_files=len(manifest)
-    )
+    monitor = create_monitor(config.monitor_type, total_files=len(manifest))
     monitor.start()
 
     previous_handlers = _install_signal_handlers()
@@ -269,9 +273,7 @@ def _execute_manifest(
             )
 
             if config.parallel and config.workers > 1:
-                _execute_batch_parallel(
-                    batch, generator, config.workers, monitor
-                )
+                _execute_batch_parallel(batch, generator, config.workers, monitor)
             else:
                 _execute_batch_sequential(batch, generator, monitor)
 
@@ -299,9 +301,7 @@ def _group_by_batch(manifest: List[FileEntry]) -> List[List[FileEntry]]:
     for entry in manifest:
         batches_dict.setdefault(entry.batch, []).append(entry)
 
-    return [
-        batches_dict[k] for k in sorted(batches_dict.keys())
-    ]
+    return [batches_dict[k] for k in sorted(batches_dict.keys())]
 
 
 def _execute_batch_sequential(
@@ -324,8 +324,7 @@ def _execute_batch_parallel(
     """Process a batch of entries in parallel using threads."""
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
-            pool.submit(execute_entry, entry, generator): entry
-            for entry in batch
+            pool.submit(execute_entry, entry, generator): entry for entry in batch
         }
         for future in as_completed(futures):
             result = future.result()

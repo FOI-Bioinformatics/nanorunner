@@ -27,8 +27,9 @@ class TestResolveMonitor:
     def test_default_returns_basic(self) -> None:
         assert _resolve_monitor(MonitorLevel.default, quiet=False) == "basic"
 
-    def test_detailed_returns_basic(self) -> None:
-        assert _resolve_monitor(MonitorLevel.detailed, quiet=False) == "basic"
+    def test_default_returns_basic_repeated(self) -> None:
+        """Default monitor should resolve to basic."""
+        assert _resolve_monitor(MonitorLevel.default, quiet=False) == "basic"
 
     def test_enhanced_with_psutil_returns_enhanced(self) -> None:
         # psutil is available in test env
@@ -38,10 +39,12 @@ class TestResolveMonitor:
     def test_enhanced_without_psutil_falls_back(self) -> None:
         """When psutil import fails, enhanced falls back to basic."""
         import sys
+
         # Temporarily remove psutil from modules
         with patch.dict(sys.modules, {"psutil": None}):
             # Patch the import to raise ImportError
             import builtins
+
             real_import = builtins.__import__
 
             def mock_import(name, *args, **kwargs):
@@ -66,10 +69,14 @@ class TestReplayErrorPaths:
             app,
             [
                 "replay",
-                "--source", str(source),
-                "--target", str(tmp_path / "target"),
-                "--batch-size", "0",  # Invalid
-                "--interval", "0",
+                "--source",
+                str(source),
+                "--target",
+                str(tmp_path / "target"),
+                "--batch-size",
+                "0",  # Invalid
+                "--interval",
+                "0",
             ],
         )
         assert result.exit_code != 0
@@ -83,16 +90,17 @@ class TestReplayErrorPaths:
             app,
             [
                 "replay",
-                "--source", str(source),
-                "--target", str(tmp_path / "target"),
-                "--interval", "-1",
+                "--source",
+                str(source),
+                "--target",
+                str(tmp_path / "target"),
+                "--interval",
+                "-1",
             ],
         )
         assert result.exit_code != 0
 
-    def test_replay_with_pipeline_validation_post_run(
-        self, tmp_path: Path
-    ) -> None:
+    def test_replay_with_pipeline_validation_post_run(self, tmp_path: Path) -> None:
         """Pipeline validation runs after replay and includes adapter name."""
         source = tmp_path / "source"
         source.mkdir()
@@ -101,10 +109,14 @@ class TestReplayErrorPaths:
             app,
             [
                 "replay",
-                "--source", str(source),
-                "--target", str(tmp_path / "target"),
-                "--pipeline", "kraken",
-                "--interval", "0",
+                "--source",
+                str(source),
+                "--target",
+                str(tmp_path / "target"),
+                "--pipeline",
+                "kraken",
+                "--interval",
+                "0",
             ],
         )
         assert result.exit_code == 0
@@ -124,17 +136,18 @@ class TestGenerateErrorPaths:
             app,
             [
                 "generate",
-                "--target", str(tmp_path / "target"),
-                "--genomes", str(fasta),
-                "--batch-size", "0",  # Invalid
+                "--target",
+                str(tmp_path / "target"),
+                "--genomes",
+                str(fasta),
+                "--batch-size",
+                "0",  # Invalid
                 "--no-wait",
             ],
         )
         assert result.exit_code != 0
 
-    def test_generate_with_pipeline_validation(
-        self, tmp_path: Path
-    ) -> None:
+    def test_generate_with_pipeline_validation(self, tmp_path: Path) -> None:
         """Pipeline validation runs after generate mode."""
         fasta = tmp_path / "g.fa"
         fasta.write_text(">chr1\nACGTACGTACGTACGT\n")
@@ -142,13 +155,20 @@ class TestGenerateErrorPaths:
             app,
             [
                 "generate",
-                "--target", str(tmp_path / "target"),
-                "--genomes", str(fasta),
-                "--generator-backend", "builtin",
-                "--read-count", "10",
-                "--reads-per-file", "10",
-                "--output-format", "fastq",
-                "--pipeline", "nanometa",
+                "--target",
+                str(tmp_path / "target"),
+                "--genomes",
+                str(fasta),
+                "--generator-backend",
+                "builtin",
+                "--read-count",
+                "10",
+                "--reads-per-file",
+                "10",
+                "--output-format",
+                "fastq",
+                "--pipeline",
+                "nanometa",
                 "--no-wait",
             ],
         )
@@ -167,8 +187,10 @@ class TestGenerateErrorPaths:
                 app,
                 [
                     "generate",
-                    "--target", str(tmp_path / "target"),
-                    "--genomes", str(fasta),
+                    "--target",
+                    str(tmp_path / "target"),
+                    "--genomes",
+                    str(fasta),
                     "--no-wait",
                     "--quiet",
                 ],
@@ -188,9 +210,12 @@ class TestGenerateErrorPaths:
                 app,
                 [
                     "replay",
-                    "--source", str(source),
-                    "--target", str(tmp_path / "target"),
-                    "--interval", "0",
+                    "--source",
+                    str(source),
+                    "--target",
+                    str(tmp_path / "target"),
+                    "--interval",
+                    "0",
                     "--quiet",
                 ],
             )
@@ -238,9 +263,7 @@ class TestDownloadCommand:
 
     def test_download_unknown_mock(self) -> None:
         """Download with an unknown mock name fails."""
-        with patch(
-            "nanopore_simulator.deps.check_preflight", return_value=[]
-        ):
+        with patch("nanopore_simulator.deps.check_preflight", return_value=[]):
             result = runner.invoke(
                 app,
                 ["download", "--mock", "nonexistent_mock"],
@@ -255,9 +278,7 @@ class TestDownloadCommand:
         mock_ref.source = "ncbi"
         mock_ref.domain = "bacteria"
 
-        with patch(
-            "nanopore_simulator.deps.check_preflight", return_value=[]
-        ):
+        with patch("nanopore_simulator.deps.check_preflight", return_value=[]):
             with patch(
                 "nanopore_simulator.species.download_genome",
                 return_value=Path("/tmp/fake_genome.fa"),
@@ -271,9 +292,7 @@ class TestDownloadCommand:
 
     def test_download_species_resolve_fails(self) -> None:
         """Download species that fails to resolve."""
-        with patch(
-            "nanopore_simulator.deps.check_preflight", return_value=[]
-        ):
+        with patch("nanopore_simulator.deps.check_preflight", return_value=[]):
             with patch(
                 "nanopore_simulator.species.resolve_species",
                 return_value=None,
@@ -286,9 +305,7 @@ class TestDownloadCommand:
 
     def test_download_taxid_resolve_fails(self) -> None:
         """Download taxid that fails to resolve."""
-        with patch(
-            "nanopore_simulator.deps.check_preflight", return_value=[]
-        ):
+        with patch("nanopore_simulator.deps.check_preflight", return_value=[]):
             with patch(
                 "nanopore_simulator.species.resolve_taxid",
                 return_value=None,
@@ -303,9 +320,7 @@ class TestDownloadCommand:
 class TestRecommendWithSource:
     """Test recommend command with source directory analysis."""
 
-    def test_recommend_source_with_barcode_subdirs(
-        self, tmp_path: Path
-    ) -> None:
+    def test_recommend_source_with_barcode_subdirs(self, tmp_path: Path) -> None:
         """Recommend with multiplex source finds files in subdirs."""
         source = tmp_path / "source"
         source.mkdir()
@@ -335,6 +350,7 @@ class TestCliMainEntryPoint:
 
     def test_main_returns_zero_on_success(self) -> None:
         from nanopore_simulator.cli import main
+
         with patch("nanopore_simulator.cli.app") as mock_app:
             mock_app.return_value = None
             code = main()
@@ -342,6 +358,7 @@ class TestCliMainEntryPoint:
 
     def test_main_returns_exit_code_on_system_exit(self) -> None:
         from nanopore_simulator.cli import main
+
         with patch("nanopore_simulator.cli.app", side_effect=SystemExit(1)):
             code = main()
             assert code == 1

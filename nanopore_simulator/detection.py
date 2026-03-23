@@ -43,8 +43,7 @@ def detect_structure(source_dir: Path) -> str:
         return "singleplex"
     elif barcode_dirs and direct_files:
         logging.warning(
-            "Mixed structure detected - files in both root and barcode "
-            "directories"
+            "Mixed structure detected - files in both root and barcode " "directories"
         )
         return "multiplex"
     else:

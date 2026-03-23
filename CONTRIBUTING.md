@@ -95,11 +95,22 @@ mypy nanopore_simulator/
 
 ```
 tests/
-├── test_unit_core_components.py    # Unit tests (32 tests)
-├── test_realistic_scenarios.py     # Integration tests
-├── test_realistic_edge_cases.py    # Edge case testing
-├── test_realistic_long_running.py  # Long-running scenarios
-└── fixtures/                       # Test fixtures and utilities
+├── conftest.py              # Shared fixtures
+├── test_config.py           # ReplayConfig and GenerateConfig validation
+├── test_manifest.py         # Manifest building (plan phase)
+├── test_executor.py         # File copy/link/generate operations
+├── test_runner.py           # Orchestration and parallel execution
+├── test_timing.py           # Timing model implementations
+├── test_generators.py       # Read generation backends
+├── test_species.py          # Species resolution
+├── test_mocks.py            # Mock community definitions
+├── test_monitoring.py       # Progress monitoring
+├── test_detection.py        # File structure detection
+├── test_adapters.py         # Pipeline validation
+├── test_profiles.py         # Configuration profiles
+├── test_deps.py             # Dependency checking
+├── test_cli.py              # CLI commands
+└── test_integration.py      # End-to-end workflows
 ```
 
 ### Running Tests
@@ -108,8 +119,8 @@ tests/
 # Run all tests
 pytest
 
-# Run unit tests only
-pytest tests/test_unit_core_components.py
+# Run a specific module's tests
+pytest tests/test_config.py
 
 # Run with coverage
 pytest --cov=nanopore_simulator --cov-report=html
@@ -117,8 +128,8 @@ pytest --cov=nanopore_simulator --cov-report=html
 # Run fast tests (exclude slow markers)
 pytest -m "not slow"
 
-# Run specific test
-pytest tests/test_unit_core_components.py::TestTimingModels::test_uniform_timing
+# Run a specific test
+pytest tests/test_timing.py::test_uniform_timing
 ```
 
 ### Writing Tests
@@ -136,7 +147,7 @@ Example test structure:
 def test_feature_name():
     """Test that feature behaves correctly under normal conditions."""
     # Arrange
-    config = SimulationConfig(...)
+    config = ReplayConfig(...)
 
     # Act
     result = feature.execute()
@@ -148,7 +159,7 @@ def test_feature_name():
 ### Coverage Goals
 
 - **Minimum**: 90% overall coverage
-- **Target**: 95% for core modules (config, simulator, timing)
+- **Target**: 92%+ for core modules (config, manifest, executor, timing)
 - **Tests must pass**: 100% success rate required
 
 ## Code Quality
@@ -192,7 +203,7 @@ flake8 nanopore_simulator/
 mypy nanopore_simulator/
 
 # All functions should have type hints
-def process_file(path: Path, config: SimulationConfig) -> bool:
+def process_file(path: Path, config: ReplayConfig) -> bool:
     ...
 ```
 
@@ -284,10 +295,9 @@ For maintainers preparing a release:
 1. **Update version numbers**
    ```bash
    # Update these files:
-   # - nanopore_simulator/__init__.py
+   # - nanopore_simulator/__init__.py  (single source of truth)
    # - pyproject.toml
-   # - setup.py
-   # - nanopore_simulator/cli/main.py (--version)
+   # CLI reads version dynamically from __init__.__version__
    ```
 
 2. **Update CHANGELOG.md**

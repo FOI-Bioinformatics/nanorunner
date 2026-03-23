@@ -1,148 +1,157 @@
 #!/usr/bin/env python3
 """
-Example 3: Parallel Processing with Enhanced Monitoring
+Example 3: Parallel Processing with Monitoring
 
+Level: Intermediate
+Time: ~2 minutes
 Description:
-    Demonstrates high-throughput simulation using parallel processing
-    with multiple worker threads and enhanced monitoring capabilities.
-    Shows resource usage tracking and performance metrics.
+    Demonstrates high-throughput replay using parallel file processing
+    with multiple worker threads and the basic progress monitor.
+    Compares sequential and parallel execution against the same source
+    data so that throughput differences are attributable only to worker
+    count and batch size.
+
+    For resource-level metrics (CPU, memory) install the optional
+    psutil dependency and set monitor_type="enhanced".
 
 Usage:
     python examples/03_parallel_processing.py
 
 Requirements:
-    - nanorunner installed
-    - nanorunner[enhanced] for resource monitoring (optional)
+    - nanorunner installed (pip install -e .)
+    - nanorunner[enhanced] recommended for resource monitoring
     - Sample data in examples/sample_data/
 
 Expected Output:
-    - Processes files in parallel with 4 workers
-    - Real-time progress with CPU/memory monitoring
-    - Performance comparison: sequential vs parallel
+    - Sequential and parallel runs against the multiplex sample data
+    - Elapsed-time comparison
+    - Note on when parallel processing provides meaningful benefit
     - Completes in ~5-10 seconds
 """
 
-from pathlib import Path
-import tempfile
 import shutil
+import tempfile
 import time
-from nanopore_simulator import SimulationConfig, NanoporeSimulator
+from pathlib import Path
+
+from nanopore_simulator import ReplayConfig, run_replay
 
 
-def run_sequential_simulation():
-    """Run simulation without parallel processing"""
+def run_sequential(source_dir: Path) -> float:
+    """Replay with a single worker (baseline).
+
+    Returns elapsed wall-clock time in seconds.
+    """
     print("\n" + "=" * 60)
-    print("Sequential Processing (Baseline)")
+    print("Sequential processing (baseline)")
     print("=" * 60)
-    print()
 
-    source_dir = Path("examples/sample_data/multiplex")
-    target_dir = Path(tempfile.gettempdir()) / "nanorunner_sequential"
-
-    if target_dir.exists():
-        shutil.rmtree(target_dir)
-
-    config = SimulationConfig(
-        source_dir=source_dir,
-        target_dir=target_dir,
-        interval=0.5,  # Fast intervals for comparison
-        operation="copy",
-        timing_model="uniform",
-        batch_size=1,  # Process one file at a time
-        parallel_processing=False,
-    )
-
-    start_time = time.time()
-    simulator = NanoporeSimulator(config, enable_monitoring=True)
-    simulator.run_simulation()
-    elapsed = time.time() - start_time
-
-    print(f"\n✓ Sequential completed in {elapsed:.2f} seconds")
-    return elapsed
-
-
-def run_parallel_simulation():
-    """Run simulation with parallel processing"""
-    print("\n" + "=" * 60)
-    print("Parallel Processing (4 Workers)")
-    print("=" * 60)
-    print()
-
-    source_dir = Path("examples/sample_data/multiplex")
-    target_dir = Path(tempfile.gettempdir()) / "nanorunner_parallel"
-
-    if target_dir.exists():
-        shutil.rmtree(target_dir)
-
-    config = SimulationConfig(
-        source_dir=source_dir,
-        target_dir=target_dir,
-        interval=0.5,  # Same intervals for fair comparison
-        operation="copy",
-        timing_model="uniform",
-        batch_size=4,  # Process batch of 4 files
-        parallel_processing=True,
-        worker_count=4,
-    )
-
-    start_time = time.time()
-    simulator = NanoporeSimulator(config, enable_monitoring=True, monitor_type="enhanced")
-    simulator.run_simulation()
-    elapsed = time.time() - start_time
-
-    print(f"\n✓ Parallel completed in {elapsed:.2f} seconds")
-    return elapsed
-
-
-def main():
-    print("=" * 60)
-    print("Example 3: Parallel Processing & Enhanced Monitoring")
-    print("=" * 60)
-    print()
-    print("This example compares sequential vs parallel processing.")
-    print("With enhanced monitoring (if psutil is installed).")
-    print()
-
-    # Check for psutil
+    target_dir = Path(tempfile.mkdtemp(prefix="nanorunner_seq_"))
     try:
-        import psutil
-        print("psutil installed - Enhanced monitoring available")
-    except ImportError:
-        from nanopore_simulator.core.deps import get_install_hint
+        config = ReplayConfig(
+            source_dir=source_dir,
+            target_dir=target_dir,
+            interval=0.1,
+            operation="copy",
+            timing_model="uniform",
+            batch_size=1,
+            parallel=False,
+            monitor_type="basic",
+        )
+        start = time.monotonic()
+        run_replay(config)
+        elapsed = time.monotonic() - start
+    finally:
+        shutil.rmtree(target_dir, ignore_errors=True)
 
-        print("psutil not installed - Basic monitoring only")
-        print(f"  Install with: {get_install_hint('psutil')}")
-    print()
+    print(f"\nSequential completed in {elapsed:.2f} s")
+    return elapsed
 
-    # Run both simulations
-    sequential_time = run_sequential_simulation()
-    parallel_time = run_parallel_simulation()
 
-    # Performance comparison
+def run_parallel(source_dir: Path) -> float:
+    """Replay with four worker threads.
+
+    Returns elapsed wall-clock time in seconds.
+    """
     print("\n" + "=" * 60)
-    print("Performance Comparison")
+    print("Parallel processing (4 workers, batch size 4)")
+    print("=" * 60)
+
+    target_dir = Path(tempfile.mkdtemp(prefix="nanorunner_par_"))
+
+    # Detect whether psutil is available for enhanced monitoring.
+    try:
+        import psutil  # noqa: F401
+        monitor = "enhanced"
+        print("  psutil detected -- using enhanced monitor")
+    except ImportError:
+        monitor = "basic"
+        print("  psutil not installed -- using basic monitor")
+        print("  Install enhanced monitoring: pip install nanorunner[enhanced]")
+
+    try:
+        config = ReplayConfig(
+            source_dir=source_dir,
+            target_dir=target_dir,
+            interval=0.1,
+            operation="copy",
+            timing_model="uniform",
+            batch_size=4,
+            parallel=True,
+            workers=4,
+            monitor_type=monitor,
+        )
+        start = time.monotonic()
+        run_replay(config)
+        elapsed = time.monotonic() - start
+    finally:
+        shutil.rmtree(target_dir, ignore_errors=True)
+
+    print(f"\nParallel completed in {elapsed:.2f} s")
+    return elapsed
+
+
+def main() -> int:
+    print("=" * 60)
+    print("Example 3: Parallel Processing with Monitoring")
     print("=" * 60)
     print()
-    print(f"Sequential:  {sequential_time:.2f} seconds")
-    print(f"Parallel:    {parallel_time:.2f} seconds")
+    print("Sequential vs. parallel replay on multiplex sample data.")
+    print()
 
-    if parallel_time < sequential_time:
-        speedup = sequential_time / parallel_time
-        print(f"\nSpeedup:     {speedup:.2f}x faster with parallel processing")
+    source_dir = Path(__file__).parent / "sample_data" / "multiplex"
+    if not source_dir.exists():
+        print(f"Error: sample data not found at {source_dir}")
+        print("Run this script from the repository root directory.")
+        return 1
+
+    seq_time = run_sequential(source_dir)
+    par_time = run_parallel(source_dir)
+
+    print()
+    print("=" * 60)
+    print("Performance comparison")
+    print("=" * 60)
+    print()
+    print(f"  Sequential:  {seq_time:.2f} s")
+    print(f"  Parallel:    {par_time:.2f} s")
+
+    if par_time < seq_time:
+        speedup = seq_time / par_time
+        print(f"  Speedup:     {speedup:.2f}x")
     else:
-        print("\nNote: Parallel overhead may exceed benefits for small datasets")
+        print()
+        print(
+            "  Note: parallel overhead may exceed gains for small file counts.\n"
+            "  Parallel processing yields meaningful throughput improvement\n"
+            "  primarily for datasets with more than ~100 files."
+        )
 
     print()
-    print("Key Observations:")
-    print("  - Parallel processing best for large datasets (>100 files)")
-    print("  - Batch size affects throughput (try different values)")
-    print("  - Enhanced monitoring shows CPU/memory usage")
-    print("  - Worker count should match CPU cores")
-    print()
-
-    # Cleanup instructions
-    print("To clean up:")
-    print("  rm -rf /tmp/nanorunner_sequential /tmp/nanorunner_parallel")
+    print("Configuration guidance:")
+    print("  parallel=True, workers=N  -- enable N worker threads per batch")
+    print("  batch_size=N              -- files processed per timing interval")
+    print("  monitor_type='enhanced'   -- CPU/memory metrics (requires psutil)")
     print()
 
     return 0
@@ -150,10 +159,10 @@ def main():
 
 if __name__ == "__main__":
     try:
-        exit(main())
+        raise SystemExit(main())
     except KeyboardInterrupt:
         print("\nInterrupted by user")
-        exit(1)
-    except Exception as e:
-        print(f"\nError: {e}")
-        exit(1)
+        raise SystemExit(1)
+    except Exception as exc:
+        print(f"\nError: {exc}")
+        raise SystemExit(1)

@@ -17,8 +17,7 @@ def sample_fastq(tmp_path: Path) -> Path:
     """Create a minimal FASTQ file."""
     fastq = tmp_path / "reads.fastq"
     fastq.write_text(
-        "@read1\nACGTACGT\n+\nIIIIIIII\n"
-        "@read2\nTTTTAAAA\n+\nIIIIIIII\n"
+        "@read1\nACGTACGT\n+\nIIIIIIII\n" "@read2\nTTTTAAAA\n+\nIIIIIIII\n"
     )
     return fastq
 
@@ -29,9 +28,7 @@ def source_dir_singleplex(tmp_path: Path) -> Path:
     source = tmp_path / "source"
     source.mkdir()
     for i in range(5):
-        (source / f"reads_{i}.fastq").write_text(
-            f"@read{i}\nACGTACGT\n+\nIIIIIIII\n"
-        )
+        (source / f"reads_{i}.fastq").write_text(f"@read{i}\nACGTACGT\n+\nIIIIIIII\n")
     return source
 
 

@@ -1,12 +1,18 @@
 """FASTQ read/write/count utilities.
 
 Provides functions for counting, iterating, and writing FASTQ records.
-Supports both plain text and gzip-compressed files.
+Supports both plain text and gzip-compressed files.  Also contains
+shared I/O helpers used by ``executor`` and ``generators``.
 """
 
 import gzip
 from pathlib import Path
 from typing import Iterator, List, Optional, Tuple
+
+
+def atomic_tmp_path(target: Path) -> Path:
+    """Return a temporary sibling path for atomic writes."""
+    return target.parent / f".{target.name}.tmp"
 
 
 def count_reads(path: Path) -> int:
@@ -34,8 +40,7 @@ def count_reads(path: Path) -> int:
 
     if line_count % 4 != 0:
         raise ValueError(
-            f"Malformed FASTQ: {path} has {line_count} lines "
-            f"(not a multiple of 4)"
+            f"Malformed FASTQ: {path} has {line_count} lines " f"(not a multiple of 4)"
         )
 
     return line_count // 4
@@ -67,15 +72,16 @@ def iter_reads(path: Path) -> Iterator[Tuple[str, str, str, str]]:
             if not qual:
                 break
             yield (
-                header.rstrip("\n\r"),
-                seq.rstrip("\n\r"),
-                sep.rstrip("\n\r"),
-                qual.rstrip("\n\r"),
+                str(header).rstrip("\n\r"),
+                str(seq).rstrip("\n\r"),
+                str(sep).rstrip("\n\r"),
+                str(qual).rstrip("\n\r"),
             )
 
 
 def write_reads(
-    reads: List[Tuple[str, str, str, str]], path: Path,
+    reads: List[Tuple[str, str, str, str]],
+    path: Path,
     compress: Optional[bool] = None,
 ) -> None:
     """Write FASTQ records to a file.
@@ -98,7 +104,6 @@ def write_reads(
     with fh:
         fh.write(
             "".join(
-                f"{header}\n{seq}\n{sep}\n{qual}\n"
-                for header, seq, sep, qual in reads
+                f"{header}\n{seq}\n{sep}\n{qual}\n" for header, seq, sep, qual in reads
             )
         )

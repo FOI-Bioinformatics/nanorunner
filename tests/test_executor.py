@@ -61,9 +61,7 @@ def builtin_generator() -> BuiltinGenerator:
 class TestCopyOperation:
     """Tests for copy file execution."""
 
-    def test_copy_preserves_content(
-        self, source_file: Path, tmp_path: Path
-    ) -> None:
+    def test_copy_preserves_content(self, source_file: Path, tmp_path: Path) -> None:
         target = tmp_path / "target" / "reads.fastq"
         entry = FileEntry(
             source=source_file,
@@ -75,9 +73,7 @@ class TestCopyOperation:
         assert target.exists()
         assert target.read_text() == source_file.read_text()
 
-    def test_copy_creates_parent_dirs(
-        self, source_file: Path, tmp_path: Path
-    ) -> None:
+    def test_copy_creates_parent_dirs(self, source_file: Path, tmp_path: Path) -> None:
         target = tmp_path / "deep" / "nested" / "dir" / "reads.fastq"
         entry = FileEntry(
             source=source_file,
@@ -106,9 +102,7 @@ class TestCopyOperation:
 class TestLinkOperation:
     """Tests for symlink file execution."""
 
-    def test_link_creates_symlink(
-        self, source_file: Path, tmp_path: Path
-    ) -> None:
+    def test_link_creates_symlink(self, source_file: Path, tmp_path: Path) -> None:
         target = tmp_path / "target" / "reads.fastq"
         entry = FileEntry(
             source=source_file,
@@ -119,9 +113,7 @@ class TestLinkOperation:
         assert result == target
         assert target.is_symlink()
 
-    def test_link_resolves_to_source(
-        self, source_file: Path, tmp_path: Path
-    ) -> None:
+    def test_link_resolves_to_source(self, source_file: Path, tmp_path: Path) -> None:
         target = tmp_path / "target" / "reads.fastq"
         entry = FileEntry(
             source=source_file,

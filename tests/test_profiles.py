@@ -79,7 +79,9 @@ class TestGetProfile:
     def test_known_profile(self) -> None:
         result = get_profile("development")
         assert result is not None
-        assert result["description"] == "Fast iteration with deterministic uniform timing"
+        assert (
+            result["description"] == "Fast iteration with deterministic uniform timing"
+        )
 
     def test_unknown_returns_none(self) -> None:
         assert get_profile("nonexistent") is None
@@ -172,9 +174,7 @@ class TestApplyProfile:
         assert params["timing_model"] == "uniform"
 
     def test_override_timing_model(self) -> None:
-        params = apply_profile(
-            "steady", overrides={"timing_model": "poisson"}
-        )
+        params = apply_profile("steady", overrides={"timing_model": "poisson"})
         assert params["timing_model"] == "poisson"
 
     def test_unknown_profile_raises(self) -> None:
@@ -236,6 +236,6 @@ class TestGetRecommendations:
         for count in [5, 50, 200, 1000]:
             recs = get_recommendations(count)
             for name in recs:
-                assert name in PROFILES, (
-                    f"Recommendation '{name}' is not a valid profile"
-                )
+                assert (
+                    name in PROFILES
+                ), f"Recommendation '{name}' is not a valid profile"

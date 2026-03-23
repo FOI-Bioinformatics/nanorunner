@@ -8,17 +8,17 @@ Get up and running with NanoRunner.
 
 ```bash
 # Latest stable release
-pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2
+pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v3.0.0
 
 # With enhanced monitoring (optional but recommended)
-pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@v2.0.2"
+pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@v3.0.0"
 ```
 
 ### Verify Installation
 
 ```bash
 nanorunner --version
-# Output: nanorunner 2.0.2
+# Output: nanorunner 3.0.0
 
 nanorunner --help
 # Shows all available subcommands
@@ -189,25 +189,18 @@ nanorunner generate --mock zymo_d6300 -t /watch/output
 nanorunner list-mocks
 ```
 
-### Sample Types
+### Output Structure for Multiple Species
 
-Control how species are organized in the output:
-
-```bash
-# Pure samples: each species in its own barcode directory (default)
-nanorunner generate --species "E. coli" "S. aureus" --sample-type pure -t /watch/output
-
-# Mixed samples: all species combined according to abundances
-nanorunner generate --species "E. coli" "S. aureus" --sample-type mixed -t /watch/output
-```
+By default, each species is assigned its own barcode directory (multiplex). To mix all
+species reads into shared files, use `--force-structure singleplex --mix-reads`.
 
 ### Custom Abundances
 
-For mixed samples, specify relative abundances (must sum to 1.0):
+Specify relative abundances for abundance-weighted read distribution (values must sum to 1.0):
 
 ```bash
 # 70% E. coli, 30% S. aureus
-nanorunner generate --species "E. coli" "S. aureus" --sample-type mixed --abundances 0.7 0.3 -t /watch/output
+nanorunner generate --species "E. coli" "S. aureus" --abundances 0.7 0.3 -t /watch/output
 ```
 
 ### Pre-download Genomes
@@ -392,8 +385,7 @@ python examples/05_pipeline_integration.py
 |--------|-------------|---------|
 | `--species NAME [...]` | Species names for genome lookup | - |
 | `--mock MOCK_ID` | Preset mock community ID | - |
-| `--sample-type {pure,mixed}` | Pure (separate barcodes) or mixed samples | pure |
-| `--abundances FLOAT [...]` | Relative abundances for mixed samples | equal |
+| `--abundances FLOAT [...]` | Relative abundances for read distribution | equal |
 | `--list-mocks` | List available mock communities | - |
 
 ### Processing Options

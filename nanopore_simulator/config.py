@@ -39,13 +39,9 @@ def _validate_common(
     if batch_size < 1:
         raise ValueError("batch_size must be at least 1")
     if timing_model not in _VALID_TIMING_MODELS:
-        raise ValueError(
-            f"timing_model must be one of: {sorted(_VALID_TIMING_MODELS)}"
-        )
+        raise ValueError(f"timing_model must be one of: {sorted(_VALID_TIMING_MODELS)}")
     if monitor_type not in _VALID_MONITOR_TYPES:
-        raise ValueError(
-            f"monitor_type must be one of: {sorted(_VALID_MONITOR_TYPES)}"
-        )
+        raise ValueError(f"monitor_type must be one of: {sorted(_VALID_MONITOR_TYPES)}")
     if workers < 1:
         raise ValueError("workers must be at least 1")
 
@@ -95,9 +91,7 @@ class ReplayConfig:
             self.workers,
         )
         if not self.source_dir.exists():
-            raise ValueError(
-                f"source_dir does not exist: {self.source_dir}"
-            )
+            raise ValueError(f"source_dir does not exist: {self.source_dir}")
         if self.operation not in {"copy", "link"}:
             raise ValueError("operation must be 'copy' or 'link'")
         if self.structure not in _VALID_STRUCTURES_REPLAY:
@@ -210,8 +204,7 @@ class GenerateConfig:
             )
         if self.structure not in _VALID_STRUCTURES_GENERATE:
             raise ValueError(
-                f"structure must be one of: "
-                f"{sorted(_VALID_STRUCTURES_GENERATE)}"
+                f"structure must be one of: " f"{sorted(_VALID_STRUCTURES_GENERATE)}"
             )
         # Validate abundances if provided with genome_inputs
         if self.abundances is not None:
@@ -223,6 +216,4 @@ class GenerateConfig:
                 )
             total = sum(self.abundances)
             if not 0.99 <= total <= 1.01:
-                raise ValueError(
-                    f"abundances must sum to 1.0 (got {total:.3f})"
-                )
+                raise ValueError(f"abundances must sum to 1.0 (got {total:.3f})")

@@ -125,9 +125,7 @@ class TestRechunkExecution:
 class TestMixedGenerateExecution:
     """Tests for mixed-genome generate execution."""
 
-    def test_mixed_generate_produces_combined_output(
-        self, tmp_path: Path
-    ) -> None:
+    def test_mixed_generate_produces_combined_output(self, tmp_path: Path) -> None:
         """Mixed generate combines reads from multiple genomes."""
         genome_a = tmp_path / "a.fa"
         genome_b = tmp_path / "b.fa"
@@ -178,13 +176,13 @@ class TestMonitoringFormatters:
         assert "MB" in format_bytes(2 * 1024 * 1024)
 
     def test_format_bytes_gigabytes(self) -> None:
-        assert "GB" in format_bytes(3 * 1024 ** 3)
+        assert "GB" in format_bytes(3 * 1024**3)
 
     def test_format_bytes_terabytes(self) -> None:
-        assert "TB" in format_bytes(2 * 1024 ** 4)
+        assert "TB" in format_bytes(2 * 1024**4)
 
     def test_format_bytes_petabytes(self) -> None:
-        assert "PB" in format_bytes(2 * 1024 ** 5)
+        assert "PB" in format_bytes(2 * 1024**5)
 
     def test_format_time_seconds(self) -> None:
         assert "s" in format_time(30.0)
@@ -242,16 +240,19 @@ class TestProgressMonitorEta:
         metrics = mon.get_metrics()
         assert metrics.eta_seconds == 0.0
 
+    @pytest.mark.slow
     def test_display_callback_invoked(self) -> None:
         """Display callback receives metrics during update loop."""
         callback = MagicMock()
         mon = ProgressMonitor(
-            10, update_interval=0.05,
+            10,
+            update_interval=0.05,
             display_callback=callback,
             enable_resources=False,
         )
         mon.start()
         import time
+
         time.sleep(0.15)
         mon.stop()
         assert callback.call_count >= 1
@@ -284,9 +285,7 @@ class TestCreateMonitor:
 class TestCliEdgeCases:
     """CLI edge cases for coverage."""
 
-    def test_replay_random_factor_out_of_range(
-        self, tmp_path: Path
-    ) -> None:
+    def test_replay_random_factor_out_of_range(self, tmp_path: Path) -> None:
         source = tmp_path / "source"
         source.mkdir()
         (source / "r.fastq").write_text("@r1\nACGT\n+\nIIII\n")
@@ -294,17 +293,19 @@ class TestCliEdgeCases:
             app,
             [
                 "replay",
-                "--source", str(source),
-                "--target", str(tmp_path / "target"),
-                "--random-factor", "1.5",
-                "--interval", "0",
+                "--source",
+                str(source),
+                "--target",
+                str(tmp_path / "target"),
+                "--random-factor",
+                "1.5",
+                "--interval",
+                "0",
             ],
         )
         assert result.exit_code != 0
 
-    def test_replay_burst_probability_out_of_range(
-        self, tmp_path: Path
-    ) -> None:
+    def test_replay_burst_probability_out_of_range(self, tmp_path: Path) -> None:
         source = tmp_path / "source"
         source.mkdir()
         (source / "r.fastq").write_text("@r1\nACGT\n+\nIIII\n")
@@ -312,17 +313,19 @@ class TestCliEdgeCases:
             app,
             [
                 "replay",
-                "--source", str(source),
-                "--target", str(tmp_path / "target"),
-                "--burst-probability", "2.0",
-                "--interval", "0",
+                "--source",
+                str(source),
+                "--target",
+                str(tmp_path / "target"),
+                "--burst-probability",
+                "2.0",
+                "--interval",
+                "0",
             ],
         )
         assert result.exit_code != 0
 
-    def test_replay_burst_rate_multiplier_negative(
-        self, tmp_path: Path
-    ) -> None:
+    def test_replay_burst_rate_multiplier_negative(self, tmp_path: Path) -> None:
         source = tmp_path / "source"
         source.mkdir()
         (source / "r.fastq").write_text("@r1\nACGT\n+\nIIII\n")
@@ -330,17 +333,19 @@ class TestCliEdgeCases:
             app,
             [
                 "replay",
-                "--source", str(source),
-                "--target", str(tmp_path / "target"),
-                "--burst-rate-multiplier", "-1.0",
-                "--interval", "0",
+                "--source",
+                str(source),
+                "--target",
+                str(tmp_path / "target"),
+                "--burst-rate-multiplier",
+                "-1.0",
+                "--interval",
+                "0",
             ],
         )
         assert result.exit_code != 0
 
-    def test_replay_adaptation_rate_out_of_range(
-        self, tmp_path: Path
-    ) -> None:
+    def test_replay_adaptation_rate_out_of_range(self, tmp_path: Path) -> None:
         source = tmp_path / "source"
         source.mkdir()
         (source / "r.fastq").write_text("@r1\nACGT\n+\nIIII\n")
@@ -348,17 +353,19 @@ class TestCliEdgeCases:
             app,
             [
                 "replay",
-                "--source", str(source),
-                "--target", str(tmp_path / "target"),
-                "--adaptation-rate", "2.0",
-                "--interval", "0",
+                "--source",
+                str(source),
+                "--target",
+                str(tmp_path / "target"),
+                "--adaptation-rate",
+                "2.0",
+                "--interval",
+                "0",
             ],
         )
         assert result.exit_code != 0
 
-    def test_replay_history_size_zero(
-        self, tmp_path: Path
-    ) -> None:
+    def test_replay_history_size_zero(self, tmp_path: Path) -> None:
         source = tmp_path / "source"
         source.mkdir()
         (source / "r.fastq").write_text("@r1\nACGT\n+\nIIII\n")
@@ -366,17 +373,19 @@ class TestCliEdgeCases:
             app,
             [
                 "replay",
-                "--source", str(source),
-                "--target", str(tmp_path / "target"),
-                "--history-size", "0",
-                "--interval", "0",
+                "--source",
+                str(source),
+                "--target",
+                str(tmp_path / "target"),
+                "--history-size",
+                "0",
+                "--interval",
+                "0",
             ],
         )
         assert result.exit_code != 0
 
-    def test_generate_with_quiet_mode(
-        self, tmp_path: Path
-    ) -> None:
+    def test_generate_with_quiet_mode(self, tmp_path: Path) -> None:
         fasta = tmp_path / "genome.fa"
         fasta.write_text(">chr1\nACGTACGTACGTACGT\n")
         target = tmp_path / "target"
@@ -384,21 +393,25 @@ class TestCliEdgeCases:
             app,
             [
                 "generate",
-                "--target", str(target),
-                "--genomes", str(fasta),
-                "--generator-backend", "builtin",
-                "--read-count", "10",
-                "--reads-per-file", "10",
-                "--output-format", "fastq",
+                "--target",
+                str(target),
+                "--genomes",
+                str(fasta),
+                "--generator-backend",
+                "builtin",
+                "--read-count",
+                "10",
+                "--reads-per-file",
+                "10",
+                "--output-format",
+                "fastq",
                 "--quiet",
                 "--no-wait",
             ],
         )
         assert result.exit_code == 0
 
-    def test_replay_with_monitor_none(
-        self, tmp_path: Path
-    ) -> None:
+    def test_replay_with_monitor_none(self, tmp_path: Path) -> None:
         source = tmp_path / "source"
         source.mkdir()
         (source / "r.fastq").write_text("@r1\nACGT\n+\nIIII\n")
@@ -406,10 +419,14 @@ class TestCliEdgeCases:
             app,
             [
                 "replay",
-                "--source", str(source),
-                "--target", str(tmp_path / "target"),
-                "--monitor", "none",
-                "--interval", "0",
+                "--source",
+                str(source),
+                "--target",
+                str(tmp_path / "target"),
+                "--monitor",
+                "none",
+                "--interval",
+                "0",
             ],
         )
         assert result.exit_code == 0
@@ -420,8 +437,10 @@ class TestCliEdgeCases:
             app,
             [
                 "generate",
-                "--target", str(tmp_path / "target"),
-                "--genomes", str(tmp_path / "nonexistent.fa"),
+                "--target",
+                str(tmp_path / "target"),
+                "--genomes",
+                str(tmp_path / "nonexistent.fa"),
                 "--no-wait",
             ],
         )
@@ -457,9 +476,7 @@ class TestCliEdgeCases:
 class TestDepsEdgeCases:
     """Tests for dependency detection edge cases."""
 
-    def test_cli_enhanced_monitor_without_psutil(
-        self, tmp_path: Path
-    ) -> None:
+    def test_cli_enhanced_monitor_without_psutil(self, tmp_path: Path) -> None:
         """Enhanced monitor falls back to basic when psutil unavailable."""
         source = tmp_path / "source"
         source.mkdir()
@@ -471,10 +488,14 @@ class TestDepsEdgeCases:
                     app,
                     [
                         "replay",
-                        "--source", str(source),
-                        "--target", str(tmp_path / "target"),
-                        "--monitor", "default",
-                        "--interval", "0",
+                        "--source",
+                        str(source),
+                        "--target",
+                        str(tmp_path / "target"),
+                        "--monitor",
+                        "default",
+                        "--interval",
+                        "0",
                     ],
                 )
                 assert result.exit_code == 0

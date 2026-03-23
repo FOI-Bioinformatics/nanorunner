@@ -23,6 +23,7 @@ import subprocess
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from dataclasses import dataclass
@@ -126,8 +127,15 @@ class ResolutionCache:
 
     def _save(self) -> None:
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.cache_path, "w") as f:
-            json.dump(self._data, f, indent=2)
+        tmp_path = self.cache_path.parent / f".{self.cache_path.name}.tmp"
+        try:
+            with open(tmp_path, "w") as f:
+                json.dump(self._data, f, indent=2)
+            tmp_path.rename(self.cache_path)
+        except BaseException:
+            if tmp_path.exists():
+                tmp_path.unlink()
+            raise
 
     def get(self, key: str) -> Optional[GenomeRef]:
         """Look up a cached resolution by species name (case-insensitive)."""
@@ -184,9 +192,7 @@ def _gtdb_request(path: str) -> Optional[Any]:
             if exc.code in (404, 422):
                 return None
             if attempt < _GTDB_MAX_RETRIES:
-                logger.debug(
-                    "GTDB API request failed (HTTP %d), retrying...", exc.code
-                )
+                logger.debug("GTDB API request failed (HTTP %d), retrying...", exc.code)
                 time.sleep(_GTDB_RETRY_BACKOFF)
             else:
                 logger.debug("GTDB API request failed after retries: %s", exc)
@@ -207,11 +213,9 @@ def _gtdb_lookup(species_name: str) -> Optional[GenomeRef]:
     Queries the public API for representative genome accessions
     (bacteria/archaea). Returns None when the species is not found.
     """
-    formatted = species_name.replace(" ", "%20")
+    formatted = urllib.parse.quote(species_name, safe="")
 
-    genomes = _gtdb_request(
-        f"/taxon/s__{formatted}/genomes?sp_reps_only=true"
-    )
+    genomes = _gtdb_request(f"/taxon/s__{formatted}/genomes?sp_reps_only=true")
     if not genomes or not isinstance(genomes, list) or len(genomes) == 0:
         return None
 
@@ -317,8 +321,14 @@ def _detect_domain(data: Dict[str, Any]) -> str:
     # Heuristic: check organism name against known eukaryotic genera
     org_name = organism.get("organism_name", "").lower()
     eukaryote_markers = [
-        "saccharomyces", "candida", "aspergillus", "cryptococcus",
-        "fusarium", "penicillium", "neurospora", "schizosaccharomyces",
+        "saccharomyces",
+        "candida",
+        "aspergillus",
+        "cryptococcus",
+        "fusarium",
+        "penicillium",
+        "neurospora",
+        "schizosaccharomyces",
     ]
     for marker in eukaryote_markers:
         if marker in org_name:
@@ -341,9 +351,13 @@ def _ncbi_lookup(
     try:
         result = subprocess.run(
             [
-                "datasets", "summary", "genome", "taxon",
+                "datasets",
+                "summary",
+                "genome",
+                "taxon",
                 identifier,
-                "--assembly-source", "refseq",
+                "--assembly-source",
+                "refseq",
                 "--as-json-lines",
             ],
             capture_output=True,
@@ -359,9 +373,7 @@ def _ncbi_lookup(
             return None
 
         fallback_name = name if name is not None else f"taxid:{taxid}"
-        organism_name = data.get("organism", {}).get(
-            "organism_name", fallback_name
-        )
+        organism_name = data.get("organism", {}).get("organism_name", fallback_name)
         domain = _detect_domain(data)
 
         return GenomeRef(
@@ -389,10 +401,15 @@ def _ncbi_download(ref: GenomeRef, cache: GenomeCache) -> Path:
 
         result = subprocess.run(
             [
-                "datasets", "download", "genome", "accession",
+                "datasets",
+                "download",
+                "genome",
+                "accession",
                 ref.accession,
-                "--include", "genome",
-                "--filename", str(zip_path),
+                "--include",
+                "genome",
+                "--filename",
+                str(zip_path),
             ],
             capture_output=True,
             text=True,
@@ -406,6 +423,10 @@ def _ncbi_download(ref: GenomeRef, cache: GenomeCache) -> Path:
 
         extract_dir = tmpdir_path / "extract"
         with zipfile.ZipFile(zip_path) as zf:
+            for member in zf.namelist():
+                member_path = (extract_dir / member).resolve()
+                if not str(member_path).startswith(str(extract_dir.resolve())):
+                    raise ValueError(f"Unsafe path in archive: {member}")
             zf.extractall(extract_dir)
 
         fna_files = list(extract_dir.rglob("*.fna"))

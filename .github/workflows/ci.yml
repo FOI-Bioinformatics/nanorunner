@@ -40,4 +40,5 @@ jobs:
         if: matrix.python-version == '3.11'
         run: |
           black --check nanopore_simulator/ tests/
-          mypy nanopore_simulator/ || true
+          flake8 nanopore_simulator/
+          mypy nanopore_simulator/

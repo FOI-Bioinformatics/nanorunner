@@ -282,7 +282,7 @@ class TestFormatBytes:
         assert format_bytes(1024 * 1024) == "1.0 MB"
 
     def test_gigabytes(self) -> None:
-        assert format_bytes(1024 ** 3) == "1.0 GB"
+        assert format_bytes(1024**3) == "1.0 GB"
 
     def test_zero(self) -> None:
         assert format_bytes(0) == "0.0 B"
@@ -312,10 +312,12 @@ class TestFormatTime:
 class TestResourceMonitoring:
     """Resource tracking with optional psutil."""
 
+    @pytest.mark.slow
     def test_monitor_with_psutil_available(self) -> None:
         """When psutil is available, resource metrics are populated."""
         try:
             import psutil  # noqa: F401
+
             has_psutil = True
         except ImportError:
             has_psutil = False

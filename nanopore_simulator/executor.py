@@ -16,15 +16,11 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
+from nanopore_simulator.fastq import atomic_tmp_path as _atomic_tmp_path
 from nanopore_simulator.generators import GenomeInput, ReadGenerator
 from nanopore_simulator.manifest import FileEntry
 
 logger = logging.getLogger(__name__)
-
-
-def _atomic_tmp_path(target: Path) -> Path:
-    """Return a temporary sibling path for atomic writes."""
-    return target.parent / f".{target.name}.tmp"
 
 
 def execute_entry(
@@ -48,8 +44,10 @@ def execute_entry(
     entry.target.parent.mkdir(parents=True, exist_ok=True)
 
     if entry.operation == "copy":
+        assert entry.source is not None, "copy operation requires source path"
         return _copy_file(entry.source, entry.target)
     elif entry.operation == "link":
+        assert entry.source is not None, "link operation requires source path"
         return _link_file(entry.source, entry.target)
     elif entry.operation == "generate":
         if generator is None:
@@ -114,6 +112,7 @@ def _generate_file(entry: FileEntry, generator: ReadGenerator) -> Path:
     if entry.mixed_genome_reads:
         return _generate_mixed_file(entry, generator)
 
+    assert entry.genome is not None, "generate operation requires genome path"
     genome = GenomeInput(
         fasta_path=entry.genome,
         barcode=entry.barcode,
@@ -122,7 +121,9 @@ def _generate_file(entry: FileEntry, generator: ReadGenerator) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     output_path = generator.generate_reads(
-        genome, output_dir, entry.file_index,
+        genome,
+        output_dir,
+        entry.file_index,
         num_reads=entry.read_count,
     )
     return output_path
@@ -175,9 +176,7 @@ def _rechunk_file(entry: FileEntry) -> Path:
     return entry.target
 
 
-def _generate_mixed_file(
-    entry: FileEntry, generator: ReadGenerator
-) -> Path:
+def _generate_mixed_file(entry: FileEntry, generator: ReadGenerator) -> Path:
     """Generate a mixed-reads file from multiple genomes.
 
     Reads from each genome are generated in memory, combined, shuffled,
@@ -186,6 +185,9 @@ def _generate_mixed_file(
     import random
     from nanopore_simulator.fastq import write_reads
 
+    assert (
+        entry.mixed_genome_reads is not None
+    ), "mixed generate requires mixed_genome_reads"
     all_reads = []
     for genome_path, count in entry.mixed_genome_reads:
         genome = GenomeInput(fasta_path=genome_path)

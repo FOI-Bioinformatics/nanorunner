@@ -255,7 +255,7 @@ def _rechunk_entries(
                 "fastq_files": [],
                 "other_entries": [],
             }
-        if _is_fastq_file(entry.source):
+        if entry.source is not None and _is_fastq_file(entry.source):
             read_count = count_reads(entry.source)
             groups[bc]["fastq_files"].append((entry.source, read_count))
         else:
@@ -275,9 +275,7 @@ def _rechunk_entries(
             continue
 
         n_output = math.ceil(total_reads / rpf)
-        first_source = (
-            grp["fastq_files"][0][0] if grp["fastq_files"] else None
-        )
+        first_source = grp["fastq_files"][0][0] if grp["fastq_files"] else None
         ext = _get_fastq_extension(first_source) if first_source else ".fastq"
         stem = _fastq_stem(first_source) if first_source else "reads"
 
@@ -292,9 +290,7 @@ def _rechunk_entries(
                     target=target_dir / filename,
                     operation="rechunk",
                     barcode=bc,
-                    read_count=min(
-                        rpf, total_reads - chunk_idx * rpf
-                    ),
+                    read_count=min(rpf, total_reads - chunk_idx * rpf),
                     file_index=chunk_idx,
                     source_files=source_paths,
                 )
@@ -337,9 +333,7 @@ def build_generate_manifest(config: GenerateConfig) -> List[FileEntry]:
     if config.abundances and len(config.abundances) == n_genomes:
         per_genome_reads = distribute_reads(total_reads, config.abundances)
     else:
-        per_genome_reads = distribute_reads(
-            total_reads, [1.0 / n_genomes] * n_genomes
-        )
+        per_genome_reads = distribute_reads(total_reads, [1.0 / n_genomes] * n_genomes)
 
     rpf = config.reads_per_file
     ext = ".fastq.gz" if config.output_format == "fastq.gz" else ".fastq"
@@ -351,9 +345,7 @@ def build_generate_manifest(config: GenerateConfig) -> List[FileEntry]:
             config, genomes, per_genome_reads, rpf, ext
         )
     elif config.mix_reads:
-        entries = _generate_mixed_entries(
-            config, genomes, per_genome_reads, rpf, ext
-        )
+        entries = _generate_mixed_entries(config, genomes, per_genome_reads, rpf, ext)
     else:
         entries = _generate_singleplex_entries(
             config, genomes, per_genome_reads, rpf, ext
@@ -450,9 +442,7 @@ def _generate_mixed_entries(
 
     # Weights for per-file distribution
     weights = (
-        list(config.abundances)
-        if config.abundances
-        else [1.0 / n_genomes] * n_genomes
+        list(config.abundances) if config.abundances else [1.0 / n_genomes] * n_genomes
     )
 
     entries: List[FileEntry] = []
@@ -462,9 +452,7 @@ def _generate_mixed_entries(
         remaining -= chunk
         # Distribute this file's reads across genomes
         per_genome = distribute_reads(chunk, weights)
-        genome_reads = [
-            (g, n) for g, n in zip(genomes, per_genome) if n > 0
-        ]
+        genome_reads = [(g, n) for g, n in zip(genomes, per_genome) if n > 0]
         filename = f"reads_{fi:04d}{ext}"
         entries.append(
             FileEntry(

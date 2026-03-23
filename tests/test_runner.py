@@ -19,9 +19,7 @@ def singleplex_source(tmp_path: Path) -> Path:
     source = tmp_path / "source_single"
     source.mkdir()
     for i in range(5):
-        (source / f"reads_{i}.fastq").write_text(
-            f"@read{i}\nACGTACGT\n+\nIIIIIIII\n"
-        )
+        (source / f"reads_{i}.fastq").write_text(f"@read{i}\nACGTACGT\n+\nIIIIIIII\n")
     return source
 
 
@@ -63,9 +61,7 @@ def genome_a(tmp_path: Path) -> Path:
 def genome_b(tmp_path: Path) -> Path:
     """Create a second genome FASTA file."""
     fasta = tmp_path / "genome_b.fa"
-    fasta.write_text(
-        ">chr1\nGCGCGCGCGCGCATATATATATATATATATAT\n"
-    )
+    fasta.write_text(">chr1\nGCGCGCGCGCGCATATATATATATATATATAT\n")
     return fasta
 
 
@@ -77,9 +73,7 @@ def genome_b(tmp_path: Path) -> Path:
 class TestRunReplaySingleplex:
     """Tests for singleplex replay mode."""
 
-    def test_copies_all_files(
-        self, singleplex_source: Path, tmp_path: Path
-    ) -> None:
+    def test_copies_all_files(self, singleplex_source: Path, tmp_path: Path) -> None:
         target = tmp_path / "target"
         config = ReplayConfig(
             source_dir=singleplex_source,
@@ -95,9 +89,7 @@ class TestRunReplaySingleplex:
         for f in output_files:
             assert f.read_text() == (singleplex_source / f.name).read_text()
 
-    def test_links_all_files(
-        self, singleplex_source: Path, tmp_path: Path
-    ) -> None:
+    def test_links_all_files(self, singleplex_source: Path, tmp_path: Path) -> None:
         target = tmp_path / "target"
         config = ReplayConfig(
             source_dir=singleplex_source,
@@ -120,9 +112,7 @@ class TestRunReplaySingleplex:
 class TestRunReplayMultiplex:
     """Tests for multiplex replay mode."""
 
-    def test_preserves_structure(
-        self, multiplex_source: Path, tmp_path: Path
-    ) -> None:
+    def test_preserves_structure(self, multiplex_source: Path, tmp_path: Path) -> None:
         target = tmp_path / "target"
         config = ReplayConfig(
             source_dir=multiplex_source,
@@ -147,9 +137,7 @@ class TestRunReplayMultiplex:
 class TestRunReplayParallel:
     """Tests for parallel replay mode."""
 
-    def test_parallel_copy(
-        self, singleplex_source: Path, tmp_path: Path
-    ) -> None:
+    def test_parallel_copy(self, singleplex_source: Path, tmp_path: Path) -> None:
         target = tmp_path / "target"
         config = ReplayConfig(
             source_dir=singleplex_source,
@@ -164,9 +152,7 @@ class TestRunReplayParallel:
         output_files = list(target.glob("*.fastq"))
         assert len(output_files) == 5
 
-    def test_parallel_link(
-        self, singleplex_source: Path, tmp_path: Path
-    ) -> None:
+    def test_parallel_link(self, singleplex_source: Path, tmp_path: Path) -> None:
         target = tmp_path / "target"
         config = ReplayConfig(
             source_dir=singleplex_source,
@@ -213,9 +199,7 @@ class TestRunReplayEmpty:
 class TestRunGenerate:
     """Tests for generate mode."""
 
-    def test_generates_correct_file_count(
-        self, genome_a: Path, tmp_path: Path
-    ) -> None:
+    def test_generates_correct_file_count(self, genome_a: Path, tmp_path: Path) -> None:
         target = tmp_path / "target"
         config = GenerateConfig(
             target_dir=target,
@@ -234,9 +218,7 @@ class TestRunGenerate:
         output_files = list(target.glob("*.fastq"))
         assert len(output_files) == 2  # 200 / 100
 
-    def test_generate_parallel(
-        self, genome_a: Path, tmp_path: Path
-    ) -> None:
+    def test_generate_parallel(self, genome_a: Path, tmp_path: Path) -> None:
         target = tmp_path / "target"
         config = GenerateConfig(
             target_dir=target,
@@ -312,9 +294,7 @@ class TestRunGenerate:
 class TestRunGenerateWithTiming:
     """Tests for generate mode with non-zero interval (kept short)."""
 
-    def test_timing_model_applied(
-        self, genome_a: Path, tmp_path: Path
-    ) -> None:
+    def test_timing_model_applied(self, genome_a: Path, tmp_path: Path) -> None:
         """Verify that timing model does not break the flow."""
         target = tmp_path / "target"
         config = GenerateConfig(

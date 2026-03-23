@@ -35,9 +35,12 @@ class TestReplaySingleplex:
             app,
             [
                 "replay",
-                "--source", str(source_dir_singleplex),
-                "--target", str(target),
-                "--interval", "0",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
                 "--quiet",
             ],
         )
@@ -55,9 +58,12 @@ class TestReplaySingleplex:
             app,
             [
                 "replay",
-                "--source", str(source_dir_singleplex),
-                "--target", str(target),
-                "--interval", "0",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
                 "--quiet",
             ],
         )
@@ -79,9 +85,12 @@ class TestReplayMultiplex:
             app,
             [
                 "replay",
-                "--source", str(source_dir_multiplex),
-                "--target", str(target),
-                "--interval", "0",
+                "--source",
+                str(source_dir_multiplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
                 "--quiet",
             ],
         )
@@ -96,19 +105,21 @@ class TestReplayMultiplex:
 class TestReplayLink:
     """Symlink operation through the CLI."""
 
-    def test_link_creates_symlinks(
-        self, source_dir_singleplex: Path, tmp_path: Path
-    ):
+    def test_link_creates_symlinks(self, source_dir_singleplex: Path, tmp_path: Path):
         """Link mode creates working symbolic links."""
         target = tmp_path / "target"
         result = runner.invoke(
             app,
             [
                 "replay",
-                "--source", str(source_dir_singleplex),
-                "--target", str(target),
-                "--operation", "link",
-                "--interval", "0",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--operation",
+                "link",
+                "--interval",
+                "0",
                 "--quiet",
             ],
         )
@@ -118,19 +129,21 @@ class TestReplayLink:
         for f in linked:
             assert f.is_symlink()
 
-    def test_link_target_readable(
-        self, source_dir_singleplex: Path, tmp_path: Path
-    ):
+    def test_link_target_readable(self, source_dir_singleplex: Path, tmp_path: Path):
         """Symlinked files resolve to readable content."""
         target = tmp_path / "target"
         runner.invoke(
             app,
             [
                 "replay",
-                "--source", str(source_dir_singleplex),
-                "--target", str(target),
-                "--operation", "link",
-                "--interval", "0",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--operation",
+                "link",
+                "--interval",
+                "0",
                 "--quiet",
             ],
         )
@@ -142,19 +155,21 @@ class TestReplayLink:
 class TestReplayProfile:
     """Profile-based replay through the CLI."""
 
-    def test_development_profile(
-        self, source_dir_singleplex: Path, tmp_path: Path
-    ):
+    def test_development_profile(self, source_dir_singleplex: Path, tmp_path: Path):
         """The development profile completes without error."""
         target = tmp_path / "target"
         result = runner.invoke(
             app,
             [
                 "replay",
-                "--source", str(source_dir_singleplex),
-                "--target", str(target),
-                "--profile", "development",
-                "--interval", "0",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--profile",
+                "development",
+                "--interval",
+                "0",
                 "--quiet",
             ],
         )
@@ -176,11 +191,15 @@ class TestReplayParallel:
             app,
             [
                 "replay",
-                "--source", str(source_dir_singleplex),
-                "--target", str(target),
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
                 "--parallel",
-                "--worker-count", "2",
-                "--interval", "0",
+                "--worker-count",
+                "2",
+                "--interval",
+                "0",
                 "--quiet",
             ],
         )
@@ -201,10 +220,14 @@ class TestReplayTimingModels:
             app,
             [
                 "replay",
-                "--source", str(source_dir_singleplex),
-                "--target", str(target),
-                "--timing-model", model,
-                "--interval", "0",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--timing-model",
+                model,
+                "--interval",
+                "0",
                 "--quiet",
             ],
         )
@@ -215,17 +238,17 @@ class TestReplayTimingModels:
 class TestReplayNoWait:
     """The --no-wait flag zeroes the interval."""
 
-    def test_no_wait_flag(
-        self, source_dir_singleplex: Path, tmp_path: Path
-    ):
+    def test_no_wait_flag(self, source_dir_singleplex: Path, tmp_path: Path):
         """--no-wait produces the same result as --interval 0."""
         target = tmp_path / "target"
         result = runner.invoke(
             app,
             [
                 "replay",
-                "--source", str(source_dir_singleplex),
-                "--target", str(target),
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
                 "--no-wait",
                 "--quiet",
             ],
@@ -246,10 +269,14 @@ class TestReplayBatchSize:
             app,
             [
                 "replay",
-                "--source", str(source_dir_singleplex),
-                "--target", str(target),
-                "--batch-size", "3",
-                "--interval", "0",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--batch-size",
+                "3",
+                "--interval",
+                "0",
                 "--quiet",
             ],
         )
@@ -274,12 +301,18 @@ class TestGenerateSingleGenome:
             app,
             [
                 "generate",
-                "--target", str(target),
-                "--genomes", str(sample_fasta),
-                "--generator-backend", "builtin",
-                "--read-count", str(read_count),
-                "--reads-per-file", str(reads_per_file),
-                "--output-format", "fastq",
+                "--target",
+                str(target),
+                "--genomes",
+                str(sample_fasta),
+                "--generator-backend",
+                "builtin",
+                "--read-count",
+                str(read_count),
+                "--reads-per-file",
+                str(reads_per_file),
+                "--output-format",
+                "fastq",
                 "--no-wait",
                 "--quiet",
             ],
@@ -289,21 +322,25 @@ class TestGenerateSingleGenome:
         expected_files = read_count // reads_per_file
         assert len(output_files) == expected_files
 
-    def test_single_genome_output_has_reads(
-        self, sample_fasta: Path, tmp_path: Path
-    ):
+    def test_single_genome_output_has_reads(self, sample_fasta: Path, tmp_path: Path):
         """Each output file contains the expected number of reads."""
         target = tmp_path / "gen_target"
         result = runner.invoke(
             app,
             [
                 "generate",
-                "--target", str(target),
-                "--genomes", str(sample_fasta),
-                "--generator-backend", "builtin",
-                "--read-count", "50",
-                "--reads-per-file", "50",
-                "--output-format", "fastq",
+                "--target",
+                str(target),
+                "--genomes",
+                str(sample_fasta),
+                "--generator-backend",
+                "builtin",
+                "--read-count",
+                "50",
+                "--reads-per-file",
+                "50",
+                "--output-format",
+                "fastq",
                 "--no-wait",
                 "--quiet",
             ],
@@ -316,21 +353,25 @@ class TestGenerateSingleGenome:
         lines = [l for l in content.strip().split("\n") if l]
         assert len(lines) == 50 * 4
 
-    def test_generate_gzipped_output(
-        self, sample_fasta: Path, tmp_path: Path
-    ):
+    def test_generate_gzipped_output(self, sample_fasta: Path, tmp_path: Path):
         """Generate mode produces gzipped FASTQ files."""
         target = tmp_path / "gen_target"
         result = runner.invoke(
             app,
             [
                 "generate",
-                "--target", str(target),
-                "--genomes", str(sample_fasta),
-                "--generator-backend", "builtin",
-                "--read-count", "50",
-                "--reads-per-file", "50",
-                "--output-format", "fastq.gz",
+                "--target",
+                str(target),
+                "--genomes",
+                str(sample_fasta),
+                "--generator-backend",
+                "builtin",
+                "--read-count",
+                "50",
+                "--reads-per-file",
+                "50",
+                "--output-format",
+                "fastq.gz",
                 "--no-wait",
                 "--quiet",
             ],
@@ -359,14 +400,22 @@ class TestGenerateMultipleGenomes:
             app,
             [
                 "generate",
-                "--target", str(target),
-                "--genomes", str(genome_a),
-                "--genomes", str(genome_b),
-                "--generator-backend", "builtin",
-                "--read-count", "200",
-                "--reads-per-file", "100",
-                "--output-format", "fastq",
-                "--force-structure", "singleplex",
+                "--target",
+                str(target),
+                "--genomes",
+                str(genome_a),
+                "--genomes",
+                str(genome_b),
+                "--generator-backend",
+                "builtin",
+                "--read-count",
+                "200",
+                "--reads-per-file",
+                "100",
+                "--output-format",
+                "fastq",
+                "--force-structure",
+                "singleplex",
                 "--no-wait",
                 "--quiet",
             ],
@@ -388,14 +437,22 @@ class TestGenerateMultipleGenomes:
             app,
             [
                 "generate",
-                "--target", str(target),
-                "--genomes", str(genome_a),
-                "--genomes", str(genome_b),
-                "--generator-backend", "builtin",
-                "--read-count", "200",
-                "--reads-per-file", "100",
-                "--output-format", "fastq",
-                "--force-structure", "multiplex",
+                "--target",
+                str(target),
+                "--genomes",
+                str(genome_a),
+                "--genomes",
+                str(genome_b),
+                "--generator-backend",
+                "builtin",
+                "--read-count",
+                "200",
+                "--reads-per-file",
+                "100",
+                "--output-format",
+                "fastq",
+                "--force-structure",
+                "multiplex",
                 "--no-wait",
                 "--quiet",
             ],
@@ -424,16 +481,26 @@ class TestGenerateAbundanceWeighting:
             app,
             [
                 "generate",
-                "--target", str(target),
-                "--genomes", str(genome_a),
-                "--genomes", str(genome_b),
-                "--generator-backend", "builtin",
-                "--read-count", "1000",
-                "--reads-per-file", "100",
-                "--output-format", "fastq",
-                "--abundances", "0.9",
-                "--abundances", "0.1",
-                "--force-structure", "singleplex",
+                "--target",
+                str(target),
+                "--genomes",
+                str(genome_a),
+                "--genomes",
+                str(genome_b),
+                "--generator-backend",
+                "builtin",
+                "--read-count",
+                "1000",
+                "--reads-per-file",
+                "100",
+                "--output-format",
+                "fastq",
+                "--abundances",
+                "0.9",
+                "--abundances",
+                "0.1",
+                "--force-structure",
+                "singleplex",
                 "--no-wait",
                 "--quiet",
             ],
@@ -461,13 +528,20 @@ class TestGenerateTimingModels:
             app,
             [
                 "generate",
-                "--target", str(target),
-                "--genomes", str(sample_fasta),
-                "--generator-backend", "builtin",
-                "--read-count", "50",
-                "--reads-per-file", "50",
-                "--output-format", "fastq",
-                "--timing-model", model,
+                "--target",
+                str(target),
+                "--genomes",
+                str(sample_fasta),
+                "--generator-backend",
+                "builtin",
+                "--read-count",
+                "50",
+                "--reads-per-file",
+                "50",
+                "--output-format",
+                "fastq",
+                "--timing-model",
+                model,
                 "--no-wait",
                 "--quiet",
             ],
@@ -486,14 +560,21 @@ class TestGenerateParallel:
             app,
             [
                 "generate",
-                "--target", str(target),
-                "--genomes", str(sample_fasta),
-                "--generator-backend", "builtin",
-                "--read-count", "300",
-                "--reads-per-file", "100",
-                "--output-format", "fastq",
+                "--target",
+                str(target),
+                "--genomes",
+                str(sample_fasta),
+                "--generator-backend",
+                "builtin",
+                "--read-count",
+                "300",
+                "--reads-per-file",
+                "100",
+                "--output-format",
+                "fastq",
                 "--parallel",
-                "--worker-count", "2",
+                "--worker-count",
+                "2",
                 "--no-wait",
                 "--quiet",
             ],
@@ -584,9 +665,12 @@ class TestValidateCommand:
             app,
             [
                 "replay",
-                "--source", str(source_dir_multiplex),
-                "--target", str(target),
-                "--interval", "0",
+                "--source",
+                str(source_dir_multiplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
                 "--quiet",
             ],
         )
@@ -595,8 +679,10 @@ class TestValidateCommand:
             app,
             [
                 "validate",
-                "--pipeline", "nanometa",
-                "--target", str(target),
+                "--pipeline",
+                "nanometa",
+                "--target",
+                str(target),
             ],
         )
         assert result.exit_code == 0
@@ -610,25 +696,28 @@ class TestValidateCommand:
             app,
             [
                 "validate",
-                "--pipeline", "nanometa",
-                "--target", str(empty_dir),
+                "--pipeline",
+                "nanometa",
+                "--target",
+                str(empty_dir),
             ],
         )
         assert result.exit_code == 1
         assert "Valid: no" in result.output
 
-    def test_validate_kraken_adapter(
-        self, source_dir_singleplex: Path, tmp_path: Path
-    ):
+    def test_validate_kraken_adapter(self, source_dir_singleplex: Path, tmp_path: Path):
         """Validate a singleplex directory against the kraken adapter."""
         target = tmp_path / "target"
         runner.invoke(
             app,
             [
                 "replay",
-                "--source", str(source_dir_singleplex),
-                "--target", str(target),
-                "--interval", "0",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--interval",
+                "0",
                 "--quiet",
             ],
         )
@@ -636,8 +725,10 @@ class TestValidateCommand:
             app,
             [
                 "validate",
-                "--pipeline", "kraken",
-                "--target", str(target),
+                "--pipeline",
+                "kraken",
+                "--target",
+                str(target),
             ],
         )
         assert result.exit_code == 0
@@ -655,9 +746,7 @@ class TestRecommendCommand:
         assert result.exit_code == 0
         assert "Recommended profiles" in result.output
 
-    def test_recommend_source_directory(
-        self, source_dir_singleplex: Path
-    ):
+    def test_recommend_source_directory(self, source_dir_singleplex: Path):
         result = runner.invoke(
             app,
             ["recommend", "--source", str(source_dir_singleplex)],
@@ -694,10 +783,14 @@ class TestReplayRechunking:
             app,
             [
                 "replay",
-                "--source", str(source),
-                "--target", str(target),
-                "--reads-per-file", "3",
-                "--interval", "0",
+                "--source",
+                str(source),
+                "--target",
+                str(target),
+                "--reads-per-file",
+                "3",
+                "--interval",
+                "0",
                 "--quiet",
             ],
         )
@@ -710,18 +803,20 @@ class TestReplayRechunking:
 class TestReplayForceStructure:
     """The --force-structure flag overrides auto-detection."""
 
-    def test_force_singleplex(
-        self, source_dir_singleplex: Path, tmp_path: Path
-    ):
+    def test_force_singleplex(self, source_dir_singleplex: Path, tmp_path: Path):
         target = tmp_path / "target"
         result = runner.invoke(
             app,
             [
                 "replay",
-                "--source", str(source_dir_singleplex),
-                "--target", str(target),
-                "--force-structure", "singleplex",
-                "--interval", "0",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--force-structure",
+                "singleplex",
+                "--interval",
+                "0",
                 "--quiet",
             ],
         )
@@ -741,10 +836,14 @@ class TestReplayPipelinePostValidation:
             app,
             [
                 "replay",
-                "--source", str(source_dir_singleplex),
-                "--target", str(target),
-                "--pipeline", "nanometa",
-                "--interval", "0",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(target),
+                "--pipeline",
+                "nanometa",
+                "--interval",
+                "0",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -766,13 +865,20 @@ class TestGenerateWithGenomeDirectory:
             app,
             [
                 "generate",
-                "--target", str(target),
-                "--genomes", str(genome_dir),
-                "--generator-backend", "builtin",
-                "--read-count", "100",
-                "--reads-per-file", "50",
-                "--output-format", "fastq",
-                "--force-structure", "singleplex",
+                "--target",
+                str(target),
+                "--genomes",
+                str(genome_dir),
+                "--generator-backend",
+                "builtin",
+                "--read-count",
+                "100",
+                "--reads-per-file",
+                "50",
+                "--output-format",
+                "fastq",
+                "--force-structure",
+                "singleplex",
                 "--no-wait",
                 "--quiet",
             ],
@@ -783,6 +889,7 @@ class TestGenerateWithGenomeDirectory:
         assert len(output_files) == 2
 
 
+@pytest.mark.slow
 class TestStress96Barcodes:
     """Stress test: 96 barcodes x 5 files x 100 reads."""
 
@@ -793,21 +900,25 @@ class TestStress96Barcodes:
         genome_dir.mkdir()
         for i in range(96):
             seq = "ACGTACGT" * 10  # 80bp genome
-            (genome_dir / f"species_{i:03d}.fa").write_text(
-                f">chr1\n{seq}\n"
-            )
+            (genome_dir / f"species_{i:03d}.fa").write_text(f">chr1\n{seq}\n")
         genomes = sorted(genome_dir.glob("*.fa"))
 
         target = tmp_path / "target"
         # Build CLI args: 96 genomes, each gets a barcode dir
         args = [
             "generate",
-            "--target", str(target),
-            "--generator-backend", "builtin",
-            "--read-count", str(96 * 500),  # 500 reads per genome
-            "--reads-per-file", "100",       # 5 files per barcode
-            "--output-format", "fastq",
-            "--force-structure", "multiplex",
+            "--target",
+            str(target),
+            "--generator-backend",
+            "builtin",
+            "--read-count",
+            str(96 * 500),  # 500 reads per genome
+            "--reads-per-file",
+            "100",  # 5 files per barcode
+            "--output-format",
+            "fastq",
+            "--force-structure",
+            "multiplex",
             "--no-wait",
             "--quiet",
         ]
@@ -821,15 +932,13 @@ class TestStress96Barcodes:
         barcode_dirs = sorted(
             d for d in target.iterdir() if d.is_dir() and d.name.startswith("barcode")
         )
-        assert len(barcode_dirs) == 96, (
-            f"Expected 96 barcode dirs, got {len(barcode_dirs)}"
-        )
+        assert (
+            len(barcode_dirs) == 96
+        ), f"Expected 96 barcode dirs, got {len(barcode_dirs)}"
 
         # Verify total file count: 96 barcodes x 5 files = 480
         all_files = list(target.rglob("*.fastq"))
-        assert len(all_files) == 480, (
-            f"Expected 480 files, got {len(all_files)}"
-        )
+        assert len(all_files) == 480, f"Expected 480 files, got {len(all_files)}"
 
         # Verify no filename collisions (all paths unique)
         paths = [str(f) for f in all_files]
@@ -837,9 +946,7 @@ class TestStress96Barcodes:
 
         # Verify no leftover .tmp files
         tmp_files = list(target.rglob("*.tmp"))
-        assert len(tmp_files) == 0, (
-            f"Found {len(tmp_files)} orphaned .tmp files"
-        )
+        assert len(tmp_files) == 0, f"Found {len(tmp_files)} orphaned .tmp files"
 
 
 class TestErrorHandling:
@@ -851,8 +958,10 @@ class TestErrorHandling:
             app,
             [
                 "replay",
-                "--source", str(tmp_path / "nonexistent"),
-                "--target", str(tmp_path / "target"),
+                "--source",
+                str(tmp_path / "nonexistent"),
+                "--target",
+                str(tmp_path / "target"),
             ],
         )
         assert result.exit_code != 0
@@ -863,22 +972,24 @@ class TestErrorHandling:
             app,
             [
                 "generate",
-                "--target", str(tmp_path / "target"),
+                "--target",
+                str(tmp_path / "target"),
             ],
         )
         assert result.exit_code != 0
 
-    def test_generate_mutual_exclusion(
-        self, sample_fasta: Path, tmp_path: Path
-    ):
+    def test_generate_mutual_exclusion(self, sample_fasta: Path, tmp_path: Path):
         """Providing both --genomes and --mock fails."""
         result = runner.invoke(
             app,
             [
                 "generate",
-                "--target", str(tmp_path / "target"),
-                "--genomes", str(sample_fasta),
-                "--mock", "zymo_d6300",
+                "--target",
+                str(tmp_path / "target"),
+                "--genomes",
+                str(sample_fasta),
+                "--mock",
+                "zymo_d6300",
                 "--no-wait",
                 "--quiet",
             ],
@@ -886,18 +997,20 @@ class TestErrorHandling:
         assert result.exit_code != 0
         assert "mutually exclusive" in result.output.lower()
 
-    def test_invalid_profile_name(
-        self, source_dir_singleplex: Path, tmp_path: Path
-    ):
+    def test_invalid_profile_name(self, source_dir_singleplex: Path, tmp_path: Path):
         """An unrecognized profile name fails with a clear message."""
         result = runner.invoke(
             app,
             [
                 "replay",
-                "--source", str(source_dir_singleplex),
-                "--target", str(tmp_path / "target"),
-                "--profile", "nonexistent_profile",
-                "--interval", "0",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(tmp_path / "target"),
+                "--profile",
+                "nonexistent_profile",
+                "--interval",
+                "0",
             ],
         )
         assert result.exit_code != 0
@@ -910,11 +1023,16 @@ class TestErrorHandling:
             app,
             [
                 "replay",
-                "--source", str(source_dir_singleplex),
-                "--target", str(tmp_path / "target"),
-                "--operation", "link",
-                "--reads-per-file", "5",
-                "--interval", "0",
+                "--source",
+                str(source_dir_singleplex),
+                "--target",
+                str(tmp_path / "target"),
+                "--operation",
+                "link",
+                "--reads-per-file",
+                "5",
+                "--interval",
+                "0",
             ],
         )
         assert result.exit_code != 0
@@ -928,8 +1046,10 @@ class TestErrorHandling:
             app,
             [
                 "validate",
-                "--pipeline", "nonexistent",
-                "--target", str(empty_dir),
+                "--pipeline",
+                "nonexistent",
+                "--target",
+                str(empty_dir),
             ],
         )
         assert result.exit_code != 0

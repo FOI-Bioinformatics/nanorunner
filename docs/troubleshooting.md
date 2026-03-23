@@ -47,7 +47,7 @@ python --version
 python3.11 -m pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git
 
 # Create alias (add to ~/.bashrc or ~/.zshrc)
-alias nanorunner='python3.11 -m nanopore_simulator.cli.main'
+alias nanorunner='python3.11 -m nanopore_simulator.cli'
 ```
 
 ### Command Not Found After Install
@@ -63,7 +63,7 @@ pip show nanorunner | grep Location
 export PATH="$HOME/.local/bin:$PATH"
 
 # Or use full path
-python -m nanopore_simulator.cli.main --help
+python -m nanopore_simulator.cli --help
 
 # Or reinstall with user flag
 pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git
@@ -263,8 +263,8 @@ echo -e "\033[32mGreen\033[0m"
 # Disable monitoring if needed
 nanorunner replay -s /source -t /target --monitor none
 
-# Use detailed monitoring for logging
-nanorunner replay -s /source -t /target --monitor detailed 2>&1 | tee simulation.log
+# Redirect output to a log file for review
+nanorunner replay -s /source -t /target 2>&1 | tee simulation.log
 ```
 
 ---
@@ -500,7 +500,7 @@ pytest --cov=nanopore_simulator --cov-report=term-missing
 nanorunner --version
 
 # Test imports
-python -c "from nanopore_simulator import SimulationConfig; print('OK')"
+python -c "from nanopore_simulator import ReplayConfig; print('OK')"
 
 # List available options
 nanorunner --help

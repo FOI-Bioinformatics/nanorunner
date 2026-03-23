@@ -26,9 +26,7 @@ def singleplex_source(tmp_path: Path) -> Path:
     source = tmp_path / "source_single"
     source.mkdir()
     for i in range(5):
-        (source / f"reads_{i}.fastq").write_text(
-            f"@read{i}\nACGTACGT\n+\nIIIIIIII\n"
-        )
+        (source / f"reads_{i}.fastq").write_text(f"@read{i}\nACGTACGT\n+\nIIIIIIII\n")
     return source
 
 
@@ -185,9 +183,7 @@ class TestDistributeReads:
 class TestBuildReplayManifestSingleplex:
     """Tests for singleplex replay manifest building."""
 
-    def test_correct_count(
-        self, singleplex_source: Path, tmp_path: Path
-    ) -> None:
+    def test_correct_count(self, singleplex_source: Path, tmp_path: Path) -> None:
         config = ReplayConfig(
             source_dir=singleplex_source,
             target_dir=tmp_path / "target",
@@ -196,9 +192,7 @@ class TestBuildReplayManifestSingleplex:
         manifest = build_replay_manifest(config)
         assert len(manifest) == 5
 
-    def test_copy_operations(
-        self, singleplex_source: Path, tmp_path: Path
-    ) -> None:
+    def test_copy_operations(self, singleplex_source: Path, tmp_path: Path) -> None:
         config = ReplayConfig(
             source_dir=singleplex_source,
             target_dir=tmp_path / "target",
@@ -222,9 +216,7 @@ class TestBuildReplayManifestSingleplex:
             assert entry.target.parent == target
             assert entry.target.name == entry.source.name
 
-    def test_link_operation(
-        self, singleplex_source: Path, tmp_path: Path
-    ) -> None:
+    def test_link_operation(self, singleplex_source: Path, tmp_path: Path) -> None:
         config = ReplayConfig(
             source_dir=singleplex_source,
             target_dir=tmp_path / "target",
@@ -234,9 +226,7 @@ class TestBuildReplayManifestSingleplex:
         manifest = build_replay_manifest(config)
         assert all(e.operation == "link" for e in manifest)
 
-    def test_batching(
-        self, singleplex_source: Path, tmp_path: Path
-    ) -> None:
+    def test_batching(self, singleplex_source: Path, tmp_path: Path) -> None:
         """5 files with batch_size=2 should yield 3 batches (0, 1, 2)."""
         config = ReplayConfig(
             source_dir=singleplex_source,
@@ -342,8 +332,7 @@ class TestBuildReplayManifestRechunk:
         source.mkdir()
         for i in range(2):
             (source / f"reads_{i}.fastq").write_text(
-                f"@readA{i}\nACGT\n+\nIIII\n"
-                f"@readB{i}\nTTTT\n+\nIIII\n"
+                f"@readA{i}\nACGT\n+\nIIII\n" f"@readB{i}\nTTTT\n+\nIIII\n"
             )
         target = tmp_path / "target"
         config = ReplayConfig(
@@ -365,9 +354,7 @@ class TestBuildReplayManifestRechunk:
         """POD5 files should pass through unchanged during rechunking."""
         source = tmp_path / "source_pod5"
         source.mkdir()
-        (source / "reads.fastq").write_text(
-            "@r1\nACGT\n+\nIIII\n@r2\nTTTT\n+\nIIII\n"
-        )
+        (source / "reads.fastq").write_text("@r1\nACGT\n+\nIIII\n@r2\nTTTT\n+\nIIII\n")
         (source / "signal.pod5").write_bytes(b"\x00" * 10)
         target = tmp_path / "target"
         config = ReplayConfig(
@@ -393,9 +380,7 @@ class TestBuildReplayManifestRechunk:
 class TestBuildGenerateManifestSingle:
     """Tests for single-genome generate manifest."""
 
-    def test_correct_file_count(
-        self, genome_a: Path, tmp_path: Path
-    ) -> None:
+    def test_correct_file_count(self, genome_a: Path, tmp_path: Path) -> None:
         config = GenerateConfig(
             target_dir=tmp_path / "target",
             genome_inputs=[genome_a],
@@ -406,9 +391,7 @@ class TestBuildGenerateManifestSingle:
         manifest = build_generate_manifest(config)
         assert len(manifest) == 10  # 1000 / 100
 
-    def test_total_reads_distributed(
-        self, genome_a: Path, tmp_path: Path
-    ) -> None:
+    def test_total_reads_distributed(self, genome_a: Path, tmp_path: Path) -> None:
         config = GenerateConfig(
             target_dir=tmp_path / "target",
             genome_inputs=[genome_a],
@@ -420,9 +403,7 @@ class TestBuildGenerateManifestSingle:
         total = sum(e.read_count for e in manifest)
         assert total == 250
 
-    def test_all_generate_operations(
-        self, genome_a: Path, tmp_path: Path
-    ) -> None:
+    def test_all_generate_operations(self, genome_a: Path, tmp_path: Path) -> None:
         config = GenerateConfig(
             target_dir=tmp_path / "target",
             genome_inputs=[genome_a],
@@ -442,9 +423,7 @@ class TestBuildGenerateManifestSingle:
 class TestBuildGenerateManifestMultiple:
     """Tests for multi-genome generate manifest."""
 
-    def test_equal_split(
-        self, genome_a: Path, genome_b: Path, tmp_path: Path
-    ) -> None:
+    def test_equal_split(self, genome_a: Path, genome_b: Path, tmp_path: Path) -> None:
         config = GenerateConfig(
             target_dir=tmp_path / "target",
             genome_inputs=[genome_a, genome_b],
@@ -472,12 +451,8 @@ class TestBuildGenerateManifestMultiple:
             monitor_type="none",
         )
         manifest = build_generate_manifest(config)
-        genome_a_reads = sum(
-            e.read_count for e in manifest if e.genome == genome_a
-        )
-        genome_b_reads = sum(
-            e.read_count for e in manifest if e.genome == genome_b
-        )
+        genome_a_reads = sum(e.read_count for e in manifest if e.genome == genome_a)
+        genome_b_reads = sum(e.read_count for e in manifest if e.genome == genome_b)
         assert genome_a_reads == 900
         assert genome_b_reads == 100
         assert genome_a_reads + genome_b_reads == 1000
@@ -514,9 +489,7 @@ class TestBuildGenerateManifestMultiple:
         for entry in manifest:
             assert entry.target.parent == target / entry.barcode
 
-    def test_batching_generate(
-        self, genome_a: Path, tmp_path: Path
-    ) -> None:
+    def test_batching_generate(self, genome_a: Path, tmp_path: Path) -> None:
         config = GenerateConfig(
             target_dir=tmp_path / "target",
             genome_inputs=[genome_a],

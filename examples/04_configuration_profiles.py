@@ -2,178 +2,222 @@
 """
 Example 4: Configuration Profiles
 
+Level: Intermediate
+Time: ~2 minutes
 Description:
-    Demonstrates using built-in configuration profiles for common
-    sequencing scenarios. Profiles provide pre-configured parameter
-    sets optimized for specific use cases.
+    Demonstrates the built-in configuration profiles that provide
+    pre-parameterised settings for common sequencing scenarios.
+
+    Profiles are plain dicts returned by get_profile() or apply_profile().
+    apply_profile() supports an optional overrides argument so that
+    individual parameters can be customised without rebuilding the full
+    configuration from scratch.
+
+    Profile field names differ from ReplayConfig field names in two
+    places:
+      - "timing_model_params"  ->  timing_params  (ReplayConfig)
+      - "parallel_processing"  ->  parallel        (ReplayConfig)
+      - "worker_count"         ->  workers         (ReplayConfig)
+
+    This example shows how to map them correctly.
 
 Usage:
     python examples/04_configuration_profiles.py
 
 Requirements:
-    - nanorunner installed
+    - nanorunner installed (pip install -e .)
     - Sample data in examples/sample_data/
 
 Expected Output:
-    - Lists all available profiles
-    - Demonstrates 3 different profiles
-    - Shows how to override profile parameters
+    - Lists all available profiles with their descriptions
+    - Runs three profiles against the singleplex sample data
+    - Demonstrates per-parameter override on the bursty profile
     - Completes in ~10-15 seconds
 """
 
-from pathlib import Path
-import tempfile
 import shutil
-from nanopore_simulator.core.profiles import (
-    get_available_profiles,
-    create_config_from_profile,
-)
-from nanopore_simulator import NanoporeSimulator
+import tempfile
+from pathlib import Path
+from typing import Any, Dict
+
+from nanopore_simulator import ReplayConfig, run_replay
+from nanopore_simulator.profiles import PROFILES, apply_profile, list_profiles
 
 
-def list_all_profiles():
-    """Display all available profiles"""
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def profile_params_to_config_kwargs(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Translate profile field names to ReplayConfig field names.
+
+    Profiles use timing_model_params, parallel_processing, and worker_count.
+    ReplayConfig uses timing_params, parallel, and workers.
+    """
+    kwargs = dict(params)
+    if "timing_model_params" in kwargs:
+        kwargs["timing_params"] = kwargs.pop("timing_model_params")
+    if "parallel_processing" in kwargs:
+        kwargs["parallel"] = kwargs.pop("parallel_processing")
+    if "worker_count" in kwargs:
+        kwargs["workers"] = kwargs.pop("worker_count")
+    # "operation" is in both -- no translation needed.
+    return kwargs
+
+
+# ---------------------------------------------------------------------------
+# Display helpers
+# ---------------------------------------------------------------------------
+
+
+def show_available_profiles() -> None:
+    """Print all profiles with their descriptions."""
     print("\n" + "=" * 60)
-    print("Available Configuration Profiles")
+    print("Available configuration profiles")
     print("=" * 60)
     print()
-
-    profiles = get_available_profiles()
-    for name, description in profiles.items():
-        print(f"  - {name}")
+    for name, description in list_profiles().items():
+        print(f"  {name}")
         print(f"    {description}")
+    print()
+
+
+def show_profile_details(name: str) -> None:
+    """Print the parameter values stored in a profile."""
+    profile = PROFILES.get(name, {})
+    print(f"  Profile '{name}' parameters:")
+    for key, value in profile.items():
+        if key == "description":
+            continue
+        print(f"    {key}: {value}")
+    print()
+
+
+# ---------------------------------------------------------------------------
+# Simulation helpers
+# ---------------------------------------------------------------------------
+
+
+def run_with_profile(
+    profile_name: str,
+    source_dir: Path,
+    interval_override: float = 0.5,
+) -> None:
+    """Run a replay simulation using the named profile.
+
+    Args:
+        profile_name: A key from PROFILES.
+        source_dir: Path to the source FASTQ directory.
+        interval_override: Base interval to use (overrides profile default).
+    """
+    print(f"\n{'=' * 60}")
+    print(f"Profile: {profile_name}")
+    print(f"{'=' * 60}")
+
+    params = apply_profile(profile_name, overrides={"interval": interval_override})
+    kwargs = profile_params_to_config_kwargs(params)
+
+    # Ensure interval and monitor_type are present.
+    kwargs.setdefault("interval", interval_override)
+    kwargs.setdefault("monitor_type", "basic")
+
+    target_dir = Path(tempfile.mkdtemp(prefix=f"nanorunner_profile_{profile_name}_"))
+    try:
+        config = ReplayConfig(
+            source_dir=source_dir,
+            target_dir=target_dir,
+            **kwargs,
+        )
+        print(f"  timing_model: {config.timing_model}")
+        print(f"  batch_size:   {config.batch_size}")
+        print(f"  parallel:     {config.parallel}")
+        print(f"  workers:      {config.workers}")
         print()
 
-
-def run_with_profile(profile_name, description):
-    """Run simulation with specific profile"""
-    print("=" * 60)
-    print(f"Profile: {profile_name}")
-    print("=" * 60)
-    print(f"{description}")
-    print()
-
-    source_dir = Path("examples/sample_data/singleplex")
-    target_dir = Path(tempfile.gettempdir()) / f"nanorunner_profile_{profile_name}"
-
-    if target_dir.exists():
-        shutil.rmtree(target_dir)
-
-    # Create configuration from profile
-    config = create_config_from_profile(
-        profile_name=profile_name,
-        source_dir=source_dir,
-        target_dir=target_dir,
-        interval=1.0,  # Override base interval
-    )
-
-    # Display profile settings
-    print(f"Timing Model: {config.timing_model}")
-    print(f"Batch Size:   {config.batch_size}")
-    print(f"Parallel:     {config.parallel_processing}")
-    print(f"Workers:      {config.worker_count}")
-    print()
-
-    # Run simulation
-    simulator = NanoporeSimulator(config, enable_monitoring=True)
-    simulator.run_simulation()
-
-    print(f"\nOutput: {target_dir}\n")
+        run_replay(config)
+        produced = list(target_dir.rglob("*.fastq"))
+        print(f"  Produced {len(produced)} file(s).")
+    finally:
+        shutil.rmtree(target_dir, ignore_errors=True)
 
 
-def demonstrate_profile_override():
-    """Show how to override profile parameters"""
+def demonstrate_override(source_dir: Path) -> None:
+    """Show parameter override on the bursty profile."""
     print("\n" + "=" * 60)
-    print("Profile Override Example")
+    print("Profile override: bursty with custom parameters")
     print("=" * 60)
-    print("Customizing 'bursty' profile")
     print()
 
-    source_dir = Path("examples/sample_data/multiplex")
-    target_dir = Path(tempfile.gettempdir()) / "nanorunner_custom"
-
-    if target_dir.exists():
-        shutil.rmtree(target_dir)
-
-    # Start with bursty profile but customize it
-    config = create_config_from_profile(
-        profile_name="bursty",
-        source_dir=source_dir,
-        target_dir=target_dir,
-        interval=0.5,  # Override: faster intervals
-        worker_count=2,  # Override: fewer workers
-        batch_size=2,  # Override: smaller batches
-        operation="link",  # Override: use symlinks instead of copy
+    # Start from bursty but override several fields.
+    params = apply_profile(
+        "bursty",
+        overrides={
+            "interval": 0.3,
+            "worker_count": 2,
+            "batch_size": 2,
+        },
     )
+    kwargs = profile_params_to_config_kwargs(params)
+    kwargs.setdefault("monitor_type", "basic")
 
-    print("Customized Settings:")
-    print(f"  Interval:   {config.interval}s (overridden)")
-    print(f"  Workers:    {config.worker_count} (overridden)")
-    print(f"  Batch Size: {config.batch_size} (overridden)")
-    print(f"  Operation:  {config.operation} (overridden)")
+    print("  Overridden parameters:")
+    print(f"    interval:   {kwargs.get('interval')} s")
+    print(f"    workers:    {kwargs.get('workers')}")
+    print(f"    batch_size: {kwargs.get('batch_size')}")
     print()
 
-    simulator = NanoporeSimulator(config, enable_monitoring=True)
-    simulator.run_simulation()
+    target_dir = Path(tempfile.mkdtemp(prefix="nanorunner_profile_custom_"))
+    try:
+        config = ReplayConfig(
+            source_dir=source_dir,
+            target_dir=target_dir,
+            **kwargs,
+        )
+        run_replay(config)
+        produced = list(target_dir.rglob("*.fastq"))
+        print(f"  Produced {len(produced)} file(s).")
+    finally:
+        shutil.rmtree(target_dir, ignore_errors=True)
 
-    print(f"\nCustom output: {target_dir}\n")
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 
-def main():
+def main() -> int:
     print("=" * 60)
     print("Example 4: Configuration Profiles")
     print("=" * 60)
     print()
 
-    # List all profiles
-    list_all_profiles()
+    source_dir = Path(__file__).parent / "sample_data" / "singleplex"
+    if not source_dir.exists():
+        print(f"Error: sample data not found at {source_dir}")
+        print("Run this script from the repository root directory.")
+        return 1
 
-    # Demonstrate different profiles
-    run_with_profile(
-        profile_name="development",
-        description="Fast profile for development and testing",
-    )
+    show_available_profiles()
 
-    run_with_profile(
-        profile_name="steady",
-        description="Low-variation random timing for controlled testing",
-    )
+    run_with_profile("development", source_dir)
+    run_with_profile("steady", source_dir)
+    run_with_profile("bursty", source_dir)
 
-    run_with_profile(
-        profile_name="bursty",
-        description="Intermittent burst pattern for pipeline robustness testing",
-    )
+    demonstrate_override(source_dir)
 
-    # Show profile customization
-    demonstrate_profile_override()
-
-    # Summary
+    print()
     print("=" * 60)
-    print("Profile Summary")
+    print("Summary")
     print("=" * 60)
     print()
-    print("Profiles provide optimized parameter sets for:")
-    print("  - Development/testing workflows")
-    print("  - Controlled low-variation testing")
-    print("  - Burst-pattern robustness testing")
-    print("  - High-throughput stress testing")
-    print("  - Gradually drifting timing patterns")
+    print("  get_profile(name)        -- retrieve profile dict (or None)")
+    print("  apply_profile(name)      -- dict ready for config construction")
+    print("  apply_profile(name, {})  -- same with parameter overrides")
     print()
-    print("Benefits:")
-    print("  - Quick start with sensible defaults")
-    print("  - Consistent configuration across runs")
-    print("  - Easy to customize with overrides")
-    print("  - Each profile covers a distinct timing model")
-    print()
-
-    print("CLI usage:")
-    print("  nanorunner /source /target --profile bursty")
-    print("  nanorunner /source /target --profile steady --interval 3")
-    print()
-
-    # Cleanup
-    print("To clean up:")
-    print("  rm -rf /tmp/nanorunner_profile_* /tmp/nanorunner_custom")
+    print("  CLI equivalents:")
+    print("    nanorunner replay /src /dst --profile bursty")
+    print("    nanorunner replay /src /dst --profile steady --interval 3")
     print()
 
     return 0
@@ -181,10 +225,10 @@ def main():
 
 if __name__ == "__main__":
     try:
-        exit(main())
+        raise SystemExit(main())
     except KeyboardInterrupt:
         print("\nInterrupted by user")
-        exit(1)
-    except Exception as e:
-        print(f"\nError: {e}")
-        exit(1)
+        raise SystemExit(1)
+    except Exception as exc:
+        print(f"\nError: {exc}")
+        raise SystemExit(1)
