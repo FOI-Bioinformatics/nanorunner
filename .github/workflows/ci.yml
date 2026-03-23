@@ -42,3 +42,10 @@ jobs:
           black --check nanopore_simulator/ tests/
           flake8 nanopore_simulator/
           mypy nanopore_simulator/
+
+      - name: Security scan (Python 3.11 only)
+        if: matrix.python-version == '3.11'
+        run: |
+          pip install bandit pip-audit
+          bandit -r nanopore_simulator/ -c pyproject.toml || bandit -r nanopore_simulator/ -s B101
+          pip-audit

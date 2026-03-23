@@ -1,11 +1,18 @@
 """Tests for orchestration runner."""
 
+import signal
 from pathlib import Path
 
 import pytest
 
 from nanopore_simulator.config import GenerateConfig, ReplayConfig
-from nanopore_simulator.runner import run_generate, run_replay
+from nanopore_simulator.runner import (
+    _install_signal_handlers,
+    _restore_signal_handlers,
+    _signal_handler,
+    run_generate,
+    run_replay,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -315,3 +322,57 @@ class TestRunGenerateWithTiming:
         run_generate(config)
         output_files = list(target.glob("*.fastq"))
         assert len(output_files) == 3
+
+
+# ---------------------------------------------------------------------------
+# Signal handler install / restore
+# ---------------------------------------------------------------------------
+
+
+class TestSignalHandlers:
+    """Tests for _install_signal_handlers and _restore_signal_handlers."""
+
+    def test_install_returns_previous_handlers(self) -> None:
+        """_install_signal_handlers returns a dict mapping each handled signal
+        to the handler that was previously registered."""
+        previous = _install_signal_handlers()
+        try:
+            assert isinstance(previous, dict)
+            # Both SIGTERM and SIGHUP should be present (or fewer if the
+            # platform silently dropped one — the function swallows OSError).
+            for sig in previous:
+                assert isinstance(sig, signal.Signals)
+        finally:
+            _restore_signal_handlers(previous)
+
+    def test_install_replaces_handlers(self) -> None:
+        """After installation, SIGTERM and SIGHUP are mapped to _signal_handler."""
+        previous = _install_signal_handlers()
+        try:
+            for sig in (signal.SIGTERM, signal.SIGHUP):
+                try:
+                    current = signal.getsignal(sig)
+                    assert (
+                        current is _signal_handler
+                    ), f"Expected _signal_handler for {sig!r}, got {current!r}"
+                except (OSError, ValueError):
+                    # Signal not available on this platform — skip quietly.
+                    pass
+        finally:
+            _restore_signal_handlers(previous)
+
+    def test_restore_reinstates_previous_handlers(self) -> None:
+        """_restore_signal_handlers puts back the handlers saved before install."""
+        # Record what was there before the test interferes.
+        original_sigterm = signal.getsignal(signal.SIGTERM)
+
+        previous = _install_signal_handlers()
+        _restore_signal_handlers(previous)
+
+        restored = signal.getsignal(signal.SIGTERM)
+        assert restored is original_sigterm
+
+    def test_signal_handler_raises_keyboard_interrupt(self) -> None:
+        """_signal_handler converts SIGTERM to KeyboardInterrupt."""
+        with pytest.raises(KeyboardInterrupt, match="SIGTERM"):
+            _signal_handler(signal.SIGTERM, None)

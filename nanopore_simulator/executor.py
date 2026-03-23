@@ -132,9 +132,11 @@ def _generate_file(entry: FileEntry, generator: ReadGenerator) -> Path:
 def _rechunk_file(entry: FileEntry) -> Path:
     """Write a chunk of reads from source FASTQ files to the target.
 
-    Reads are drawn from the source files in order, skipping reads
-    that belong to earlier chunks and writing ``entry.read_count``
-    reads to the target path.
+    When ``entry.source_offset`` is set and ``entry.source`` points to
+    the correct source file, the function seeks directly to the byte
+    offset, avoiding the O(n) scan through earlier reads.  Otherwise
+    it falls back to the sequential skip approach for backwards
+    compatibility.
 
     Args:
         entry: A rechunk-mode FileEntry with ``source_files``,
@@ -143,26 +145,52 @@ def _rechunk_file(entry: FileEntry) -> Path:
     Returns:
         Path to the written output file.
     """
-    from nanopore_simulator.fastq import iter_reads, write_reads
+    from nanopore_simulator.fastq import (
+        iter_reads,
+        iter_reads_from_offset,
+        write_reads,
+    )
 
     if not entry.source_files:
         raise ValueError("rechunk operation requires source_files")
 
     reads_per_chunk = entry.read_count or 0
-    skip = entry.file_index * reads_per_chunk
 
-    collected = []
-    skipped = 0
-    for src in entry.source_files:
-        for record in iter_reads(src):
-            if skipped < skip:
-                skipped += 1
-                continue
+    if entry.source_offset is not None and entry.source is not None:
+        # Fast path: seek directly to the byte offset within the
+        # identified source file, then continue into subsequent
+        # source files if this chunk spans a file boundary.
+        collected = []
+        source_idx = entry.source_files.index(entry.source)
+        # Read from the offset in the starting source file
+        for record in iter_reads_from_offset(entry.source, entry.source_offset):
             collected.append(record)
             if len(collected) >= reads_per_chunk:
                 break
-        if len(collected) >= reads_per_chunk:
-            break
+        # Continue into subsequent source files if needed
+        if len(collected) < reads_per_chunk:
+            for src in entry.source_files[source_idx + 1 :]:
+                for record in iter_reads(src):
+                    collected.append(record)
+                    if len(collected) >= reads_per_chunk:
+                        break
+                if len(collected) >= reads_per_chunk:
+                    break
+    else:
+        # Fallback: skip reads sequentially (backwards-compatible)
+        skip = entry.file_index * reads_per_chunk
+        collected = []
+        skipped = 0
+        for src in entry.source_files:
+            for record in iter_reads(src):
+                if skipped < skip:
+                    skipped += 1
+                    continue
+                collected.append(record)
+                if len(collected) >= reads_per_chunk:
+                    break
+            if len(collected) >= reads_per_chunk:
+                break
 
     use_gz = str(entry.target).endswith(".gz")
     tmp_target = _atomic_tmp_path(entry.target)

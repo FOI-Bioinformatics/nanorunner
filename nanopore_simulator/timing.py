@@ -12,7 +12,7 @@ batch operations:
 
 import random
 from abc import ABC, abstractmethod
-from typing import Any, List
+from typing import Any, Callable, Dict, List
 
 
 class TimingModel(ABC):
@@ -154,6 +154,22 @@ class AdaptiveTimingModel(TimingModel):
         self.current_mean = self.base_interval
 
 
+_TIMING_REGISTRY: Dict[str, Callable[..., TimingModel]] = {
+    "uniform": lambda base, **kw: UniformTimingModel(base),
+    "random": lambda base, **kw: RandomTimingModel(base, kw.get("random_factor", 0.3)),
+    "poisson": lambda base, **kw: PoissonTimingModel(
+        base,
+        kw.get("burst_probability", 0.1),
+        kw.get("burst_rate_multiplier", 5.0),
+    ),
+    "adaptive": lambda base, **kw: AdaptiveTimingModel(
+        base,
+        kw.get("adaptation_rate", 0.1),
+        kw.get("history_size", 10),
+    ),
+}
+
+
 def create_timing_model(
     model_type: str, base_interval: float, **kwargs: Any
 ) -> TimingModel:
@@ -170,22 +186,7 @@ def create_timing_model(
     Raises:
         ValueError: If model_type is not recognized or base_interval < 0.
     """
-    model_type = model_type.lower()
-
-    if model_type == "uniform":
-        return UniformTimingModel(base_interval)
-    elif model_type == "random":
-        random_factor = kwargs.get("random_factor", 0.3)
-        return RandomTimingModel(base_interval, random_factor)
-    elif model_type == "poisson":
-        burst_probability = kwargs.get("burst_probability", 0.1)
-        burst_rate_multiplier = kwargs.get("burst_rate_multiplier", 5.0)
-        return PoissonTimingModel(
-            base_interval, burst_probability, burst_rate_multiplier
-        )
-    elif model_type == "adaptive":
-        adaptation_rate = kwargs.get("adaptation_rate", 0.1)
-        history_size = kwargs.get("history_size", 10)
-        return AdaptiveTimingModel(base_interval, adaptation_rate, history_size)
-    else:
+    factory = _TIMING_REGISTRY.get(model_type.lower())
+    if factory is None:
         raise ValueError(f"Unknown timing model type: {model_type}")
+    return factory(base_interval, **kwargs)

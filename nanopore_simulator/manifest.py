@@ -17,7 +17,7 @@ from nanopore_simulator.detection import (
     find_barcode_dirs,
     find_sequencing_files,
 )
-from nanopore_simulator.fastq import count_reads
+from nanopore_simulator.fastq import count_reads_with_offsets
 
 
 # -------------------------------------------------------------------
@@ -46,6 +46,10 @@ class FileEntry:
             (genome_path, read_count) tuples.
         source_files: For rechunk entries, ordered list of source FASTQ
             paths whose reads are pooled and re-distributed.
+        source_offset: For rechunk entries, byte offset into the
+            concatenated source stream where this chunk's reads begin.
+            When set, the executor can seek directly instead of
+            scanning and discarding earlier reads.
     """
 
     source: Optional[Path] = None
@@ -58,6 +62,7 @@ class FileEntry:
     barcode: Optional[str] = None
     mixed_genome_reads: Optional[List[tuple]] = None
     source_files: Optional[List[Path]] = None
+    source_offset: Optional[int] = None
 
 
 # -------------------------------------------------------------------
@@ -231,9 +236,12 @@ def _rechunk_entries(
 ) -> List[FileEntry]:
     """Replace raw entries with rechunked entries.
 
-    Reads are counted in each source FASTQ, then output entries are
-    planned with ``reads_per_output`` reads each.  Non-FASTQ files
-    (e.g. POD5) are passed through as-is.
+    Reads are counted in each source FASTQ while simultaneously
+    recording byte offsets at chunk boundaries.  Output entries are
+    planned with ``reads_per_output`` reads each and carry a
+    ``source_offset`` so the executor can seek directly to the
+    correct position instead of scanning earlier reads.  Non-FASTQ
+    files (e.g. POD5) are passed through as-is.
     """
     rpf = config.reads_per_output
     assert rpf is not None
@@ -256,8 +264,8 @@ def _rechunk_entries(
                 "other_entries": [],
             }
         if entry.source is not None and _is_fastq_file(entry.source):
-            read_count = count_reads(entry.source)
-            groups[bc]["fastq_files"].append((entry.source, read_count))
+            read_count, offsets = count_reads_with_offsets(entry.source, rpf)
+            groups[bc]["fastq_files"].append((entry.source, read_count, offsets))
         else:
             groups[bc]["other_entries"].append(entry)
 
@@ -270,7 +278,7 @@ def _rechunk_entries(
         rechunked.extend(grp["other_entries"])
 
         # Plan rechunked output files
-        total_reads = sum(c for _, c in grp["fastq_files"])
+        total_reads = sum(c for _, c, _ in grp["fastq_files"])
         if total_reads == 0:
             continue
 
@@ -280,23 +288,79 @@ def _rechunk_entries(
         stem = _fastq_stem(first_source) if first_source else "reads"
 
         # Collect ordered source paths for the rechunk entries.
-        source_paths = [src for src, _ in grp["fastq_files"]]
+        source_paths = [src for src, _, _ in grp["fastq_files"]]
+
+        # Build a global chunk-to-(source_file_index, byte_offset) map.
+        # Each source file contributes ceil(file_reads / rpf) chunks
+        # worth of offsets.  We flatten them into a single list aligned
+        # with the output chunk indices.
+        chunk_offsets = _build_chunk_offsets(grp["fastq_files"], rpf)
 
         for chunk_idx in range(n_output):
+            src_file_idx, byte_offset = chunk_offsets.get(chunk_idx, (0, None))
             filename = f"{stem}_chunk_{chunk_idx:04d}{ext}"
             rechunked.append(
                 FileEntry(
-                    source=None,
+                    source=(
+                        source_paths[src_file_idx] if byte_offset is not None else None
+                    ),
                     target=target_dir / filename,
                     operation="rechunk",
                     barcode=bc,
                     read_count=min(rpf, total_reads - chunk_idx * rpf),
                     file_index=chunk_idx,
                     source_files=source_paths,
+                    source_offset=byte_offset,
                 )
             )
 
     return rechunked
+
+
+def _build_chunk_offsets(fastq_files: list, rpf: int) -> dict:
+    """Map global chunk indices to (source_file_index, byte_offset).
+
+    Given the per-file read counts and per-file offset lists produced
+    by ``count_reads_with_offsets``, this computes a mapping from each
+    output chunk index to the source file index and the byte offset
+    within that file where reading should begin.
+
+    When a chunk boundary falls inside a source file at a position
+    that was recorded by ``count_reads_with_offsets``, the offset is
+    stored directly.  When the boundary falls at a non-aligned
+    position within a file (because the file boundary did not align
+    with the chunk boundary), no offset is stored for that chunk and
+    the executor falls back to sequential skipping.
+
+    Args:
+        fastq_files: List of (path, read_count, offsets) tuples.
+        rpf: Reads per output file (chunk size).
+
+    Returns:
+        Dict mapping chunk_idx -> (source_file_index, byte_offset).
+    """
+    mapping: dict = {}
+    cumulative_reads = 0
+
+    for file_idx, (_, file_reads, file_offsets) in enumerate(fastq_files):
+        # file_offsets[k] is the byte offset where read (k * rpf)
+        # starts within this file.
+        for local_chunk_idx, byte_offset in enumerate(file_offsets):
+            local_read_start = local_chunk_idx * rpf
+            if local_read_start >= file_reads:
+                break
+            global_read_start = cumulative_reads + local_read_start
+            global_chunk_idx = global_read_start // rpf
+
+            # Only store if the global chunk starts exactly at this
+            # local boundary (i.e. cumulative reads are chunk-aligned).
+            if global_read_start == global_chunk_idx * rpf:
+                if global_chunk_idx not in mapping:
+                    mapping[global_chunk_idx] = (file_idx, byte_offset)
+
+        cumulative_reads += file_reads
+
+    return mapping
 
 
 # -------------------------------------------------------------------

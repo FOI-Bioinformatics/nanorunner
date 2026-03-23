@@ -8,12 +8,16 @@ for speed and rely on tmp_path fixtures.
 
 import gzip
 import os
+import threading
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
 
 from nanopore_simulator.cli import app
+from nanopore_simulator.config import ReplayConfig
+from nanopore_simulator.runner import run_replay
 
 runner = CliRunner()
 
@@ -1053,3 +1057,78 @@ class TestErrorHandling:
             ],
         )
         assert result.exit_code != 0
+
+
+# -------------------------------------------------------------------
+# Interrupt recovery
+# -------------------------------------------------------------------
+
+
+@pytest.mark.slow
+class TestInterruptRecovery:
+    """Verify that interrupting a simulation leaves no orphaned .tmp files."""
+
+    def test_no_orphaned_tmp_files_after_keyboard_interrupt(
+        self, tmp_path: Path
+    ) -> None:
+        """When run_replay raises KeyboardInterrupt the cleanup path in
+        _execute_manifest runs and removes any partially written .tmp files."""
+
+        # Build a source directory with several files so the simulation
+        # has work to do before the interrupt fires.
+        source = tmp_path / "source"
+        source.mkdir()
+        for i in range(10):
+            (source / f"reads_{i:02d}.fastq").write_text(
+                f"@read{i}\nACGTACGT\n+\nIIIIIIII\n"
+            )
+
+        target = tmp_path / "target"
+        target.mkdir()
+
+        # Place a stale .tmp file in the target to confirm the cleanup routine
+        # removes pre-existing orphans as well.
+        stale_tmp = target / ".stale_reads.fastq.tmp"
+        stale_tmp.touch()
+
+        config = ReplayConfig(
+            source_dir=source,
+            target_dir=target,
+            operation="copy",
+            interval=0.0,
+            monitor_type="none",
+        )
+
+        # Inject a KeyboardInterrupt mid-execution by patching execute_entry so
+        # that the first call succeeds and the second raises.
+        call_count = {"n": 0}
+        from nanopore_simulator import executor as _executor_mod
+
+        real_execute_entry = _executor_mod.execute_entry
+
+        def _interrupting_execute(entry, generator=None):  # type: ignore[no-untyped-def]
+            call_count["n"] += 1
+            if call_count["n"] == 2:
+                raise KeyboardInterrupt("test interrupt")
+            return real_execute_entry(entry, generator)
+
+        with patch(
+            "nanopore_simulator.runner.execute_entry",
+            side_effect=_interrupting_execute,
+        ):
+            with pytest.raises(KeyboardInterrupt):
+                run_replay(config)
+
+        # No .tmp files should remain -- both the stale pre-existing one and any
+        # created by a partial copy must have been removed by _cleanup_tmp_files.
+        remaining_tmp = list(target.rglob("*.tmp"))
+        assert (
+            remaining_tmp == []
+        ), f"Orphaned .tmp files found after interrupt: {remaining_tmp}"
+
+        # The target directory itself must still exist and be in a consistent
+        # state (any files that completed before the interrupt are present).
+        assert target.exists()
+        completed_files = list(target.glob("*.fastq"))
+        # At least the first file should have been written successfully.
+        assert len(completed_files) >= 1

@@ -46,6 +46,53 @@ def count_reads(path: Path) -> int:
     return line_count // 4
 
 
+def count_reads_with_offsets(path: Path, chunk_size: int) -> Tuple[int, List[int]]:
+    """Count reads and record byte offsets at chunk boundaries.
+
+    Iterates through the FASTQ file once, counting reads and recording
+    the byte offset at every ``chunk_size`` reads.  The offsets list
+    contains one entry per chunk boundary (including offset 0 for the
+    first chunk).
+
+    For gzip files the offsets represent decompressed-stream positions.
+    Since gzip does not support random access, the executor falls back
+    to sequential reading for compressed files regardless of offsets.
+
+    Args:
+        path: Path to a .fastq or .fastq.gz file.
+        chunk_size: Number of reads per chunk.
+
+    Returns:
+        A (read_count, offsets) tuple.  ``offsets[i]`` is the byte
+        offset where chunk *i* begins.
+
+    Raises:
+        ValueError: If the line count is not a multiple of 4.
+    """
+    is_gz = str(path).endswith(".gz")
+    open_fn = gzip.open if is_gz else open
+    mode = "rt" if is_gz else "r"
+
+    offsets: List[int] = [0]
+    read_count = 0
+
+    with open_fn(path, mode) as fh:
+        while True:
+            if read_count > 0 and read_count % chunk_size == 0:
+                offsets.append(fh.tell())
+            header = fh.readline()
+            if not header:
+                break
+            fh.readline()  # sequence
+            fh.readline()  # separator
+            qual = fh.readline()
+            if not qual:
+                break
+            read_count += 1
+
+    return read_count, offsets
+
+
 def iter_reads(path: Path) -> Iterator[Tuple[str, str, str, str]]:
     """Yield FASTQ records as (header, sequence, separator, quality) tuples.
 
@@ -62,6 +109,49 @@ def iter_reads(path: Path) -> Iterator[Tuple[str, str, str, str]]:
     mode = "rt" if str(path).endswith(".gz") else "r"
 
     with open_fn(path, mode) as fh:
+        while True:
+            header = fh.readline()
+            if not header:
+                break
+            seq = fh.readline()
+            sep = fh.readline()
+            qual = fh.readline()
+            if not qual:
+                break
+            yield (
+                str(header).rstrip("\n\r"),
+                str(seq).rstrip("\n\r"),
+                str(sep).rstrip("\n\r"),
+                str(qual).rstrip("\n\r"),
+            )
+
+
+def iter_reads_from_offset(
+    path: Path, offset: int
+) -> Iterator[Tuple[str, str, str, str]]:
+    """Yield FASTQ records starting from a byte offset.
+
+    Identical to ``iter_reads`` but seeks to *offset* before reading.
+    For plain-text files this avoids scanning reads that precede the
+    desired position.  For gzip files the decompressor must still
+    process the stream sequentially, but the caller can use the offset
+    recorded during manifest building to seek within the decompressed
+    stream.
+
+    Args:
+        path: Path to a .fastq or .fastq.gz file.
+        offset: Byte offset (in the text stream) to seek to.
+
+    Yields:
+        4-tuples of stripped lines for each read.
+    """
+    is_gz = str(path).endswith(".gz")
+    open_fn = gzip.open if is_gz else open
+    mode = "rt" if is_gz else "r"
+
+    with open_fn(path, mode) as fh:
+        if offset > 0:
+            fh.seek(offset)
         while True:
             header = fh.readline()
             if not header:

@@ -18,7 +18,12 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, runtime_checkable
+
+try:
+    from typing import Protocol
+except ImportError:  # Python 3.7
+    from typing_extensions import Protocol  # type: ignore[assignment]
 
 # Optional dependency for enhanced resource monitoring.
 try:
@@ -107,6 +112,30 @@ class SimulationMetrics:
         if el <= 0 or self.files_processed == 0:
             return 0.0
         return self.files_processed / el
+
+
+# -------------------------------------------------------------------
+# Monitor protocol
+# -------------------------------------------------------------------
+
+
+@runtime_checkable
+class Monitor(Protocol):
+    """Structural interface shared by ProgressMonitor and NullMonitor."""
+
+    def start(self) -> None: ...
+
+    def stop(self) -> None: ...
+
+    def update(self, *, bytes_delta: int = 0) -> None: ...
+
+    def get_metrics(self) -> SimulationMetrics: ...
+
+    def pause(self) -> None: ...
+
+    def resume(self) -> None: ...
+
+    def is_paused(self) -> bool: ...
 
 
 # -------------------------------------------------------------------
@@ -342,9 +371,7 @@ class NullMonitor:
 # -------------------------------------------------------------------
 
 
-def create_monitor(
-    monitor_type: str, *, total_files: int, **kwargs: Any
-) -> "ProgressMonitor":
+def create_monitor(monitor_type: str, *, total_files: int, **kwargs: Any) -> Monitor:
     """Create a progress monitor by type name.
 
     Args:
@@ -353,11 +380,11 @@ def create_monitor(
         **kwargs: Additional keyword arguments forwarded to ProgressMonitor.
 
     Returns:
-        A ProgressMonitor or NullMonitor instance.
+        A Monitor-compatible instance (ProgressMonitor or NullMonitor).
     """
     mt = monitor_type.lower()
     if mt == "none":
-        return NullMonitor()  # type: ignore[return-value]
+        return NullMonitor()
     if mt == "enhanced":
         kwargs.setdefault("enable_resources", True)
         kwargs.setdefault("update_interval", 0.5)

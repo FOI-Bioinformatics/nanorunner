@@ -33,8 +33,7 @@ from nanopore_simulator.manifest import (
     build_replay_manifest,
 )
 from nanopore_simulator.monitoring import (
-    NullMonitor,
-    ProgressMonitor,
+    Monitor,
     create_monitor,
     format_bytes,
 )
@@ -307,7 +306,7 @@ def _group_by_batch(manifest: List[FileEntry]) -> List[List[FileEntry]]:
 def _execute_batch_sequential(
     batch: List[FileEntry],
     generator: Optional[ReadGenerator],
-    monitor: Union[ProgressMonitor, "NullMonitor"],
+    monitor: Monitor,
 ) -> None:
     """Process a batch of entries sequentially."""
     for entry in batch:
@@ -315,25 +314,28 @@ def _execute_batch_sequential(
         _record_progress(result, monitor)
 
 
+_OPERATION_TIMEOUT = 600  # seconds per file operation
+
+
 def _execute_batch_parallel(
     batch: List[FileEntry],
     generator: Optional[ReadGenerator],
     workers: int,
-    monitor: Union[ProgressMonitor, "NullMonitor"],
+    monitor: Monitor,
 ) -> None:
     """Process a batch of entries in parallel using threads."""
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
             pool.submit(execute_entry, entry, generator): entry for entry in batch
         }
-        for future in as_completed(futures):
+        for future in as_completed(futures, timeout=_OPERATION_TIMEOUT):
             result = future.result()
             _record_progress(result, monitor)
 
 
 def _record_progress(
     result_path: Path,
-    monitor: Union[ProgressMonitor, "NullMonitor"],
+    monitor: Monitor,
 ) -> None:
     """Record a completed file in the monitor."""
     try:

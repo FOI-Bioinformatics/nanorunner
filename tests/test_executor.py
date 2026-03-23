@@ -1,10 +1,12 @@
 """Tests for file executor (do phase)."""
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from nanopore_simulator.executor import execute_entry
+from nanopore_simulator.fastq import atomic_tmp_path
 from nanopore_simulator.generators import (
     BuiltinGenerator,
     GeneratorConfig,
@@ -92,6 +94,37 @@ class TestCopyOperation:
         )
         with pytest.raises(FileNotFoundError, match="Source file not found"):
             execute_entry(entry)
+
+    def test_copy_atomic_rollback_on_error(
+        self, source_file: Path, tmp_path: Path
+    ) -> None:
+        """The .tmp file is removed and the target is not created when shutil.copy2 raises."""
+        target = tmp_path / "target" / "reads.fastq"
+        target.parent.mkdir(parents=True, exist_ok=True)
+
+        # Determine the expected .tmp path so we can verify it is cleaned up.
+        tmp_target = atomic_tmp_path(target)
+
+        # Patch shutil.copy2 to create the .tmp file then raise OSError,
+        # simulating a disk-full or permission failure mid-copy.
+        def _failing_copy2(src: object, dst: object) -> None:
+            # Materialise the tmp file before raising, matching the real failure
+            # scenario where partial data has been written.
+            Path(str(dst)).touch()
+            raise OSError("Simulated disk error")
+
+        with patch(
+            "nanopore_simulator.executor.shutil.copy2", side_effect=_failing_copy2
+        ):
+            with pytest.raises(OSError, match="Simulated disk error"):
+                execute_entry(
+                    FileEntry(source=source_file, target=target, operation="copy")
+                )
+
+        # The .tmp file must have been unlinked by the BaseException handler.
+        assert not tmp_target.exists(), ".tmp file was not cleaned up after failure"
+        # The final target must not have been created.
+        assert not target.exists(), "Target file was created despite copy failure"
 
 
 # ---------------------------------------------------------------------------

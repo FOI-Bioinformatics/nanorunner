@@ -24,7 +24,7 @@ import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     import numpy as np
@@ -309,12 +309,13 @@ class BuiltinGenerator(ReadGenerator):
         actual_reads = (
             num_reads if num_reads is not None else self.config.reads_per_file
         )
-        reads = self._sample_reads(full_seq, genome, actual_reads)
 
         use_gz = output_path.suffix == ".gz"
         tmp_path = _atomic_tmp_path(output_path)
         try:
-            self._write_fastq(reads, tmp_path, compress=use_gz)
+            self._write_reads_streaming(
+                full_seq, genome, actual_reads, tmp_path, use_gz
+            )
             tmp_path.rename(output_path)
         except BaseException:
             if tmp_path.exists():
@@ -430,6 +431,145 @@ class BuiltinGenerator(ReadGenerator):
             reads.append((read_id, seq, quals))
 
         return reads
+
+    # -- Streaming write --------------------------------------------
+
+    def _write_reads_streaming(
+        self,
+        genome_seq: str,
+        genome: GenomeInput,
+        num_reads: int,
+        output_path: Path,
+        compress: bool,
+    ) -> None:
+        """Generate reads and write each directly to file.
+
+        Instead of accumulating all reads in a list and joining them into
+        a single string, this method writes each FASTQ record to the
+        output handle as it is generated.  This reduces peak memory
+        usage from O(total_bases) to O(longest_read).
+
+        Both numpy-accelerated and stdlib fallback paths are supported.
+        """
+        genome_len = len(genome_seq)
+        stem = genome.fasta_path.stem
+        mean_len = self.config.mean_read_length
+        std_len = self.config.std_read_length
+        mean_q = self.config.mean_quality
+        std_q = self.config.std_quality
+
+        # Log-normal parameters
+        if std_len > 0:
+            variance = std_len**2
+            mu = math.log(mean_len**2 / math.sqrt(variance + mean_len**2))
+            sigma = math.sqrt(math.log(1 + variance / mean_len**2))
+        else:
+            mu = math.log(mean_len)
+            sigma = 0.0
+
+        if compress:
+            fh = gzip.open(output_path, "wt", compresslevel=1)
+        else:
+            fh = open(output_path, "w")
+
+        with fh:
+            if self._np_rng is not None:
+                self._stream_reads_numpy(
+                    fh,
+                    genome_seq,
+                    genome_len,
+                    stem,
+                    num_reads,
+                    mu,
+                    sigma,
+                    mean_q,
+                    std_q,
+                )
+            else:
+                self._stream_reads_stdlib(
+                    fh,
+                    genome_seq,
+                    genome_len,
+                    stem,
+                    num_reads,
+                    mu,
+                    sigma,
+                    mean_q,
+                    std_q,
+                )
+
+    def _stream_reads_numpy(
+        self,
+        fh: Any,
+        genome_seq: str,
+        genome_len: int,
+        stem: str,
+        num_reads: int,
+        mu: float,
+        sigma: float,
+        mean_q: float,
+        std_q: float,
+    ) -> None:
+        """Stream reads to *fh* using numpy for random value generation."""
+        assert self._np_rng is not None
+        rng = self._np_rng.spawn(1)[0]
+        min_len = self.config.min_read_length
+
+        # Batch-generate read lengths
+        if sigma > 0:
+            raw_lengths = rng.lognormal(mu, sigma, num_reads)
+            lengths = np.clip(raw_lengths.astype(int), min_len, genome_len)
+        else:
+            lengths = np.full(num_reads, min(self.config.mean_read_length, genome_len))
+
+        # Batch-generate RC decisions
+        rc_flags = rng.random(num_reads) < 0.5
+
+        for i in range(num_reads):
+            read_len = int(lengths[i])
+            max_start = max(0, genome_len - read_len)
+            start = int(rng.integers(0, max_start + 1)) if max_start > 0 else 0
+            seq = genome_seq[start : start + read_len]
+
+            if rc_flags[i]:
+                seq = self._reverse_complement(seq)
+
+            quals = _generate_quality_string_numpy(rng, mean_q, std_q, len(seq))
+            fh.write(f"@{stem}_read_{i}\n{seq}\n+\n{quals}\n")
+
+    def _stream_reads_stdlib(
+        self,
+        fh: Any,
+        genome_seq: str,
+        genome_len: int,
+        stem: str,
+        num_reads: int,
+        mu: float,
+        sigma: float,
+        mean_q: float,
+        std_q: float,
+    ) -> None:
+        """Stream reads to *fh* using the standard library."""
+        min_len = self.config.min_read_length
+        mean_len = self.config.mean_read_length
+
+        for i in range(num_reads):
+            if sigma > 0:
+                read_len = int(random.lognormvariate(mu, sigma))
+            else:
+                read_len = mean_len
+            read_len = max(min_len, read_len)
+            read_len = min(read_len, genome_len)
+
+            max_start = max(0, genome_len - read_len)
+            start = random.randint(0, max_start) if max_start > 0 else 0
+            seq = genome_seq[start : start + read_len]
+
+            if random.random() < 0.5:
+                seq = self._reverse_complement(seq)
+
+            quals = self._generate_quality_string(len(seq))
+            fh.write(f"@{stem}_read_{i}\n{seq}\n+\n{quals}\n")
 
     # -- Helpers ----------------------------------------------------
 

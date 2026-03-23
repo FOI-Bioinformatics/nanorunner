@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from nanopore_simulator.monitoring import (
+    Monitor,
     NullMonitor,
     ProgressMonitor,
     SimulationMetrics,
@@ -240,6 +241,20 @@ class TestNullMonitor:
 # ---------------------------------------------------------------------------
 # create_monitor factory
 # ---------------------------------------------------------------------------
+
+
+class TestMonitorProtocol:
+    """Verify that concrete monitors satisfy the runtime-checkable Monitor protocol."""
+
+    def test_progress_monitor_is_monitor(self) -> None:
+        """ProgressMonitor must be an instance of the Monitor protocol."""
+        mon = ProgressMonitor(total_files=10)
+        assert isinstance(mon, Monitor)
+
+    def test_null_monitor_is_monitor(self) -> None:
+        """NullMonitor must be an instance of the Monitor protocol."""
+        mon = NullMonitor()
+        assert isinstance(mon, Monitor)
 
 
 class TestCreateMonitor:
