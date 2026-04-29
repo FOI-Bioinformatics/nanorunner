@@ -41,11 +41,18 @@ class TestDetectStructure:
         (source / "reads.fastq.gz").write_bytes(b"")
         assert detect_structure(source) == "singleplex"
 
-    def test_pod5_files_detected(self, tmp_path):
+    def test_pod5_files_no_longer_detected(self, tmp_path):
+        """POD5 was dropped from the supported extension set; a
+        directory containing only POD5 files now raises the
+        no-sequencing-files error rather than detecting as singleplex.
+        """
+        import pytest as _pytest
+
         source = tmp_path / "source"
         source.mkdir()
         (source / "reads.pod5").write_bytes(b"")
-        assert detect_structure(source) == "singleplex"
+        with _pytest.raises(ValueError, match="No sequencing files"):
+            detect_structure(source)
 
 
 class TestFindSequencingFiles:

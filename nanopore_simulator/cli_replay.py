@@ -32,7 +32,7 @@ def replay(
         ...,
         "--source",
         "-s",
-        help="Source directory containing FASTQ/POD5 files.",
+        help="Source directory containing FASTQ files.",
         exists=True,
         file_okay=False,
         resolve_path=True,
@@ -147,7 +147,7 @@ def replay(
         rich_help_panel="Monitoring",
     ),
 ) -> None:
-    """Replay existing FASTQ/POD5 files with configurable timing."""
+    """Replay existing FASTQ files with configurable timing."""
     if no_wait:
         interval = 0.0
 

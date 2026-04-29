@@ -17,7 +17,7 @@ _BARCODE_PATTERNS = [
     r"^unclassified$",
 ]
 
-_SUPPORTED_EXTENSIONS = {".fastq", ".fq", ".fastq.gz", ".fq.gz", ".pod5"}
+_SUPPORTED_EXTENSIONS = {".fastq", ".fq", ".fastq.gz", ".fq.gz"}
 
 
 def detect_structure(source_dir: Path) -> str:
@@ -51,7 +51,7 @@ def detect_structure(source_dir: Path) -> str:
 
 
 def find_sequencing_files(directory: Path) -> List[Path]:
-    """Find sequencing files (FASTQ/POD5) in a directory.
+    """Find sequencing files (FASTQ) in a directory.
 
     Only searches the immediate directory, not subdirectories.
 

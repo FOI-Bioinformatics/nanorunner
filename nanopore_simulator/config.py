@@ -22,7 +22,6 @@ _DEFAULT_FILE_EXTENSIONS: Tuple[str, ...] = (
     ".fq",
     ".fastq.gz",
     ".fq.gz",
-    ".pod5",
 )
 
 

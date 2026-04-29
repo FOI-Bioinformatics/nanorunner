@@ -240,9 +240,14 @@ def _rechunk_entries(
     recording byte offsets at chunk boundaries.  Output entries are
     planned with ``reads_per_output`` reads each and carry a
     ``source_offset`` so the executor can seek directly to the
-    correct position instead of scanning earlier reads.  Non-FASTQ
-    files (e.g. POD5) are passed through as-is.
+    correct position instead of scanning earlier reads.
+
+    Chunks are interleaved round-robin across barcodes so that each
+    batch interval advances all barcodes together rather than finishing
+    one barcode before starting the next.
     """
+    from itertools import zip_longest
+
     rpf = config.reads_per_output
     assert rpf is not None
 
@@ -270,16 +275,23 @@ def _rechunk_entries(
             groups[bc]["other_entries"].append(entry)
 
     rechunked: List[FileEntry] = []
+
+    # Non-FASTQ files pass through first (order preserved per barcode)
+    for bc in barcode_order:
+        rechunked.extend(groups[bc]["other_entries"])
+
+    # Build per-barcode chunk lists, then interleave round-robin so that
+    # batch assignment spreads chunks across barcodes rather than
+    # exhausting one barcode before starting the next.
+    per_barcode_chunks: List[List[FileEntry]] = []
     for bc in barcode_order:
         grp = groups[bc]
         target_dir = grp["target_dir"]
+        bc_chunks: List[FileEntry] = []
 
-        # Non-FASTQ files pass through
-        rechunked.extend(grp["other_entries"])
-
-        # Plan rechunked output files
         total_reads = sum(c for _, c, _ in grp["fastq_files"])
         if total_reads == 0:
+            per_barcode_chunks.append(bc_chunks)
             continue
 
         n_output = math.ceil(total_reads / rpf)
@@ -291,15 +303,12 @@ def _rechunk_entries(
         source_paths = [src for src, _, _ in grp["fastq_files"]]
 
         # Build a global chunk-to-(source_file_index, byte_offset) map.
-        # Each source file contributes ceil(file_reads / rpf) chunks
-        # worth of offsets.  We flatten them into a single list aligned
-        # with the output chunk indices.
         chunk_offsets = _build_chunk_offsets(grp["fastq_files"], rpf)
 
         for chunk_idx in range(n_output):
             src_file_idx, byte_offset = chunk_offsets.get(chunk_idx, (0, None))
             filename = f"{stem}_chunk_{chunk_idx:04d}{ext}"
-            rechunked.append(
+            bc_chunks.append(
                 FileEntry(
                     source=(
                         source_paths[src_file_idx] if byte_offset is not None else None
@@ -313,6 +322,14 @@ def _rechunk_entries(
                     source_offset=byte_offset,
                 )
             )
+
+        per_barcode_chunks.append(bc_chunks)
+
+    # Interleave: bc01_chunk0, bc02_chunk0, ..., bc01_chunk1, bc02_chunk1, ...
+    for group in zip_longest(*per_barcode_chunks):
+        for entry in group:
+            if entry is not None:
+                rechunked.append(entry)
 
     return rechunked
 

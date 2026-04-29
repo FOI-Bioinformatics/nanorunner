@@ -124,7 +124,8 @@ class TestReplayConfig:
         assert ".fq" in cfg.file_extensions
         assert ".fastq.gz" in cfg.file_extensions
         assert ".fq.gz" in cfg.file_extensions
-        assert ".pod5" in cfg.file_extensions
+        # POD5 was dropped to align with the FASTQ-only product.
+        assert ".pod5" not in cfg.file_extensions
 
     def test_custom_file_extensions(self, tmp_path):
         source = tmp_path / "source"
