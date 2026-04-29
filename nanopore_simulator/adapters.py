@@ -23,7 +23,6 @@ ADAPTERS: Dict[str, Dict[str, Any]] = {
             "*.fq",
             "*.fastq.gz",
             "*.fq.gz",
-            "*.pod5",
         ],
     },
     "kraken": {

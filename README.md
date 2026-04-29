@@ -7,7 +7,7 @@
 
 NanoRunner is a Python tool for testing nanopore sequencing analysis pipelines. It operates in two modes:
 
-- **Replay mode**: Transfers existing FASTQ and POD5 files from a source directory to a target directory with configurable timing, replicating the temporal characteristics of a real sequencing run.
+- **Replay mode**: Transfers existing FASTQ files from a source directory to a target directory with configurable timing, replicating the temporal characteristics of a real sequencing run.
 - **Generate mode**: Produces simulated nanopore FASTQ reads from genome FASTA files, delivering them incrementally with the same timing models.
 
 Both modes support singleplex and multiplex (barcoded) output structures, multiple timing models, parallel processing, and real-time monitoring. The output is compatible with downstream pipelines such as Nanometa Live and Kraken.
@@ -17,7 +17,7 @@ Both modes support singleplex and multiplex (barcoded) output structures, multip
 ### Core Capabilities
 - **Two operation modes**: Replay existing sequencing files or generate simulated reads from genomes
 - **Automated structure detection**: Recognition of singleplex and multiplex experimental designs through directory analysis
-- **Multi-format file support**: FASTQ files (`.fastq`, `.fq`, `.fastq.gz`, `.fq.gz`), POD5 signal files (`.pod5`), and genome FASTA files (`.fa`, `.fasta`, gzipped variants)
+- **Multi-format file support**: FASTQ files (`.fastq`, `.fq`, `.fastq.gz`, `.fq.gz`) and genome FASTA files (`.fa`, `.fasta`, gzipped variants) for generate mode
 - **Timing models**: Four temporal simulation approaches (uniform, random, Poisson, adaptive)
 - **Parallel processing**: Concurrent file operations with configurable worker threads
 - **Configuration profiles**: Pre-defined parameter sets for common sequencing and generation scenarios
@@ -345,7 +345,7 @@ Files located directly within the source directory represent single-sample exper
 source_dir/
 ├── sample1.fastq
 ├── sample2.fastq.gz
-└── sample3.pod5
+└── sample3.fastq.gz
 ```
 
 ### Multiplex Configuration

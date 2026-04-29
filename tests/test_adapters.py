@@ -28,17 +28,14 @@ class TestAdaptersRegistry:
         patterns = ADAPTERS["nanometa"]["patterns"]
         assert "*.fastq" in patterns
         assert "*.fastq.gz" in patterns
-        assert "*.pod5" in patterns
+        # nanorunner is FASTQ-only; POD5 was dropped to align with the
+        # nanometa_live + nanometanf product direction.
+        assert "*.pod5" not in patterns
 
     def test_kraken_has_patterns(self) -> None:
         patterns = ADAPTERS["kraken"]["patterns"]
         assert "*.fastq" in patterns
         assert "*.fastq.gz" in patterns
-
-    def test_kraken_no_pod5(self) -> None:
-        """Kraken does not accept POD5 files."""
-        patterns = ADAPTERS["kraken"]["patterns"]
-        assert "*.pod5" not in patterns
 
 
 class TestValidateOutput:
@@ -91,10 +88,13 @@ class TestValidateOutput:
         issues = validate_output(Path("/tmp/does_not_exist_xyz"), "nanometa")
         assert len(issues) > 0
 
-    def test_pod5_accepted_by_nanometa(self, tmp_path: Path) -> None:
+    def test_pod5_no_longer_accepted(self, tmp_path: Path) -> None:
+        """nanorunner dropped POD5 support to align with the FASTQ-only
+        nanometa_live + nanometanf product. A directory with only .pod5
+        files should now be flagged as missing valid sequencing data."""
         (tmp_path / "data.pod5").write_text("")
         issues = validate_output(tmp_path, "nanometa")
-        assert issues == []
+        assert len(issues) > 0
 
     def test_wrong_extensions_flagged(self, tmp_path: Path) -> None:
         """Files that do not match any pattern should produce issues."""

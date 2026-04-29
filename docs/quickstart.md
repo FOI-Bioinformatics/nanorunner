@@ -31,7 +31,7 @@ nanorunner check-deps
 
 ## 2. Replay Mode - Replaying Existing Files
 
-Transfer existing FASTQ/POD5 files from a source directory to a target directory with controlled timing.
+Transfer existing FASTQ files from a source directory to a target directory with controlled timing.
 
 ### Your First Simulation
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is `nanorunner` - a nanopore sequencing run simulator designed for testing bioinformatics pipelines. It operates in two modes: **replay mode** transfers existing FASTQ/POD5 files with configurable timing, while **generate mode** produces simulated nanopore reads from genome FASTA files. Both modes support multiple timing models (uniform, random, Poisson, adaptive), parallel processing, configuration profiles, pipeline-specific adapters, and progress monitoring with resource tracking.
+This is `nanorunner` - a nanopore sequencing run simulator designed for testing bioinformatics pipelines. It operates in two modes: **replay mode** transfers existing FASTQ files with configurable timing, while **generate mode** produces simulated nanopore reads from genome FASTA files. Both modes support multiple timing models (uniform, random, Poisson, adaptive), parallel processing, configuration profiles, pipeline-specific adapters, and progress monitoring with resource tracking.
 
 ## Project Standards
 
@@ -240,7 +240,7 @@ Flat layout -- all source modules in `nanopore_simulator/` with no subdirectorie
 - Backward-compatible alias: `nanometanf` -> `nanometa`
 
 ### Supported File Types
-- **Replay mode input**: `.fastq`, `.fq`, `.fastq.gz`, `.fq.gz`, `.pod5`
+- **Replay mode input**: `.fastq`, `.fq`, `.fastq.gz`, `.fq.gz`
 - **Generate mode input**: `.fa`, `.fasta`, `.fa.gz`, `.fasta.gz` (genome FASTA files)
 - **Generate mode output**: `.fastq`, `.fastq.gz`
 

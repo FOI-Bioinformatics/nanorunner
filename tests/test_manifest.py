@@ -350,9 +350,12 @@ class TestBuildReplayManifestRechunk:
         assert rechunk_entries[0].read_count == 3
         assert rechunk_entries[1].read_count == 1
 
-    def test_rechunk_preserves_pod5(self, tmp_path: Path) -> None:
-        """POD5 files should pass through unchanged during rechunking."""
-        source = tmp_path / "source_pod5"
+    def test_rechunk_ignores_unrecognized_files(self, tmp_path: Path) -> None:
+        """Files outside the supported FASTQ extension set (e.g. POD5,
+        which nanorunner dropped along with the upstream product) are
+        not picked up by the manifest builder. Only the FASTQ inputs
+        produce rechunk entries."""
+        source = tmp_path / "source_mixed"
         source.mkdir()
         (source / "reads.fastq").write_text("@r1\nACGT\n+\nIIII\n@r2\nTTTT\n+\nIIII\n")
         (source / "signal.pod5").write_bytes(b"\x00" * 10)
@@ -365,11 +368,45 @@ class TestBuildReplayManifestRechunk:
             monitor_type="none",
         )
         manifest = build_replay_manifest(config)
-        pod5_entries = [e for e in manifest if e.operation == "copy"]
+        pod5_entries = [
+            e for e in manifest
+            if e.operation == "copy" and e.source.suffix == ".pod5"
+        ]
         rechunk_entries = [e for e in manifest if e.operation == "rechunk"]
-        assert len(pod5_entries) == 1
-        assert pod5_entries[0].source.name == "signal.pod5"
+        assert pod5_entries == []
+        # The two FASTQ reads still rechunk into two output entries.
         assert len(rechunk_entries) == 2
+
+    def test_rechunk_multiplex_interleaved(self, tmp_path: Path) -> None:
+        """Multiplex rechunk entries must be interleaved round-robin across barcodes.
+
+        With two barcodes each having 2 reads and reads_per_output=1 the
+        manifest should alternate: bc01_chunk0, bc02_chunk0, bc01_chunk1,
+        bc02_chunk1 -- not all bc01 chunks followed by all bc02 chunks.
+        """
+        source = tmp_path / "source"
+        source.mkdir()
+        for bc in ("barcode01", "barcode02"):
+            bc_dir = source / bc
+            bc_dir.mkdir()
+            (bc_dir / "reads.fastq").write_text(
+                "@r1\nACGT\n+\nIIII\n@r2\nTTTT\n+\nIIII\n"
+            )
+        target = tmp_path / "target"
+        config = ReplayConfig(
+            source_dir=source,
+            target_dir=target,
+            operation="copy",
+            reads_per_output=1,
+            monitor_type="none",
+        )
+        manifest = build_replay_manifest(config)
+        rechunk_entries = [e for e in manifest if e.operation == "rechunk"]
+        # 2 barcodes x 2 reads x 1 read/chunk = 4 entries
+        assert len(rechunk_entries) == 4
+        barcodes = [e.barcode for e in rechunk_entries]
+        # Round-robin: bc01, bc02, bc01, bc02
+        assert barcodes == ["barcode01", "barcode02", "barcode01", "barcode02"]
 
 
 # ---------------------------------------------------------------------------
