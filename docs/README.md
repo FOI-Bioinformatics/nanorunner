@@ -38,8 +38,9 @@ Comprehensive guides and references for the NanoRunner nanopore sequencing simul
 - **[Testing Guide](testing.md)**: Comprehensive guide covering test categories, running tests, organization, and contributing
 
 ### Current Status
-- **Test Count**: 722 tests across 18 test files
-- **Coverage**: 92% on core components
+- **Test Count**: 729 tests across 18 test files
+- **Coverage**: 88% on core components (below the 90% pytest.ini
+  threshold; raise coverage on `cli_helpers.py` to clear it).
 
 ## Quick Links
 
