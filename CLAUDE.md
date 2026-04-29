@@ -273,8 +273,9 @@ Flat layout -- all source modules in `nanopore_simulator/` with no subdirectorie
 - `conftest.py`: Shared fixtures (sample_fasta, source directories)
 
 **Coverage Standards:**
-- Minimum coverage threshold: 90%
-- 722 tests across 18 test files
+- Minimum coverage threshold: 90% (set in `pytest.ini`)
+- Currently 729 tests across 18 test files; coverage is 88%, below
+  the threshold. The largest gap is `cli_helpers.py` at 55%.
 - Comprehensive integration testing with multiple timing models and configurations
 
 ## Integration Context

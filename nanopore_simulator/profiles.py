@@ -9,16 +9,6 @@ just data and functions.
 from typing import Any, Dict, List, Optional
 
 
-# Generate-mode field names. Replay profiles omit these entirely.
-_GENERATE_FIELDS = (
-    "read_count",
-    "mean_read_length",
-    "mean_quality",
-    "reads_per_file",
-    "output_format",
-    "generator_backend",
-)
-
 # ---------------------------------------------------------------------------
 # Built-in profiles
 # ---------------------------------------------------------------------------

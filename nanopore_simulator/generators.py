@@ -38,23 +38,6 @@ from nanopore_simulator.fastq import atomic_tmp_path as _atomic_tmp_path
 logger = logging.getLogger(__name__)
 
 
-# Module-level genome cache for ProcessPoolExecutor workers.
-# Populated by _init_worker_genomes() which is passed as the
-# ``initializer`` argument when the pool is created, so each worker
-# process receives pre-parsed genome data without redundant I/O.
-_WORKER_GENOME_CACHE: Dict[str, str] = {}
-
-
-def _init_worker_genomes(genome_data: Dict[str, str]) -> None:
-    """Initializer for ProcessPoolExecutor workers.
-
-    Pre-populates the module-level genome cache so that workers can
-    skip redundant FASTA parsing.
-    """
-    global _WORKER_GENOME_CACHE
-    _WORKER_GENOME_CACHE = genome_data
-
-
 # -------------------------------------------------------------------
 # Quality string helpers
 # -------------------------------------------------------------------
@@ -596,32 +579,6 @@ class BuiltinGenerator(ReadGenerator):
             q = max(0, min(40, q))
             quals.append(chr(int(q) + 33))
         return "".join(quals)
-
-    def _write_fastq(
-        self,
-        reads: List[Tuple[str, str, str]],
-        output_path: Path,
-        compress: Optional[bool] = None,
-    ) -> None:
-        """Write reads to a FASTQ file (plain or gzipped).
-
-        Args:
-            reads: List of (read_id, sequence, quality) tuples.
-            output_path: Destination file path.
-            compress: Force gzip compression. If None, infer from suffix.
-        """
-        use_gz = compress if compress is not None else output_path.suffix == ".gz"
-        if use_gz:
-            fh = gzip.open(output_path, "wt", compresslevel=1)
-        else:
-            fh = open(output_path, "w")
-        with fh:
-            fh.write(
-                "".join(
-                    f"@{read_id}\n{seq}\n+\n{quals}\n" for read_id, seq, quals in reads
-                )
-            )
-
 
 # -------------------------------------------------------------------
 # Subprocess generator (badread / nanosim)

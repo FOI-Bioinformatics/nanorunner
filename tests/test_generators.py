@@ -594,24 +594,3 @@ class TestDetectAvailableBackends:
             assert result["nanosim"] is False
 
 
-# ---------------------------------------------------------------------------
-# Worker genome cache
-# ---------------------------------------------------------------------------
-
-
-class TestWorkerGenomeCache:
-    """Module-level worker genome cache for ProcessPoolExecutor."""
-
-    def test_init_worker_genomes(self) -> None:
-        from nanopore_simulator.generators import (
-            _WORKER_GENOME_CACHE,
-            _init_worker_genomes,
-        )
-
-        _init_worker_genomes({"test": "ACGT"})
-        # Import again to check the module-level variable was set
-        from nanopore_simulator import generators
-
-        assert generators._WORKER_GENOME_CACHE.get("test") == "ACGT"
-        # Clean up
-        _init_worker_genomes({})
