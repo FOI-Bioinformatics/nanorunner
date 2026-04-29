@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
-"""Entry point script for nanopore-simulator"""
+"""Entry point script for nanopore-simulator.
+
+The package's preferred entry point is the ``nanorunner`` console
+script generated from ``[project.scripts]`` in pyproject.toml. This
+``bin/`` shim exists for sdist consumers who invoke the file path
+directly (it is shipped via MANIFEST.in's ``recursive-include bin
+*``). The earlier import path
+``from nanopore_simulator.cli.main import main`` was wrong because
+``cli`` is a module not a package -- running the script raised
+``ModuleNotFoundError: 'nanopore_simulator.cli' is not a package``.
+"""
 
 import sys
-from nanopore_simulator.cli.main import main
+from nanopore_simulator.cli import main
 
 if __name__ == "__main__":
     sys.exit(main())
