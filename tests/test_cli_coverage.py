@@ -10,7 +10,8 @@ from unittest.mock import MagicMock, patch, PropertyMock
 import pytest
 from typer.testing import CliRunner
 
-from nanopore_simulator.cli import app, _resolve_monitor, MonitorLevel
+from nanopore_simulator.cli import app, MonitorLevel
+from nanopore_simulator.cli_helpers import _resolve_monitor
 
 runner = CliRunner()
 

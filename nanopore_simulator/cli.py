@@ -131,17 +131,3 @@ if __name__ == "__main__":
 # -------------------------------------------------------------------
 
 from nanopore_simulator import cli_replay, cli_generate, cli_utils  # noqa: F401,E402
-
-# Re-export helpers so that existing imports of the form
-#   from nanopore_simulator.cli import _resolve_monitor, _build_timing_params
-# continue to work without modification.
-from nanopore_simulator.cli_helpers import (  # noqa: F401,E402
-    _build_timing_params,
-    _resolve_monitor,
-    _validate_timing_params,
-    _expand_genome_paths,
-    _find_genome_files,
-    _resolve_and_download_genomes,
-    _run_pipeline_validation,
-    _GENOME_EXTENSIONS,
-)

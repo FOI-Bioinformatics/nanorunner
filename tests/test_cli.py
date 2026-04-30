@@ -952,17 +952,20 @@ class TestMonitorLevelResolution:
     """Verify the _resolve_monitor helper function."""
 
     def test_quiet_returns_none(self):
-        from nanopore_simulator.cli import _resolve_monitor, MonitorLevel
+        from nanopore_simulator.cli import MonitorLevel
+        from nanopore_simulator.cli_helpers import _resolve_monitor
 
         assert _resolve_monitor(MonitorLevel.default, True) == "none"
 
     def test_none_returns_none(self):
-        from nanopore_simulator.cli import _resolve_monitor, MonitorLevel
+        from nanopore_simulator.cli import MonitorLevel
+        from nanopore_simulator.cli_helpers import _resolve_monitor
 
         assert _resolve_monitor(MonitorLevel.none, False) == "none"
 
     def test_default_returns_basic(self):
-        from nanopore_simulator.cli import _resolve_monitor, MonitorLevel
+        from nanopore_simulator.cli import MonitorLevel
+        from nanopore_simulator.cli_helpers import _resolve_monitor
 
         assert _resolve_monitor(MonitorLevel.default, False) == "basic"
 
@@ -970,7 +973,8 @@ class TestMonitorLevelResolution:
         """Enhanced without psutil should fall back to basic."""
         import unittest.mock
 
-        from nanopore_simulator.cli import _resolve_monitor, MonitorLevel
+        from nanopore_simulator.cli import MonitorLevel
+        from nanopore_simulator.cli_helpers import _resolve_monitor
 
         with unittest.mock.patch.dict("sys.modules", {"psutil": None}):
             result = _resolve_monitor(MonitorLevel.enhanced, False)
@@ -986,13 +990,13 @@ class TestBuildTimingParams:
     """Verify _build_timing_params helper."""
 
     def test_all_none_returns_empty(self):
-        from nanopore_simulator.cli import _build_timing_params
+        from nanopore_simulator.cli_helpers import _build_timing_params
 
         result = _build_timing_params(None, None, None, None, None)
         assert result == {}
 
     def test_collects_provided_values(self):
-        from nanopore_simulator.cli import _build_timing_params
+        from nanopore_simulator.cli_helpers import _build_timing_params
 
         result = _build_timing_params(0.1, 3.0, 0.5, 0.2, 10)
         assert result == {
@@ -1004,7 +1008,7 @@ class TestBuildTimingParams:
         }
 
     def test_partial_values(self):
-        from nanopore_simulator.cli import _build_timing_params
+        from nanopore_simulator.cli_helpers import _build_timing_params
 
         result = _build_timing_params(None, None, 0.3, None, None)
         assert result == {"random_factor": 0.3}
