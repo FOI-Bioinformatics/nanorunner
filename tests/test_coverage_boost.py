@@ -217,10 +217,6 @@ class TestNullMonitor:
         m = NullMonitor()
         m.start()
         m.update(bytes_delta=100)
-        m.pause()
-        m.resume()
-        m.wait_if_paused(timeout=0.01)
-        assert not m.is_paused()
         metrics = m.get_metrics()
         assert isinstance(metrics, SimulationMetrics)
         m.stop()
@@ -256,14 +252,6 @@ class TestProgressMonitorEta:
         time.sleep(0.15)
         mon.stop()
         assert callback.call_count >= 1
-
-    def test_pause_and_resume(self) -> None:
-        mon = ProgressMonitor(10, enable_resources=False)
-        mon.pause()
-        assert mon.is_paused()
-        mon.resume()
-        assert not mon.is_paused()
-
 
 class TestCreateMonitor:
     """Tests for the monitor factory function."""

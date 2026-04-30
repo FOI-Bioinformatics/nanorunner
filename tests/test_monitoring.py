@@ -116,14 +116,6 @@ class TestProgressMonitor:
         metrics = mon.get_metrics()
         assert metrics.eta_seconds == 0.0
 
-    def test_pause_and_resume(self) -> None:
-        mon = ProgressMonitor(total_files=10)
-        assert not mon.is_paused()
-        mon.pause()
-        assert mon.is_paused()
-        mon.resume()
-        assert not mon.is_paused()
-
     def test_get_metrics_returns_copy(self) -> None:
         mon = ProgressMonitor(total_files=10)
         mon.update()
@@ -202,9 +194,6 @@ class TestNullMonitor:
         assert hasattr(mon, "stop")
         assert hasattr(mon, "update")
         assert hasattr(mon, "get_metrics")
-        assert hasattr(mon, "pause")
-        assert hasattr(mon, "resume")
-        assert hasattr(mon, "is_paused")
 
     def test_start_stop_no_ops(self) -> None:
         mon = NullMonitor()
@@ -224,13 +213,6 @@ class TestNullMonitor:
         metrics = mon.get_metrics()
         assert isinstance(metrics, SimulationMetrics)
         assert metrics.files_total == 0
-
-    def test_pause_resume_no_ops(self) -> None:
-        mon = NullMonitor()
-        mon.pause()
-        assert not mon.is_paused()
-        mon.resume()
-        assert not mon.is_paused()
 
     def test_estimate_eta_always_none(self) -> None:
         mon = NullMonitor()

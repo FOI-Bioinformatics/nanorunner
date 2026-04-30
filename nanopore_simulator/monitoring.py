@@ -1,8 +1,8 @@
 """Progress monitoring and performance metrics for simulations.
 
 Provides thread-safe progress tracking, optional resource monitoring
-(CPU/memory via psutil), pause/resume, and a NullMonitor that
-implements the same interface as a no-op.
+(CPU/memory via psutil), and a NullMonitor that implements the same
+interface as a no-op.
 
 Usage::
 
@@ -131,12 +131,6 @@ class Monitor(Protocol):
 
     def get_metrics(self) -> SimulationMetrics: ...
 
-    def pause(self) -> None: ...
-
-    def resume(self) -> None: ...
-
-    def is_paused(self) -> bool: ...
-
 
 # -------------------------------------------------------------------
 # Resource monitor (optional psutil)
@@ -205,10 +199,6 @@ class ProgressMonitor:
         # Resource collector
         self._resource_collector = _ResourceCollector() if enable_resources else None
 
-        # Pause / resume
-        self._paused = threading.Event()
-        self._paused.set()  # Start unpaused
-
         # Background update thread
         self._stop_event = threading.Event()
         self._update_thread: Optional[threading.Thread] = None
@@ -260,26 +250,6 @@ class ProgressMonitor:
             )
         return m
 
-    # -- Pause / resume ---------------------------------------------
-
-    def pause(self) -> None:
-        """Pause the simulation (workers should call wait_if_paused)."""
-        self._paused.clear()
-        logger.info("Simulation paused")
-
-    def resume(self) -> None:
-        """Resume the simulation."""
-        self._paused.set()
-        logger.info("Simulation resumed")
-
-    def is_paused(self) -> bool:
-        """Return True if the simulation is currently paused."""
-        return not self._paused.is_set()
-
-    def wait_if_paused(self, timeout: Optional[float] = None) -> None:
-        """Block until the simulation is resumed."""
-        self._paused.wait(timeout)
-
     # -- ETA --------------------------------------------------------
 
     def _estimate_eta(self) -> Optional[float]:
@@ -310,7 +280,6 @@ class ProgressMonitor:
     def _update_loop(self) -> None:
         """Periodic background update: resources and display callback."""
         while not self._stop_event.wait(self._update_interval):
-            self._paused.wait()
             if self._stop_event.is_set():
                 break
 
@@ -352,18 +321,6 @@ class NullMonitor:
 
     def get_metrics(self) -> SimulationMetrics:
         return SimulationMetrics()
-
-    def pause(self) -> None:
-        pass
-
-    def resume(self) -> None:
-        pass
-
-    def is_paused(self) -> bool:
-        return False
-
-    def wait_if_paused(self, timeout: Optional[float] = None) -> None:
-        pass
 
 
 # -------------------------------------------------------------------

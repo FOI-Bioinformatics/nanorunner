@@ -33,8 +33,7 @@ Both modes support singleplex and multiplex (barcoded) output structures, multip
 ### Monitoring and Control
 - **Real-time progress tracking**: Live monitoring with predictive ETA calculation and performance trend analysis
 - **Resource utilization monitoring**: CPU, memory, and disk I/O tracking with automatic performance warnings
-- **Interactive controls**: Pause/resume functionality with graceful shutdown handling
-- **Checkpoint system**: Automatic progress preservation for recovery from interruptions
+- **Graceful shutdown**: Ctrl+C cleanly stops in-flight workers and emits a summary
 
 ### Pipeline Integration
 - **Multi-pipeline support**: Built-in adapters for Nanometa Live, Kraken, and generic workflows
@@ -378,8 +377,6 @@ Supported naming conventions for automatic multiplex detection:
 
 ### Interactive Controls
 - **Ctrl+C**: Graceful shutdown with summary statistics
-- **Pause/Resume**: Process control during long simulations
-- **Automatic checkpointing**: Progress preservation every 10 files
 
 ## Pipeline Integration
 
