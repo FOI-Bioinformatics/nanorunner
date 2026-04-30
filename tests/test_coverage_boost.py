@@ -470,7 +470,7 @@ class TestDepsEdgeCases:
         source.mkdir()
         (source / "r.fastq").write_text("@r1\nACGT\n+\nIIII\n")
         with patch.dict("sys.modules", {"psutil": None}):
-            with patch("nanopore_simulator.cli._resolve_monitor") as mock_resolve:
+            with patch("nanopore_simulator.cli_helpers._resolve_monitor") as mock_resolve:
                 mock_resolve.return_value = "basic"
                 result = runner.invoke(
                     app,
