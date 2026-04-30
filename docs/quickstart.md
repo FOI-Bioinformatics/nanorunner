@@ -296,8 +296,6 @@ nanorunner replay -s /data/source -t /watch/output --monitor enhanced
 ### Interactive Controls
 
 - **Ctrl+C**: Graceful shutdown with summary
-- **Pause/Resume**: Available in enhanced mode
-- **Automatic checkpoints**: Progress saved every 10 files
 
 ---
 
