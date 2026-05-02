@@ -21,6 +21,16 @@ from types import FrameType
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from nanopore_simulator.config import GenerateConfig, ReplayConfig
+
+
+class EmptySourceError(RuntimeError):
+    """Raised when a manifest is empty -- nothing to replay or generate.
+
+    Distinguishes a legitimate "I forgot to point --source somewhere"
+    operator mistake from internal failures, so the CLI can present a
+    targeted message and exit with a non-zero code rather than the
+    pre-2026-05-02 silent-return behaviour that defeated CI pipelines.
+    """
 from nanopore_simulator.executor import execute_entry
 from nanopore_simulator.generators import (
     GeneratorConfig,
@@ -184,8 +194,16 @@ def run_replay(config: ReplayConfig) -> None:
     """
     manifest = build_replay_manifest(config)
     if not manifest:
-        logger.info("No files found in source directory")
-        return
+        # Pre-2026-05-02 this returned silently with INFO-level logging,
+        # which defeated CI pipelines that check $? -- a forgotten
+        # --source pointing at the wrong directory looked exactly like
+        # a successful run with nothing to do. Raising lets cli_replay
+        # surface a targeted message and exit with code 1.
+        raise EmptySourceError(
+            f"No FASTQ files found in source directory: {config.source_dir}. "
+            f"Check the path and that files match the expected pattern "
+            f"(*.fastq, *.fq, *.fastq.gz, *.fq.gz)."
+        )
 
     logger.info("Replay manifest: %d files", len(manifest))
     _execute_manifest(manifest, config)
@@ -202,8 +220,13 @@ def run_generate(config: GenerateConfig) -> None:
     """
     manifest = build_generate_manifest(config)
     if not manifest:
-        logger.info("No genomes to generate from")
-        return
+        # Same rationale as run_replay: silent zero-exit on an empty
+        # manifest is hostile to CI. Raise so the CLI exits with a
+        # non-zero code and a clear message.
+        raise EmptySourceError(
+            "No genomes available to generate from. Provide at least "
+            "one of --genomes, --species, --mock, or --taxid."
+        )
 
     gen_config = GeneratorConfig(
         num_reads=config.read_count,
