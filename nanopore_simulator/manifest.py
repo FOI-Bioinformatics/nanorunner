@@ -296,8 +296,14 @@ def _rechunk_entries(
 
         n_output = math.ceil(total_reads / rpf)
         first_source = grp["fastq_files"][0][0] if grp["fastq_files"] else None
+        # `ext` (gzip vs plain) is the same across the whole barcode
+        # group because all sources are FASTQ-shaped; the chunk
+        # filename stem, however, must follow whichever source
+        # contributed the chunk's reads -- using only the first
+        # source's stem makes operator-visible output look like one
+        # giant input ran. See docs/audit-2026-05-02-nanorunner-and-compat.md
+        # finding §1.4.
         ext = _get_fastq_extension(first_source) if first_source else ".fastq"
-        stem = _fastq_stem(first_source) if first_source else "reads"
 
         # Collect ordered source paths for the rechunk entries.
         source_paths = [src for src, _, _ in grp["fastq_files"]]
@@ -307,6 +313,12 @@ def _rechunk_entries(
 
         for chunk_idx in range(n_output):
             src_file_idx, byte_offset = chunk_offsets.get(chunk_idx, (0, None))
+            # Stem comes from the chunk's actual source, not the
+            # alphabetically-first source.
+            chunk_source = (
+                source_paths[src_file_idx] if byte_offset is not None else first_source
+            )
+            stem = _fastq_stem(chunk_source) if chunk_source else "reads"
             filename = f"{stem}_chunk_{chunk_idx:04d}{ext}"
             bc_chunks.append(
                 FileEntry(
