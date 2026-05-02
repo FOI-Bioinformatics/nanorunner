@@ -22,7 +22,7 @@ from nanopore_simulator.cli_helpers import (
     _validate_timing_params,
 )
 from nanopore_simulator.config import ReplayConfig
-from nanopore_simulator.runner import run_replay
+from nanopore_simulator.runner import EmptySourceError, run_replay
 
 
 @app.command()
@@ -229,6 +229,11 @@ def replay(
     except KeyboardInterrupt:
         typer.echo("\nSimulation interrupted by user", err=True)
         raise typer.Exit(code=1)
+    except EmptySourceError as exc:
+        # Distinct exit code (3) for "operator mistake" vs (1) generic
+        # error so CI pipelines can branch on the cause if needed.
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=3)
     except Exception as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)

@@ -182,11 +182,21 @@ class TestRunReplayParallel:
 
 
 class TestRunReplayEmpty:
-    """Tests for empty source directory."""
+    """Tests for empty source directory.
 
-    def test_empty_completes_without_error(
+    Pre-2026-05-02 the runner returned silently with INFO-level
+    logging on an empty source -- a forgotten --source pointing at
+    the wrong directory looked exactly like a successful no-op,
+    which defeated CI pipelines checking $?. The audit followup F6
+    flagged this; the runner now raises EmptySourceError so the CLI
+    can exit with a non-zero code and a clear message.
+    """
+
+    def test_empty_source_raises(
         self, empty_source: Path, tmp_path: Path
     ) -> None:
+        from nanopore_simulator.runner import EmptySourceError
+
         target = tmp_path / "target"
         config = ReplayConfig(
             source_dir=empty_source,
@@ -194,8 +204,11 @@ class TestRunReplayEmpty:
             interval=0.0,
             monitor_type="none",
         )
-        # Should not raise
-        run_replay(config)
+        with pytest.raises(EmptySourceError) as excinfo:
+            run_replay(config)
+        # Message names the offending source dir so the operator
+        # knows which path was wrong.
+        assert str(empty_source) in str(excinfo.value)
 
 
 # ---------------------------------------------------------------------------
