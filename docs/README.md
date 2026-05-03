@@ -12,6 +12,12 @@ Reference material for the NanoRunner nanopore sequencing run simulator.
 - [Sample data](../examples/sample_data/) -- small FASTQ files for
   experimentation
 
+## Integration walkthroughs
+
+- [Quick start with Nanometa Live](https://github.com/FOI-Bioinformatics/nanometa_live/blob/main/docs/quickstart-with-nanorunner.md)
+  -- end-to-end demo driving Nanometa Live (and the nanometanf Nextflow
+  backend) with simulated reads from nanorunner
+
 ## Developer documentation
 
 - [CLAUDE.md](../CLAUDE.md) -- architecture and contributor notes
