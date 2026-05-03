@@ -1,92 +1,53 @@
-# NanoRunner Documentation
+# NanoRunner documentation
 
-Comprehensive guides and references for the NanoRunner nanopore sequencing simulator.
+Reference material for the NanoRunner nanopore sequencing run simulator.
 
-## Table of Contents
+## User documentation
 
-- [User Guides](#user-guides)
-- [Developer Documentation](#developer-documentation)
-- [Testing Documentation](#testing-documentation)
-- [Quick Links](#quick-links)
+- [Quick start](quickstart.md) -- installation and first simulation
+- [Troubleshooting](troubleshooting.md) -- installation and runtime issues
+- [Main README](../README.md) -- feature overview, examples, and CLI reference
+- [Examples](../examples/) -- working scripts for timing models, profiles,
+  parallel processing, and pipeline integration
+- [Sample data](../examples/sample_data/) -- small FASTQ files for
+  experimentation
 
-## User Guides
+## Developer documentation
 
-### Getting Started
-- **[Quick Start Guide](quickstart.md)**: Step-by-step setup and first simulation
-- **[Troubleshooting Guide](troubleshooting.md)**: Solutions for common installation and runtime issues
-- **[Main README](../README.md)**: Complete feature documentation, examples, and usage
+- [CLAUDE.md](../CLAUDE.md) -- architecture and contributor notes
+- [CONTRIBUTING.md](../CONTRIBUTING.md) -- contribution workflow
+- [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) -- community standards
+- [Testing guide](testing.md) -- test categories, running tests, and
+  contribution conventions
 
-### Working Examples
-- **[Examples Directory](../examples/)**: Working code demonstrating timing models, profiles, and pipeline integration
-- **[Sample Data](../examples/sample_data/)**: Test FASTQ files for immediate experimentation
-
-## Developer Documentation
-
-### Development Setup
-- **[CLAUDE.md](../CLAUDE.md)**: Developer guide for AI assistants and contributors
-- **[CONTRIBUTING.md](../CONTRIBUTING.md)**: Contribution guidelines and development workflow
-- **[CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md)**: Community standards and expectations
-
-### Architecture & Design
-- **Core Components**: See [CLAUDE.md - Architecture](../CLAUDE.md#architecture)
-- **Timing Models**: Uniform, Random, Poisson, Adaptive implementations
-- **Pipeline Adapters**: Framework for Nanometa Live, Kraken, and custom pipeline integration
-
-## Testing Documentation
-
-### Test Suite Overview
-- **[Testing Guide](testing.md)**: Comprehensive guide covering test categories, running tests, organization, and contributing
-
-### Current Status
-- **Test Count**: 729 tests across 18 test files
-- **Coverage**: 88% on core components (below the 90% pytest.ini
-  threshold; raise coverage on `cli_helpers.py` to clear it).
-
-## Quick Links
-
-### For First-Time Users
-1. [Quick Start Guide](quickstart.md) - Get running in 5 minutes
-2. [Main README](../README.md) - Full feature documentation
-3. [Examples](../examples/) - Working code samples
-
-### For Developers
-1. [CLAUDE.md](../CLAUDE.md) - Development guidelines
-2. [Testing Guide](testing.md) - How to run and write tests
-3. [CONTRIBUTING.md](../CONTRIBUTING.md) - Contribution workflow
-
-### For Troubleshooting
-1. [Troubleshooting Guide](troubleshooting.md) - Common issues
-2. [GitHub Issues](https://github.com/FOI-Bioinformatics/nanorunner/issues) - Report problems
-3. [GitHub Discussions](https://github.com/FOI-Bioinformatics/nanorunner/discussions) - Ask questions
-
-## Documentation Structure
+## Repository layout
 
 ```
 nanorunner/
-├── README.md                       # Main user documentation
-├── CLAUDE.md                       # Developer guide
-├── CONTRIBUTING.md                 # Contribution guidelines
-├── CODE_OF_CONDUCT.md              # Community standards
-├── CHANGELOG.md                    # Version history
-├── docs/
-│   ├── README.md                   # This file - documentation index
-│   ├── quickstart.md               # Quick start guide
-│   ├── troubleshooting.md          # Common issues and solutions
-│   └── testing.md                  # Comprehensive testing guide
-└── examples/
-    ├── README.md                   # Examples overview
-    ├── 01_basic_simulation.py
-    ├── 02_timing_models.py
-    ├── 03_parallel_processing.py
-    ├── 04_configuration_profiles.py
-    ├── 05_pipeline_integration.py
-    ├── 06_practical_genome_test.py
-    └── sample_data/                # Test FASTQ files
+|-- README.md                       Main user documentation
+|-- CLAUDE.md                       Developer guide
+|-- CONTRIBUTING.md                 Contribution guidelines
+|-- CODE_OF_CONDUCT.md              Community standards
+|-- CHANGELOG.md                    Version history
+|-- docs/
+|   |-- README.md                   This file
+|   |-- quickstart.md
+|   |-- troubleshooting.md
+|   `-- testing.md
+`-- examples/
+    |-- README.md
+    |-- 01_basic_simulation.py
+    |-- 02_timing_models.py
+    |-- 03_parallel_processing.py
+    |-- 04_configuration_profiles.py
+    |-- 05_pipeline_integration.py
+    |-- 06_practical_genome_test.py
+    `-- sample_data/
 ```
 
-## Version Information
+## Version
 
-- **Current Version**: 3.0.0
-- **Python Requirement**: 3.9+
-- **Status**: Production/Stable
-- **Last Updated**: 2026-03-23
+- **Current version**: 3.0.0
+- **Python requirement**: 3.9 or later
+- **Test suite**: 729 tests across 18 files; 88% coverage (the 90% threshold
+  in `pytest.ini` is currently exceeded only by the gap in `cli_helpers.py`)

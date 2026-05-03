@@ -1,6 +1,6 @@
 # NanoRunner Troubleshooting Guide
 
-Comprehensive guide to diagnosing and resolving common issues.
+Diagnosing and resolving common issues.
 
 ## Installation Issues
 
@@ -218,13 +218,13 @@ nanorunner replay -s /source -t /target --parallel --worker-count 8
 # Reduce interval
 nanorunner replay -s /source -t /target --interval 0.5
 
-# Use uniform timing (fastest)
+# Use uniform timing (lowest per-interval overhead)
 nanorunner replay -s /source -t /target --timing-model uniform
 
-# Use symlinks for faster operations
+# Use symlinks instead of copies
 nanorunner replay -s /source -t /target --operation link
 
-# Use optimized profile
+# Use the high-throughput profile
 nanorunner replay -s /source -t /target --profile high_throughput
 ```
 
@@ -587,12 +587,7 @@ Include:
 
 ### Q: Can I pause and resume a simulation?
 
-**A**: Yes, with enhanced monitoring:
-```bash
-nanorunner replay -s /source -t /target --monitor enhanced
-# Press Ctrl+C for graceful shutdown
-# Progress is automatically checkpointed every 10 files
-```
+**A**: No. Pause/resume and checkpointing are not implemented. Use `Ctrl+C` for graceful shutdown; restart from the beginning, or run on a subset of source files.
 
 ### Q: How do I simulate very fast sequencing (< 1 second)?
 
@@ -616,7 +611,7 @@ nanorunner replay -s /source -t /target --monitor none --quiet
 
 ### Q: Can I resume an interrupted simulation?
 
-**A**: Not automatically, but checkpoints show progress. Manually skip already-processed files or clean target and restart.
+**A**: There is no automatic resume. Either remove already-delivered files from the source list (e.g., by pointing replay at a directory containing only the remaining files), or clear the target and restart.
 
 ---
 

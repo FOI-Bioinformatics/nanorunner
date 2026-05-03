@@ -1,8 +1,10 @@
 # NanoRunner Quick Start Guide
 
-Get up and running with NanoRunner.
+This guide walks through installation, the two run modes (replay and generate), timing models, and pipeline integration.
 
 ## 1. Installation
+
+NanoRunner requires Python 3.9 or newer. A conda environment is recommended.
 
 ### Install from GitHub
 
@@ -10,7 +12,7 @@ Get up and running with NanoRunner.
 # Latest stable release
 pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v3.0.0
 
-# With enhanced monitoring (optional but recommended)
+# With resource monitoring extras (psutil)
 pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@v3.0.0"
 ```
 
@@ -234,7 +236,7 @@ Use `nanorunner list-mocks` for complete details on all 15 communities and alias
 
 ## 5. Using Configuration Profiles
 
-Profiles provide optimized parameter sets for common scenarios.
+Profiles bundle parameter sets for common scenarios.
 
 ### List Available Profiles
 
@@ -254,7 +256,7 @@ nanorunner list-profiles
 ### Use a Profile
 
 ```bash
-# Use profile as-is
+# Use the profile as-is
 nanorunner replay -s /data/source -t /watch/output --profile bursty
 
 # Override profile parameters
@@ -424,27 +426,25 @@ chmod 755 /path/to/target
 **Problem**: Out of memory with large datasets
 ```bash
 # Solution: Reduce batch size
-nanorunner /data /output --batch-size 5
+nanorunner replay -s /data -t /output --batch-size 5
 ```
 
 **Problem**: Slow performance
 ```bash
 # Solution: Enable parallel processing
-nanorunner /data /output --parallel --worker-count 8
+nanorunner replay -s /data -t /output --parallel --worker-count 8
 ```
 
 ---
 
 ## 11. Next Steps
 
-Now that you are familiar with the basics:
-
-1. **Explore timing models**: Try different patterns to match your needs
-2. **Try generate mode**: Simulate reads from reference genomes without needing existing FASTQ files
-3. **Optimize performance**: Experiment with batch sizes and workers
-4. **Integrate with pipelines**: Validate output for your target pipeline
-5. **Read full documentation**: See [README.md](../README.md) for complete reference
-6. **Review examples**: Study [examples/](../examples/) for advanced usage
+1. Explore timing models to match the pattern you need to reproduce.
+2. Try generate mode to produce reads from reference genomes without prior FASTQ files.
+3. Tune batch sizes and worker counts for your workload.
+4. Validate output against your target pipeline with `nanorunner validate`.
+5. See [README.md](../README.md) for the full reference.
+6. Browse [examples/](../examples/) for additional patterns.
 
 ---
 
@@ -457,7 +457,7 @@ nanorunner replay -s /source -t /target
 # Replay: fast testing with symlinks
 nanorunner replay -s /source -t /target --interval 0.5 --operation link
 
-# Replay: realistic Poisson timing
+# Replay: irregular intervals via Poisson model
 nanorunner replay -s /source -t /target --timing-model poisson
 
 # Replay: high-throughput profile

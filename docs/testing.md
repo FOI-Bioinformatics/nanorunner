@@ -1,101 +1,49 @@
 # Testing Guide
 
-This document provides a comprehensive guide to NanoRunner's test suite, including how to run tests, understand test categories, and contribute new tests.
+How to run NanoRunner's test suite, the layout of test categories, and conventions for adding new tests.
 
 ## Overview
 
-NanoRunner has a comprehensive test suite designed to validate both individual components and complete workflows:
+The test suite covers individual components and end-to-end workflows.
 
-- **Total Tests**: 902 tests across 40 test files
-- **Runtime**: ~45 seconds for non-slow suite
-- **Coverage**: 97% on core components
+- **Total tests**: 729 tests across 18 test files
+- **Runtime**: roughly 45 seconds excluding the `slow` marker
+- **Coverage**: 88% overall (the 90% threshold in `pytest.ini` is the target for new code)
 
 ## Test Categories
 
 ### Unit Tests
 
-Test individual components in isolation with fast execution (<1 second per test).
+Component-level tests, typically under one second each.
 
 | Test File | Description |
 |-----------|-------------|
-| `test_unit_core_components.py` | Core component isolation tests |
 | `test_config.py` | Configuration validation and parameter handling |
-| `test_config_coverage.py` | Additional configuration coverage |
-| `test_detector.py` | File structure detection algorithms |
-| `test_timing_models.py` | Timing model implementations and edge cases |
+| `test_detection.py` | File structure detection (singleplex vs multiplex) |
+| `test_timing.py` | Timing model implementations and edge cases |
 | `test_adapters.py` | Pipeline adapter functionality |
-| `test_adapters_coverage.py` | Additional adapter coverage |
-| `test_profiles.py` | Configuration profile system validation |
+| `test_profiles.py` | Configuration profile system |
 | `test_mocks.py` | Mock community definitions, aliases, organism validation |
 | `test_species.py` | Species name resolution (GTDB/NCBI) |
 | `test_deps.py` | Dependency checking, install hints, pre-flight validation |
+| `test_fastq.py` | FASTQ writing and format handling |
+| `test_manifest.py` | Manifest generation and parsing |
+| `test_executor.py` | Operation executor (copy/link) |
 
 ### Integration Tests
 
-Test component interactions and end-to-end workflows.
+Cross-component and end-to-end workflows.
 
 | Test File | Description |
 |-----------|-------------|
-| `test_cli.py` | Core command-line interface functionality |
-| `test_cli_enhanced.py` | Enhanced CLI features and monitoring integration |
-| `test_cli_coverage.py` | CLI coverage (recommend, profiles) |
-| `test_cli_additional_coverage.py` | Additional CLI coverage |
-| `test_cli_species.py` | Species/mock CLI integration |
-| `test_cli_download.py` | Download subcommand tests |
-| `test_simulator.py` | Core simulation functionality and orchestration |
-| `test_simulator_coverage.py` | Additional simulator coverage |
-| `test_simulator_additional_coverage.py` | Extended simulator coverage |
-| `test_simulator_species.py` | Species resolution within simulation |
-| `test_species_integration.py` | Species resolution end-to-end |
+| `test_cli.py` | Command-line interface |
+| `test_cli_coverage.py` | Additional CLI coverage paths |
+| `test_runner.py` | Simulation orchestration |
 | `test_integration.py` | End-to-end workflow testing |
-| `test_timing_integration.py` | Timing model integration with simulation workflow |
-| `test_parallel_processing.py` | Parallel processing capabilities and thread safety |
-| `test_enhanced_monitoring.py` | Advanced monitoring features and resource tracking |
-| `test_monitoring.py` | Core monitoring tests |
-| `test_monitoring_coverage.py` | Monitoring coverage |
-| `test_monitoring_additional_coverage.py` | Extended monitoring coverage |
-| `test_monitoring_eta_and_detailed.py` | ETA calculation and detailed monitoring |
-
-### Generate Mode Tests
-
-Test read generation functionality.
-
-| Test File | Description |
-|-----------|-------------|
-| `test_generators.py` | Read generation backends, FASTA parsing, factory pattern |
-| `test_generate_integration.py` | End-to-end generate mode (multiplex, singleplex, mixed, timing) |
-
-### Practical Tests
-
-Real-world tests using actual NCBI genome sequences.
-
-| Test File | Description |
-|-----------|-------------|
-| `test_practical.py` | Tests with real NCBI genomes (Lambda, S. aureus, E. coli) |
-
-Requires the NCBI datasets CLI to be installed. Run with:
-```bash
-pytest tests/test_practical.py -m practical
-```
-
-### Performance Tests
-
-Benchmarks and large dataset handling (marked as `slow`).
-
-| Test File | Description |
-|-----------|-------------|
-| `test_performance.py` | Large dataset handling and performance benchmarks |
-
-### Edge Case and Scenario Tests
-
-Error handling, permissions, boundary conditions, and realistic scenarios.
-
-| Test File | Description |
-|-----------|-------------|
-| `test_edge_cases.py` | Error handling, permissions, boundary conditions |
-| `test_realistic_edge_cases.py` | Mixed file types, permissions, symlinks |
-| `test_realistic_long_running.py` | Extended runs, checkpoint/resume, recovery |
-| `test_realistic_scenarios.py` | Realistic multi-step scenarios |
+| `test_monitoring.py` | Progress monitoring and resource tracking |
+| `test_generators.py` | Read generation backends and factory pattern |
+| `test_empty_source_exit_code.py` | Exit codes when no input files are present |
+| `test_coverage_boost.py` | Targeted coverage gap fillers |
 
 ## Running Tests
 
@@ -122,18 +70,15 @@ pytest --cov=nanopore_simulator --cov-report=term-missing
 pytest tests/test_unit_core_components.py tests/test_config.py tests/test_detector.py
 
 # CLI tests
-pytest tests/test_cli.py tests/test_cli_enhanced.py
+pytest tests/test_cli.py tests/test_cli_coverage.py
 
 # Generate mode tests
-pytest tests/test_generators.py tests/test_generate_integration.py
-
-# Practical tests (requires NCBI datasets CLI)
-pytest tests/test_practical.py -m practical
+pytest tests/test_generators.py
 
 # Exclude slow tests (for development)
 pytest -m "not slow"
 
-# Only slow tests (performance benchmarks)
+# Only slow tests
 pytest -m "slow"
 ```
 
@@ -175,31 +120,25 @@ pytest -v -s
 tests/
 ├── __init__.py
 ├── conftest.py                      # Shared fixtures
-├── test_cli.py                      # CLI interface tests
-├── test_cli_enhanced.py             # Enhanced CLI tests
-├── test_cli_coverage.py             # CLI coverage (recommend, profiles)
-├── test_cli_additional_coverage.py  # Additional CLI coverage
-├── test_cli_species.py              # Species/mock CLI integration
-├── test_cli_download.py             # Download subcommand
-├── test_config.py                   # Configuration tests
-├── test_detector.py                 # File detection tests
-├── test_simulator.py                # Core simulation tests
-├── test_timing_models.py            # Timing model tests
-├── test_parallel_processing.py      # Parallel processing tests
-├── test_enhanced_monitoring.py      # Monitoring tests
-├── test_profiles.py                 # Profile system tests
 ├── test_adapters.py                 # Pipeline adapter tests
-├── test_generators.py               # Read generator tests
-├── test_generate_integration.py     # Generate mode integration
-├── test_mocks.py                    # Mock community definitions
-├── test_species.py                  # Species name resolution
-├── test_practical.py                # Real genome tests
-├── test_integration.py              # End-to-end tests
-├── test_timing_integration.py       # Timing integration tests
-├── test_edge_cases.py               # Edge case tests
+├── test_cli.py                      # CLI interface tests
+├── test_cli_coverage.py             # Additional CLI coverage
+├── test_config.py                   # Configuration tests
+├── test_coverage_boost.py           # Targeted coverage fillers
 ├── test_deps.py                     # Dependency checking and pre-flight
-├── test_performance.py              # Performance benchmarks
-└── ...                              # Additional coverage files
+├── test_detection.py                # File structure detection
+├── test_empty_source_exit_code.py   # Empty-source exit code behaviour
+├── test_executor.py                 # Operation executor (copy/link)
+├── test_fastq.py                    # FASTQ writing and format handling
+├── test_generators.py               # Read generation backends
+├── test_integration.py              # End-to-end tests
+├── test_manifest.py                 # Manifest generation and parsing
+├── test_mocks.py                    # Mock community definitions
+├── test_monitoring.py               # Progress monitoring
+├── test_profiles.py                 # Profile system tests
+├── test_runner.py                   # Simulation orchestration
+├── test_species.py                  # Species name resolution
+└── test_timing.py                   # Timing model tests
 ```
 
 ### Naming Conventions
@@ -214,8 +153,9 @@ tests/
 Tests use pytest markers for categorization:
 
 ```python
-@pytest.mark.slow        # Performance tests (>10 seconds)
-@pytest.mark.practical   # Tests requiring external tools (NCBI datasets)
+@pytest.mark.slow         # Long-running tests (deselect with -m "not slow")
+@pytest.mark.unit         # Component-level tests
+@pytest.mark.integration  # Integration tests
 ```
 
 ## Contributing Tests
@@ -271,17 +211,24 @@ testpaths = tests
 python_files = test_*.py
 python_classes = Test*
 python_functions = test_*
+addopts =
+    --verbose
+    --strict-markers
+    --disable-warnings
+    --cov=nanopore_simulator
+    --cov-report=html
+    --cov-report=term-missing
+    --cov-report=xml
+    --cov-fail-under=90
 markers =
-    slow: marks tests as slow (may take several seconds)
-    practical: marks tests requiring external tools
-addopts = --strict-markers
+    slow: marks tests as slow (deselect with -m "not slow")
+    integration: marks tests as integration tests
+    unit: marks tests as unit tests
 ```
 
 ### Coverage Configuration
 
-Coverage is configured in `.coveragerc` or `pyproject.toml`:
-- Minimum coverage threshold: 90%
-- Excludes platform-specific code and import fallbacks
+The project sets `--cov-fail-under=90` in `pytest.ini`. Current overall coverage is around 88%, so adding tests should keep new code at or above the threshold to avoid regressions.
 
 ## Continuous Integration
 
