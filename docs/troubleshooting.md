@@ -1,508 +1,281 @@
-# NanoRunner Troubleshooting Guide
+# nanorunner troubleshooting
 
-Diagnosing and resolving common issues.
+Common issues and resolutions. nanorunner targets POSIX-compliant
+operating systems (Linux, macOS); Windows is not supported.
 
-## Installation Issues
+## Installation issues
 
-### Git Not Found
+### Command not found after install
 
-**Symptom**: `fatal: not a git repository` or `git: command not found`
+**Symptom:** `nanorunner: command not found`
 
-**Solution**:
 ```bash
-# Ubuntu/Debian
-sudo apt-get install git
-
-# macOS
-brew install git
-
-# Or download from: https://git-scm.com/
-```
-
-### Permission Denied During Install
-
-**Symptom**: `Permission denied` or `[Errno 13]`
-
-**Solutions**:
-```bash
-# Option 1: Install to user directory
-pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git
-
-# Option 2: Use virtual environment (recommended)
-python -m venv nanorunner_env
-source nanorunner_env/bin/activate  # On Windows: nanorunner_env\Scripts\activate
-pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git
-```
-
-### Python Version Mismatch
-
-**Symptom**: `Requires Python '>=3.9' but the running Python is 3.8`
-
-**Solution**:
-```bash
-# Check Python version
-python --version
-
-# Use specific Python version
-python3.11 -m pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git
-
-# Create alias (add to ~/.bashrc or ~/.zshrc)
-alias nanorunner='python3.11 -m nanopore_simulator.cli'
-```
-
-### Command Not Found After Install
-
-**Symptom**: `nanorunner: command not found`
-
-**Solution**:
-```bash
-# Check if pip install directory is in PATH
+# Check if pip's install location is on PATH
 pip show nanorunner | grep Location
 
-# Add to PATH (Linux/macOS)
+# If installed with --user, ensure the user-bin directory is on PATH
 export PATH="$HOME/.local/bin:$PATH"
 
-# Or use full path
+# As a fallback, invoke the module directly
 python -m nanopore_simulator.cli --help
+```
 
-# Or reinstall with user flag
+### Permission denied during install
+
+```bash
+# Option 1: install into a virtual environment (recommended)
+python -m venv nanorunner_env
+source nanorunner_env/bin/activate
+pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git
+
+# Option 2: install into the user site-packages directory
 pip install --user git+https://github.com/FOI-Bioinformatics/nanorunner.git
+```
+
+### Python version mismatch
+
+`Requires Python '>=3.9' but the running Python is 3.8`. Use a Python
+3.9 or newer interpreter:
+
+```bash
+python3.11 -m pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git
 ```
 
 ---
 
-## Missing Dependencies
+## Missing dependencies
 
-### Check All Dependencies
-
-Before investigating specific issues, run the dependency checker:
+Always start with the dependency checker:
 
 ```bash
 nanorunner check-deps
 ```
 
-This shows the status of all required and optional dependencies with install instructions.
+It reports the status of all optional dependencies and prints install
+hints for missing ones.
 
-### Badread Not Working
+### badread fails to start
 
-**Symptom**: `badread exited with status 1` or `ModuleNotFoundError: No module named 'edlib'`
+**Symptom:** `badread exited with status 1`, or
+`ModuleNotFoundError: No module named 'edlib'`.
 
-**Explanation**: Badread may be installed but missing a Python dependency (e.g., edlib). NanoRunner verifies that backends can actually start, not just that their binary exists on PATH.
+nanorunner verifies that backends actually start, not just that their
+binary exists on `PATH`. badread can be partially installed (binary
+present, Python deps missing).
 
-**Solution**:
 ```bash
-# Check dependency status
-nanorunner check-deps
-
-# Reinstall badread (includes all dependencies)
 conda install -c conda-forge -c bioconda badread
+nanorunner check-deps
 ```
 
-### NCBI Datasets CLI Not Found
+### NCBI datasets CLI missing
 
-**Symptom**: `datasets CLI is required` when using `--species`, `--mock`, or `--taxid`
+**Symptom:** `datasets CLI is required` when using `--species`,
+`--mock`, or `--taxid`.
 
-**Solution**:
 ```bash
-# Install NCBI datasets CLI
 conda install -c conda-forge ncbi-datasets-cli
-
-# Verify
 datasets --version
 ```
 
-### NanoSim Not Working
+### NanoSim fails to start
 
-**Symptom**: `nanosim exited with status 1` or backend unavailable
-
-**Solution**:
 ```bash
-# Install NanoSim
 conda install -c conda-forge -c bioconda nanosim
-
-# Verify
 nanorunner check-deps
 ```
 
-### NumPy Not Installed
+### NumPy not installed
 
-**Symptom**: Slower read generation performance (falls back to pure Python)
+Read generation falls back to a pure-Python implementation if numpy is
+missing. For better generation performance:
 
-**Solution**:
 ```bash
 conda install -c conda-forge numpy
 ```
 
+### Enhanced monitoring not available
+
+The `--monitor enhanced` mode requires `psutil`:
+
+```bash
+conda install -c conda-forge psutil
+# Or install nanorunner with the enhanced extra:
+pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git"
+```
+
 ---
 
-## Runtime Issues
+## Runtime issues
 
-### Permission Denied on Target Directory
+### Permission denied on the target directory
 
-**Symptom**: `PermissionError: [Errno 13] Permission denied: '/path/to/target'`
-
-**Solutions**:
 ```bash
-# Check permissions
-ls -ld /path/to/target
-
-# Fix permissions
-chmod 755 /path/to/target
-
-# Or use writable directory
+ls -ld /path/to/target           # Inspect ownership and mode
+chmod 755 /path/to/target        # Fix permissions
+# Or write to a directory you own:
 nanorunner replay -s /source -t ~/nanorunner_output
 ```
 
-### Source Directory Not Found
+### Source directory not found
 
-**Symptom**: `Error: Source directory does not exist: /path/to/source`
-
-**Solutions**:
 ```bash
-# Check path exists
-ls /path/to/source
-
-# Use absolute path
-nanorunner $(pwd)/data /output
-
-# Check for typos
-nanorunner --help  # Review usage
+ls /path/to/source               # Verify the path exists
+nanorunner --help                # Check option spellings
 ```
 
-### No Sequencing Files Found
+### No sequencing files found
 
-**Symptom**: `ValueError: No sequencing files found in /source`
+`ValueError: No sequencing files found in /source`. nanorunner accepts
+`.fastq`, `.fq`, `.fastq.gz`, `.fq.gz`. For multiplex layouts, the
+files live inside `barcode##/` subdirectories.
 
-**Diagnosis**:
 ```bash
-# Check for supported file types
-find /source -name "*.fastq" -o -name "*.fq" -o -name "*.pod5" -o -name "*.fastq.gz"
-
-# List directory contents
-ls -la /source
+find /source -name "*.fastq*" -o -name "*.fq*"   # Confirm what is there
+ls -la /source                                    # Surface hidden files
 ```
 
-**Solutions**:
-- Ensure files have correct extensions (`.fastq`, `.fq`, `.pod5`, `.fastq.gz`, `.fq.gz`)
-- Check barcode subdirectories for multiplex data
-- Verify files aren't hidden or in wrong location
+### Out of memory or slow performance
 
-### Out of Memory
-
-**Symptom**: `MemoryError` or system slowdown
-
-**Solutions**:
 ```bash
-# Reduce batch size
+# Lower batch size
 nanorunner replay -s /source -t /target --batch-size 5
-
-# Disable parallel processing
-nanorunner replay -s /source -t /target  # (parallel is off by default)
-
-# Use symlinks instead of copying
-nanorunner replay -s /source -t /target --operation link
-
-# Monitor memory usage
-nanorunner replay -s /source -t /target --monitor enhanced
-```
-
-### Slow Performance
-
-**Symptom**: Very low throughput (< 1 file/sec with small files)
-
-**Solutions**:
-```bash
-# Enable parallel processing
-nanorunner replay -s /source -t /target --parallel --worker-count 8
-
-# Reduce interval
-nanorunner replay -s /source -t /target --interval 0.5
-
-# Use uniform timing (lowest per-interval overhead)
-nanorunner replay -s /source -t /target --timing-model uniform
 
 # Use symlinks instead of copies
 nanorunner replay -s /source -t /target --operation link
 
-# Use the high-throughput profile
+# Add resource tracking to confirm CPU / memory pressure
+nanorunner replay -s /source -t /target --monitor enhanced
+```
+
+For sustained throughput problems, the high-throughput profile bundles
+parallel processing and burst timing:
+
+```bash
 nanorunner replay -s /source -t /target --profile high_throughput
 ```
 
 ---
 
-## Monitoring Issues
+## Monitoring issues
 
-### Enhanced Monitoring Not Working
+### Progress bar not displaying
 
-**Symptom**: Enhanced monitoring falls back to basic mode
-
-**Solution**:
 ```bash
-# Install psutil
-conda install -c conda-forge psutil
+echo -e "\033[32mGreen\033[0m"   # Confirm terminal supports ANSI
 
-# Or install with enhanced extras
-pip install "nanorunner[enhanced] @ git+https://github.com/FOI-Bioinformatics/nanorunner.git@main"
-
-# Verify psutil
-python -c "import psutil; print('OK')"
-
-# Or check all dependencies at once
-nanorunner check-deps
-```
-
-### Progress Bar Not Displaying
-
-**Symptom**: No progress output or jumbled display
-
-**Solutions**:
-```bash
-# Check terminal supports ANSI
-echo -e "\033[32mGreen\033[0m"
-
-# Disable monitoring if needed
+# Disable monitoring entirely
 nanorunner replay -s /source -t /target --monitor none
 
-# Redirect output to a log file for review
+# Capture both monitor and program output to a log
 nanorunner replay -s /source -t /target 2>&1 | tee simulation.log
 ```
 
 ---
 
-## Pipeline Integration Issues
+## Pipeline integration
 
-### Validation Fails
+### Validation fails
 
-**Symptom**: `Pipeline validation failed` or `Structure not valid`
+`Pipeline validation failed` or `Structure not valid`:
 
-**Diagnosis**:
 ```bash
-# Check what pipelines are compatible
+# Inspect the validator's view
 nanorunner validate --pipeline nanometa --target /target
 
-# Check output structure
+# Inspect the actual structure
 ls -R /target
-
-# Verify file patterns
 find /target -name "*.fastq*"
 ```
 
-**Solutions**:
-- **For nanometa**: Works with both singleplex and multiplex
-- **For kraken**: Works with any structure
+The `nanometa` adapter accepts both singleplex and multiplex layouts;
+the `kraken` adapter accepts any directory containing FASTQ files.
 
-### Pipeline Adapter Not Found
+### Pipeline adapter not found
 
-**Symptom**: `Unknown pipeline: xyz`
-
-**Solution**:
 ```bash
-# List available adapters
 nanorunner list-adapters
-
-# Use generic adapter for custom pipelines
-# (requires Python API, not CLI)
 ```
+
+If your pipeline is not listed, the generic adapter is available via
+the Python API.
 
 ---
 
-## File System Issues
+## File-system issues
 
-### Symbolic Link Errors
+### Symlinks across filesystems
 
-**Symptom**: `OSError: symbolic link privilege not held` (Windows)
+Symbolic links cannot cross some filesystem boundaries. Use copy mode:
 
-**Solutions**:
 ```bash
-# On Windows: Run as Administrator or use copy mode
-nanorunner replay -s /source -t /target --operation copy
-
-# Or enable Developer Mode (Windows 10+)
-# Settings → Update & Security → For Developers → Developer Mode
+nanorunner replay -s /mnt/source -t /home/user/target --operation copy
 ```
 
-### Disk Space Exhausted
+### Disk space exhausted
 
-**Symptom**: `No space left on device`
-
-**Solutions**:
 ```bash
-# Check disk space
 df -h /target
 
-# Use symlinks to save space
+# Use symlinks instead of copies
 nanorunner replay -s /source -t /target --operation link
 
-# Use smaller batch size to process incrementally
-nanorunner replay -s /source -t /target --batch-size 10
-
-# Cleanup previous runs
+# Or smaller batches and clean up between runs
 rm -rf /tmp/nanorunner_*
 ```
 
-### Mixed File System Types
-
-**Symptom**: Issues with symlinks across filesystems
-
-**Solution**:
-```bash
-# Use copy mode for cross-filesystem operations
-nanorunner replay -s /mnt/source -t /home/user/target --operation copy
-
-# Ensure source and target are on same filesystem for symlinks
-```
-
 ---
 
-## Timing Model Issues
+## Configuration issues
 
-### Adaptive Model Not Adapting
+### Profile not found
 
-**Symptom**: Intervals don't change over time
-
-**Explanation**: Adaptive model requires history to build. Early intervals use base rate.
-
-**Solution**:
 ```bash
-# Increase history size and adaptation rate
-nanorunner replay -s /source -t /target \
-  --timing-model adaptive \
-  --adaptation-rate 0.3 \
-  --history-size 20
-```
-
-### Poisson Intervals Too Variable
-
-**Symptom**: Intervals are very inconsistent
-
-**Solution**:
-```bash
-# Reduce burst probability
-nanorunner replay -s /source -t /target \
-  --timing-model poisson \
-  --burst-probability 0.05
-
-# Or use random model for controlled variation
-nanorunner replay -s /source -t /target \
-  --timing-model random \
-  --random-factor 0.2
-```
-
----
-
-## Parallel Processing Issues
-
-### Thread Safety Errors
-
-**Symptom**: Random crashes or corruption with parallel processing
-
-**Solution**:
-```bash
-# Reduce worker count
-nanorunner replay -s /source -t /target --parallel --worker-count 2
-
-# Or disable parallel processing
-nanorunner replay -s /source -t /target  # (default is sequential)
-
-# Report bug with details:
-# https://github.com/FOI-Bioinformatics/nanorunner/issues
-```
-
-### Workers Not Utilized
-
-**Symptom**: Parallel mode shows no speedup
-
-**Diagnosis**:
-```bash
-# Check batch size (must be > 1 for parallel benefit)
-nanorunner replay -s /source -t /target --parallel --batch-size 10 --worker-count 4
-
-# Monitor CPU usage
-top  # or htop
-```
-
-**Solutions**:
-- Batch size should be ≥ worker count
-- Small files may not benefit from parallelization
-- Use profile designed for parallel processing
-
----
-
-## Configuration Issues
-
-### Profile Not Found
-
-**Symptom**: `Unknown profile: xyz`
-
-**Solution**:
-```bash
-# List available profiles
 nanorunner list-profiles
-
-# Check spelling (case-sensitive)
-nanorunner replay -s /source -t /target --profile bursty  # correct
-nanorunner replay -s /source -t /target --profile Bursty  # incorrect
 ```
 
-### Profile Overrides Not Working
+Profile names are case-sensitive. `--profile bursty` works;
+`--profile Bursty` does not.
 
-**Symptom**: Profile settings not being overridden
+### Verifying overrides
 
-**Example**:
+Per-flag overrides apply after the profile, so the explicit value wins:
+
 ```bash
-# This works correctly:
 nanorunner replay -s /source -t /target --profile bursty --interval 10
-
-# Profile is applied first, then interval override is applied
+# Result: bursty profile with interval = 10
 ```
-
-**Note**: Overrides are applied after profile. Check with verbose logging.
 
 ---
 
-## Testing and Debugging
+## Testing and debugging
 
-### Enable Debug Logging
+### Enable debug logging
 
 ```bash
-# Set Python logging level
-export PYTHONLOGLEVEL=DEBUG
-nanorunner replay -s /source -t /target
+PYTHONLOGLEVEL=DEBUG nanorunner replay -s /source -t /target
 
-# Or redirect all output
+# Or capture all output for review
 nanorunner replay -s /source -t /target 2>&1 | tee debug.log
 ```
 
-### Run Test Suite
+### Run the test suite
 
 ```bash
-# Clone repository
 git clone https://github.com/FOI-Bioinformatics/nanorunner.git
 cd nanorunner
-
-# Install dev dependencies
 pip install -e .[dev]
 
-# Run tests
 pytest -v
-
-# Run specific test
-pytest tests/test_simulator.py -v
-
-# Check coverage
+pytest tests/test_runner.py -v       # A single module
 pytest --cov=nanopore_simulator --cov-report=term-missing
 ```
 
-### Verify Installation
+### Verify installation
 
 ```bash
-# Check version
 nanorunner --version
-
-# Test imports
 python -c "from nanopore_simulator import ReplayConfig; print('OK')"
-
-# List available options
 nanorunner --help
 nanorunner list-profiles
 nanorunner list-adapters
@@ -510,109 +283,61 @@ nanorunner list-adapters
 
 ---
 
-## Platform-Specific Issues
-
-### macOS: Permission Issues
-
-**Symptom**: `Operation not permitted` on macOS
-
-**Solution**:
-```bash
-# Grant Terminal full disk access
-# System Preferences → Security & Privacy → Privacy → Full Disk Access
-
-# Or use accessible directory
-nanorunner replay -s /source -t ~/Documents/nanorunner_output
-```
-
-### Windows: Path Issues
-
-**Symptom**: Backslash problems in Windows paths
-
-**Solution**:
-```bash
-# Use forward slashes
-nanorunner C:/data/source C:/output
-
-# Or use raw strings in Python
-# (when using API directly)
-```
-
-### Linux: SELinux Restrictions
-
-**Symptom**: Permission denied despite correct permissions
-
-**Solution**:
-```bash
-# Check SELinux status
-getenforce
-
-# Temporarily disable (not recommended for production)
-sudo setenforce 0
-
-# Or add proper SELinux context
-chcon -R -t user_home_t /path/to/target
-```
-
----
-
-## Getting Help
-
-### Before Opening an Issue
-
-1. **Search existing issues**: [GitHub Issues](https://github.com/FOI-Bioinformatics/nanorunner/issues)
-2. **Check documentation**: [README](../README.md), [Quick Start](quickstart.md)
-3. **Try examples**: Run `examples/*.py` to verify installation
-4. **Enable debug logging**: Capture full error output
-
-### Opening an Issue
-
-Include:
-- NanoRunner version: `nanorunner --version`
-- Python version: `python --version`
-- Operating system: `uname -a` (Linux/macOS) or `ver` (Windows)
-- Full error message
-- Command used
-- Minimal reproducing example
-
-### Community Support
-
-- **GitHub Discussions**: [Ask questions](https://github.com/FOI-Bioinformatics/nanorunner/discussions)
-- **Bug Reports**: [Report bugs](https://github.com/FOI-Bioinformatics/nanorunner/issues/new?template=bug_report.yml)
-- **Feature Requests**: [Suggest features](https://github.com/FOI-Bioinformatics/nanorunner/issues/new?template=feature_request.yml)
-
----
-
 ## FAQ
 
-### Q: Can I pause and resume a simulation?
+### Can I pause and resume a simulation?
 
-**A**: No. Pause/resume and checkpointing are not implemented. Use `Ctrl+C` for graceful shutdown; restart from the beginning, or run on a subset of source files.
+No. Pause / resume and checkpointing are not implemented. Use Ctrl+C
+for graceful shutdown; restart from the beginning, or run on a subset
+of source files.
 
-### Q: How do I simulate very fast sequencing (< 1 second)?
+### How do I simulate sub-second intervals?
 
-**A**:
 ```bash
-# Use fractional intervals
-nanorunner replay -s /source -t /target --interval 0.1  # 100ms
-nanorunner replay -s /source -t /target --interval 0.01  # 10ms
+nanorunner replay -s /source -t /target --interval 0.1   # 100 ms
+nanorunner replay -s /source -t /target --interval 0.01  # 10 ms
 ```
 
-### Q: Can I use NanoRunner in CI/CD?
+### Can I use nanorunner in CI?
 
-**A**: Yes, disable monitoring for automated runs:
+Yes -- disable interactive monitoring:
+
 ```bash
 nanorunner replay -s /source -t /target --monitor none --quiet
 ```
 
-### Q: Does NanoRunner modify source files?
+### Does nanorunner modify source files?
 
-**A**: No, source files are never modified. Only target directory is affected.
+No. Source files are never written to; only the target directory is
+modified.
 
-### Q: Can I resume an interrupted simulation?
+### Can I resume an interrupted simulation?
 
-**A**: There is no automatic resume. Either remove already-delivered files from the source list (e.g., by pointing replay at a directory containing only the remaining files), or clear the target and restart.
+Not automatically. Either restrict the source directory to the
+remaining files (e.g. by symlinking only the unsent files into a fresh
+source) or clear the target and start again.
 
 ---
 
-**Still stuck?** Open an issue: https://github.com/FOI-Bioinformatics/nanorunner/issues/new/choose
+## Getting help
+
+Before opening an issue:
+
+1. Search [existing issues](https://github.com/FOI-Bioinformatics/nanorunner/issues).
+2. Re-read the [usage guide](quickstart.md) and main [README](../README.md).
+3. Run an example from `examples/` to confirm the install works.
+4. Capture full error output with `2>&1 | tee debug.log`.
+
+Include in the report:
+
+- nanorunner version (`nanorunner --version`)
+- Python version (`python --version`)
+- Operating system (`uname -a`)
+- Full error message and the exact command used
+- A minimal reproducer
+
+Channels:
+
+- [GitHub Discussions](https://github.com/FOI-Bioinformatics/nanorunner/discussions)
+- [Bug reports](https://github.com/FOI-Bioinformatics/nanorunner/issues/new?template=bug_report.yml)
+- [Feature requests](https://github.com/FOI-Bioinformatics/nanorunner/issues/new?template=feature_request.yml)

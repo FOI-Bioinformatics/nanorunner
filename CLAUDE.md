@@ -98,13 +98,21 @@ Flat layout under `nanopore_simulator/`. No subpackages.
 - `mocks.py` -- `MockOrganism`, `MockCommunity`, built-in communities, aliases
 
 **Infrastructure**
-- `cli.py` -- Typer CLI
-- `timing.py` -- timing model implementations and factory
-- `monitoring.py` -- `ProgressMonitor` with optional resource tracking; `NullMonitor` for headless runs
-- `detection.py` -- module-level singleplex / multiplex structure detection
-- `adapters.py` -- pipeline validation registry (dict-based, no ABC)
-- `deps.py` -- dependency probing with install hints
-- `fastq.py` -- FASTQ I/O helpers
+- `cli.py` -- Typer app entry point; registers subcommands.
+- `cli_replay.py` -- `replay` subcommand options and dispatch.
+- `cli_generate.py` -- `generate` subcommand options and dispatch.
+- `cli_helpers.py` -- shared helpers used by the subcommand modules
+  (genome resolution, abundance parsing, output dispatching).
+- `cli_utils.py` -- additional utilities used by the CLI layer. The
+  2026-04-29 audit flagged that some genome-resolution logic here
+  duplicates helpers in `cli_helpers.py`; treat as transitional and
+  do not extend without consolidating first.
+- `timing.py` -- timing model implementations and factory.
+- `monitoring.py` -- `ProgressMonitor` with optional resource tracking; `NullMonitor` for headless runs.
+- `detection.py` -- module-level singleplex / multiplex structure detection.
+- `adapters.py` -- pipeline validation registry (dict-based, no ABC).
+- `deps.py` -- dependency probing with install hints.
+- `fastq.py` -- FASTQ I/O helpers.
 
 ### Timing models
 
@@ -212,7 +220,9 @@ entry under `examples/`.
 
 ## Reference
 
-- [README](README.md) -- user-facing documentation
-- [Quick start](docs/quickstart.md)
+- [README](README.md) -- project landing page
+- [Usage guide](docs/quickstart.md) -- comprehensive user documentation
 - [Troubleshooting](docs/troubleshooting.md)
+- [Testing notes](docs/testing.md)
 - [Examples](examples/)
+- [Archive](docs/archive/) -- historical audits and design plans

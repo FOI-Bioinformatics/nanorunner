@@ -1,18 +1,18 @@
-# NanoRunner documentation
+# nanorunner documentation
 
-Reference material for the NanoRunner nanopore sequencing run simulator.
+Reference material for the nanorunner nanopore sequencing run simulator.
+
+Start with the [usage guide](quickstart.md) for installation, run modes,
+timing models, configuration, and pipeline integration.
 
 ## User documentation
 
-- [Quick start](quickstart.md) -- installation and first simulation
+- [Usage guide](quickstart.md) -- comprehensive end-to-end reference
 - [Troubleshooting](troubleshooting.md) -- installation and runtime issues
-- [Main README](../README.md) -- feature overview, examples, and CLI reference
-- [Examples](../examples/) -- working scripts for timing models, profiles,
-  parallel processing, and pipeline integration
-- [Sample data](../examples/sample_data/) -- small FASTQ files for
-  experimentation
+- [Testing notes](testing.md) -- test categories, running tests, and
+  contribution conventions
 
-## Integration walkthroughs
+## Integration
 
 - [Quick start with Nanometa Live](https://github.com/FOI-Bioinformatics/nanometa_live/blob/main/docs/quickstart-with-nanorunner.md)
   -- end-to-end demo driving Nanometa Live (and the nanometanf Nextflow
@@ -20,40 +20,22 @@ Reference material for the NanoRunner nanopore sequencing run simulator.
 
 ## Developer documentation
 
-- [CLAUDE.md](../CLAUDE.md) -- architecture and contributor notes
+- [CLAUDE.md](../CLAUDE.md) -- architecture, extension points, conventions
 - [CONTRIBUTING.md](../CONTRIBUTING.md) -- contribution workflow
 - [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) -- community standards
-- [Testing guide](testing.md) -- test categories, running tests, and
-  contribution conventions
+- [Examples](../examples/) -- runnable scripts demonstrating timing
+  models, profiles, parallel processing, and pipeline integration
 
-## Repository layout
+## Archive
 
-```
-nanorunner/
-|-- README.md                       Main user documentation
-|-- CLAUDE.md                       Developer guide
-|-- CONTRIBUTING.md                 Contribution guidelines
-|-- CODE_OF_CONDUCT.md              Community standards
-|-- CHANGELOG.md                    Version history
-|-- docs/
-|   |-- README.md                   This file
-|   |-- quickstart.md
-|   |-- troubleshooting.md
-|   `-- testing.md
-`-- examples/
-    |-- README.md
-    |-- 01_basic_simulation.py
-    |-- 02_timing_models.py
-    |-- 03_parallel_processing.py
-    |-- 04_configuration_profiles.py
-    |-- 05_pipeline_integration.py
-    |-- 06_practical_genome_test.py
-    `-- sample_data/
-```
+Working artifacts from development cycles -- audit reports and design
+plans -- live in [`archive/`](archive/README.md). They are preserved
+for reference but are not actively maintained.
 
 ## Version
 
-- **Current version**: 3.0.0
-- **Python requirement**: 3.9 or later
-- **Test suite**: 729 tests across 18 files; 88% coverage (the 90% threshold
-  in `pytest.ini` is currently exceeded only by the gap in `cli_helpers.py`)
+- Current version: 3.0.0
+- Python requirement: 3.9 or later
+- Test suite: 729 tests across 19 files; coverage 88% (the 90%
+  threshold in `pytest.ini` is not currently met -- see
+  [testing notes](testing.md))
