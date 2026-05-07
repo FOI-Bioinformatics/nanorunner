@@ -16,7 +16,10 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
-from nanopore_simulator.fastq import atomic_tmp_path as _atomic_tmp_path
+from nanopore_simulator.fastq import (
+    atomic_move as _atomic_move,
+    atomic_tmp_path as _atomic_tmp_path,
+)
 from nanopore_simulator.generators import GenomeInput, ReadGenerator
 from nanopore_simulator.manifest import FileEntry
 
@@ -74,7 +77,7 @@ def _copy_file(source: Path, target: Path) -> Path:
     tmp_target = _atomic_tmp_path(target)
     try:
         shutil.copy2(source, tmp_target)
-        tmp_target.rename(target)
+        _atomic_move(tmp_target, target)
     except BaseException:
         if tmp_target.exists():
             tmp_target.unlink()
@@ -196,7 +199,7 @@ def _rechunk_file(entry: FileEntry) -> Path:
     tmp_target = _atomic_tmp_path(entry.target)
     try:
         write_reads(collected, tmp_target, compress=use_gz)
-        tmp_target.rename(entry.target)
+        _atomic_move(tmp_target, entry.target)
     except BaseException:
         if tmp_target.exists():
             tmp_target.unlink()
@@ -230,7 +233,7 @@ def _generate_mixed_file(entry: FileEntry, generator: ReadGenerator) -> Path:
     tmp_target = _atomic_tmp_path(entry.target)
     try:
         write_reads(all_reads, tmp_target, compress=use_gz)
-        tmp_target.rename(entry.target)
+        _atomic_move(tmp_target, entry.target)
     except BaseException:
         if tmp_target.exists():
             tmp_target.unlink()
