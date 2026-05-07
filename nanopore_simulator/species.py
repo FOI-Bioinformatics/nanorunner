@@ -30,6 +30,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from nanopore_simulator.fastq import atomic_move
+
 logger = logging.getLogger(__name__)
 
 
@@ -131,7 +133,7 @@ class ResolutionCache:
         try:
             with open(tmp_path, "w") as f:
                 json.dump(self._data, f, indent=2)
-            tmp_path.rename(self.cache_path)
+            atomic_move(tmp_path, self.cache_path)
         except BaseException:
             if tmp_path.exists():
                 tmp_path.unlink()

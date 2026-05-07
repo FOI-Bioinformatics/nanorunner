@@ -33,7 +33,10 @@ try:
 except ImportError:  # pragma: no cover
     _HAS_NUMPY = False
 
-from nanopore_simulator.fastq import atomic_tmp_path as _atomic_tmp_path
+from nanopore_simulator.fastq import (
+    atomic_move as _atomic_move,
+    atomic_tmp_path as _atomic_tmp_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -299,7 +302,7 @@ class BuiltinGenerator(ReadGenerator):
             self._write_reads_streaming(
                 full_seq, genome, actual_reads, tmp_path, use_gz
             )
-            tmp_path.rename(output_path)
+            _atomic_move(tmp_path, output_path)
         except BaseException:
             if tmp_path.exists():
                 tmp_path.unlink()
@@ -663,7 +666,7 @@ class SubprocessGenerator(ReadGenerator):
                 self._run_nanosim(
                     genome, tmp_path, output_dir, file_index, actual_reads
                 )
-            tmp_path.rename(output_path)
+            _atomic_move(tmp_path, output_path)
         except BaseException:
             if tmp_path.exists():
                 tmp_path.unlink()

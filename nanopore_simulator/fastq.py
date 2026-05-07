@@ -6,6 +6,8 @@ shared I/O helpers used by ``executor`` and ``generators``.
 """
 
 import gzip
+import os
+import shutil
 from pathlib import Path
 from typing import Iterator, List, Optional, Tuple
 
@@ -13,6 +15,32 @@ from typing import Iterator, List, Optional, Tuple
 def atomic_tmp_path(target: Path) -> Path:
     """Return a temporary sibling path for atomic writes."""
     return target.parent / f".{target.name}.tmp"
+
+
+def atomic_move(tmp: Path, target: Path) -> None:
+    """Move a freshly-written tmp file into its final target path.
+
+    On the same filesystem this is an atomic rename (POSIX rename(2)).
+    Across filesystems -- the case ``Path.rename`` raises
+    ``OSError: [Errno 18] Cross-device link`` -- this falls back to a
+    copy-then-delete via ``shutil.move``. Cross-device atomicity is
+    impossible by definition, so the best we can do is "the file
+    appears at target if the move succeeded; otherwise it does not".
+
+    Surfaces commonly hit by this fallback include macOS Docker
+    bind-mounts, NFS-backed scratch directories, and writes from a
+    container's overlay layer to a host-mounted volume. Without the
+    fallback, nanorunner would crash on those layouts even when the
+    user has enough space and permissions to land the file.
+    """
+    try:
+        os.replace(str(tmp), str(target))
+    except OSError as exc:
+        # errno 18 is EXDEV (cross-device link). Other OSErrors are
+        # genuine -- propagate so callers can clean up the tmp file.
+        if exc.errno != 18:
+            raise
+        shutil.move(str(tmp), str(target))
 
 
 def count_reads(path: Path) -> int:
