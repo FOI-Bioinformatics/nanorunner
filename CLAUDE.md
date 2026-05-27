@@ -188,11 +188,23 @@ files: `test_config.py`, `test_manifest.py`, `test_executor.py`,
 `test_mocks.py`, `test_monitoring.py`, `test_detection.py`,
 `test_adapters.py`, `test_profiles.py`, `test_deps.py`, `test_cli.py`,
 `test_cli_helpers.py`, `test_integration.py`. Shared fixtures live in
-`conftest.py`. The full suite currently runs 773 tests.
+`conftest.py`. The full suite currently runs 784 tests.
 
-Coverage target: 90% (set in `pytest.ini`). Current coverage is 91%
-(`cli_helpers.py` is at 100%; the largest remaining gap is
-`generators.py` at 84%).
+Coverage target: 90% (set in `pytest.ini`). Current coverage is 91%.
+`cli_helpers.py`, `mocks.py`, `cli.py`, `detection.py`, and
+`profiles.py` are at 100%; the largest remaining gap is
+`generators.py` at 84% (mostly badread / nanosim subprocess error
+paths that need the backend binaries installed).
+
+Re-runnable audit drivers under `bin/`:
+- `audit_simulate_replay.py` (rounds 1-2): generate + replay matrix,
+  mock-community sweep, profiles, backends, abundance fidelity,
+  quality-score range, edge cases.
+- `audit_cli_subcommands.py` (round 3): every subcommand and every
+  behavior-changing flag invoked via `subprocess.run`.
+- `audit_robustness.py` (round 4): round-trip identity, unusual
+  filenames, SIGTERM mid-run, concurrent writers, source mutation
+  mid-replay, read-only target.
 
 The 3x3 input/output reshape matrix for replay is exercised
 parametrically in `test_integration.py::test_reshape_matrix` and via

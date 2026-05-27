@@ -301,6 +301,19 @@ def generate(
         struct = "multiplex"
     else:
         struct = "singleplex"
+    # Warn about a silent footgun: forcing singleplex with multiple
+    # genomes and no --mix-reads writes each genome's reads into
+    # separately-named files in the target root with no barcode
+    # grouping. That is rarely what the operator intends.
+    if struct == "singleplex" and genomes and len(genomes) > 1 and not mix_reads:
+        typer.echo(
+            "Warning: --force-structure singleplex with multiple genomes and "
+            "no --mix-reads writes each genome's reads into separate files "
+            "in the target root. Add --mix-reads to interleave, or drop "
+            "--force-structure to get the default multiplex (one barcode "
+            "per genome).",
+            err=True,
+        )
     monitor_type = _resolve_monitor(monitor, quiet)
 
     # Species / mock / taxid resolution

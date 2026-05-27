@@ -1140,6 +1140,67 @@ class TestEdgeCases:
         barcode_dirs = [d for d in target.iterdir() if d.is_dir()]
         assert len(barcode_dirs) >= 1
 
+    def test_force_singleplex_multi_genome_warns(self, sample_fasta, tmp_path):
+        """Forcing singleplex on multiple genomes without --mix-reads is a
+        silent footgun: each genome's reads land in the target root with
+        no barcode grouping. The CLI must emit a warning to stderr."""
+        second = tmp_path / "second.fa"
+        second.write_text(">chr1\n" + "ACGT" * 100 + "\n")
+        target = tmp_path / "gen_output"
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target",
+                str(target),
+                "--genomes",
+                str(sample_fasta),
+                "--genomes",
+                str(second),
+                "--read-count",
+                "10",
+                "--interval",
+                "0",
+                "--generator-backend",
+                "builtin",
+                "--force-structure",
+                "singleplex",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "force-structure singleplex" in (result.stderr or "")
+
+    def test_force_singleplex_multi_genome_no_warn_with_mix(
+        self, sample_fasta, tmp_path
+    ):
+        """With --mix-reads the operator has signalled intent, so no warning."""
+        second = tmp_path / "second.fa"
+        second.write_text(">chr1\n" + "ACGT" * 100 + "\n")
+        target = tmp_path / "gen_output"
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target",
+                str(target),
+                "--genomes",
+                str(sample_fasta),
+                "--genomes",
+                str(second),
+                "--read-count",
+                "10",
+                "--interval",
+                "0",
+                "--generator-backend",
+                "builtin",
+                "--force-structure",
+                "singleplex",
+                "--mix-reads",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "force-structure singleplex" not in (result.stderr or "")
+
     def test_generate_output_format_fastq(self, sample_fasta, tmp_path):
         target = tmp_path / "gen_output"
         result = runner.invoke(

@@ -4,7 +4,13 @@ import gzip
 
 import pytest
 from pathlib import Path
-from nanopore_simulator.fastq import count_reads, iter_reads, write_reads
+from nanopore_simulator.fastq import (
+    count_reads,
+    count_reads_with_offsets,
+    iter_reads,
+    iter_reads_from_offset,
+    write_reads,
+)
 
 
 class TestCountReads:
@@ -93,3 +99,39 @@ class TestWriteReads:
         write_reads([], out)
         assert out.exists()
         assert count_reads(out) == 0
+
+
+class TestTruncatedInput:
+    """Truncated FASTQ files (last record missing qual line) must not
+    raise -- the parser stops cleanly at the EOF.
+
+    Covers the ``if not qual: break`` branches in
+    ``count_reads_with_offsets``, ``iter_reads``, and
+    ``iter_reads_from_offset``.
+    """
+
+    @pytest.fixture
+    def truncated_fastq(self, tmp_path: Path) -> Path:
+        """One full record, then a header/seq/+ but no qual line."""
+        fq = tmp_path / "truncated.fastq"
+        fq.write_text("@r1\nACGT\n+\nIIII\n@r2\nACGT\n+\n")
+        return fq
+
+    def test_count_with_offsets_handles_truncation(self, truncated_fastq):
+        count, offsets = count_reads_with_offsets(truncated_fastq, chunk_size=1)
+        # Only the complete record counts; the truncated tail is
+        # ignored. An offset may be recorded at the start of the bad
+        # record (which the executor will then read past EOF) -- that
+        # is harmless because the count is the authoritative bound.
+        assert count == 1
+        assert offsets[0] == 0
+        assert len(offsets) >= 1
+
+    def test_iter_reads_handles_truncation(self, truncated_fastq):
+        reads = list(iter_reads(truncated_fastq))
+        assert len(reads) == 1
+        assert reads[0][0] == "@r1"
+
+    def test_iter_reads_from_offset_handles_truncation(self, truncated_fastq):
+        reads = list(iter_reads_from_offset(truncated_fastq, offset=0))
+        assert len(reads) == 1
