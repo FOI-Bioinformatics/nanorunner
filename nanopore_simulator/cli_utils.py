@@ -13,7 +13,6 @@ import typer
 from nanopore_simulator.cli import GeneratorBackend, OutputFormat, app
 from nanopore_simulator.runner import run_generate
 
-
 # ---------------------------------------------------------------------------
 # Informational commands
 # ---------------------------------------------------------------------------
@@ -330,75 +329,15 @@ def download(
             typer.echo(f"Error: {err}", err=True)
         raise typer.Exit(code=1)
 
-    # Resolve and download
-    from nanopore_simulator.species import (
-        GenomeCache,
-        GenomeRef,
-        download_genome,
-        resolve_species,
-        resolve_taxid,
+    # Resolve and download via the shared cli_helpers pipeline.
+    from nanopore_simulator.cli_helpers import (
+        _download_genome_refs,
+        _resolve_genome_refs,
     )
-    from nanopore_simulator.mocks import get_mock
 
-    cache = GenomeCache()
-    genome_downloads: List[tuple] = []  # (name, ref) pairs
-    mock_community = None
-
-    if mock:
-        mock_community = get_mock(mock)
-        if mock_community is None:
-            typer.echo(f"Error: Unknown mock community: {mock}", err=True)
-            raise typer.Exit(code=1)
-        for org in mock_community.organisms:
-            ref: Optional[GenomeRef] = None
-            if org.accession:
-                domain = org.domain or (
-                    "eukaryota" if org.resolver == "ncbi" else "bacteria"
-                )
-                ref = GenomeRef(
-                    name=org.name,
-                    accession=org.accession,
-                    source=org.resolver,
-                    domain=domain,
-                )
-            else:
-                ref = resolve_species(org.name)
-            if ref:
-                genome_downloads.append((org.name, ref))
-            else:
-                typer.echo(f"Warning: Could not resolve: {org.name}", err=True)
-
-    if species:
-        for sp in species:
-            sp_ref: Optional[GenomeRef] = resolve_species(sp)
-            if sp_ref:
-                genome_downloads.append((sp, sp_ref))
-            else:
-                typer.echo(f"Warning: Could not resolve: {sp}", err=True)
-
-    if taxid:
-        for tid in taxid:
-            tid_ref: Optional[GenomeRef] = resolve_taxid(tid)
-            if tid_ref:
-                genome_downloads.append((f"taxid:{tid}", tid_ref))
-            else:
-                typer.echo(f"Warning: Could not resolve taxid: {tid}", err=True)
-
-    if not genome_downloads:
-        typer.echo("No genomes to download", err=True)
-        raise typer.Exit(code=1)
-
-    typer.echo(f"Downloading {len(genome_downloads)} genome(s)...")
-    successful: List[tuple] = []  # (name, ref, path)
-
-    for name, ref in genome_downloads:
-        try:
-            path = download_genome(ref, cache=cache)
-            typer.echo(f"  Downloaded: {name} -> {path}")
-            successful.append((name, ref, path))
-        except Exception as exc:
-            typer.echo(f"  Failed: {name} - {exc}", err=True)
-
+    taxid_strs = [str(t) for t in taxid] if taxid else None
+    refs = _resolve_genome_refs(mock, species, taxid_strs)
+    successful = _download_genome_refs(refs)
     typer.echo("Download complete")
 
     # Optionally generate reads if target provided
@@ -410,7 +349,7 @@ def download(
             )
             raise typer.Exit(code=1)
 
-        genome_paths = [path for _, _, path in successful]
+        genome_paths = [path for _, _, path, _ in successful]
 
         from nanopore_simulator.config import GenerateConfig
 

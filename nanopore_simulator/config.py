@@ -9,11 +9,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-
 _VALID_TIMING_MODELS = {"uniform", "random", "poisson", "adaptive"}
 _VALID_MONITOR_TYPES = {"basic", "enhanced", "none"}
 _VALID_STRUCTURES_REPLAY = {"auto", "singleplex", "multiplex"}
 _VALID_STRUCTURES_GENERATE = {"singleplex", "multiplex"}
+_VALID_OUTPUT_STRUCTURES = {"preserve", "flat", "barcoded"}
 _VALID_GENERATOR_BACKENDS = {"auto", "builtin", "badread", "nanosim"}
 _VALID_OUTPUT_FORMATS = {"fastq", "fastq.gz"}
 
@@ -50,7 +50,9 @@ class ReplayConfig:
     """Configuration for replay mode (copy/link existing files).
 
     Attributes:
-        source_dir: Directory containing source sequencing files.
+        source_dir: Directory containing source sequencing files, or a
+            path to a single FASTQ file (treated as a singleplex source
+            with one file).
         target_dir: Directory where files will be placed.
         operation: File transfer method -- "copy" or "link".
         interval: Base seconds between batch operations.
@@ -64,6 +66,18 @@ class ReplayConfig:
         adapter: Pipeline adapter name, or None.
         reads_per_output: Rechunk FASTQ files to this many reads per output file.
         structure: Source directory layout -- "auto", "singleplex", or "multiplex".
+        output_structure: Target directory layout -- "preserve" (mirror the
+            source), "flat" (all files in target_dir), or "barcoded" (split
+            into barcode subdirectories). Non-"preserve" values require
+            ``reads_per_output`` to be set and ``operation`` to be "copy".
+        output_barcodes: Number of barcode directories to emit when
+            ``output_structure`` is "barcoded". Pooled reads are split
+            evenly across these directories.
+        output_barcode_pattern: Python format string for barcode directory
+            names. Must contain exactly one positional placeholder accepting
+            an integer (e.g. "barcode{:02d}").
+        output_file_prefix: Optional filename stem used for output chunks
+            when reshaping. When None, the source stem is used.
     """
 
     source_dir: Path
@@ -80,6 +94,10 @@ class ReplayConfig:
     adapter: Optional[str] = None
     reads_per_output: Optional[int] = None
     structure: str = "auto"
+    output_structure: str = "preserve"
+    output_barcodes: int = 1
+    output_barcode_pattern: str = "barcode{:02d}"
+    output_file_prefix: Optional[str] = None
 
     def __post_init__(self) -> None:
         _validate_common(
@@ -105,6 +123,36 @@ class ReplayConfig:
                     "rechunking is incompatible with operation='link' "
                     "because it requires reading and rewriting file contents"
                 )
+        if self.output_structure not in _VALID_OUTPUT_STRUCTURES:
+            raise ValueError(
+                "output_structure must be one of: "
+                f"{sorted(_VALID_OUTPUT_STRUCTURES)}"
+            )
+        if self.output_structure != "preserve":
+            if self.operation == "link":
+                raise ValueError(
+                    "output_structure reshaping is incompatible with "
+                    "operation='link'; use --operation copy"
+                )
+            if self.reads_per_output is None:
+                raise ValueError(
+                    "output_structure reshaping requires --reads-per-file "
+                    "(reads_per_output) to be set"
+                )
+        if self.output_barcodes < 1:
+            raise ValueError("output_barcodes must be at least 1")
+        # Validate the barcode pattern by trying to format it.
+        try:
+            sample = self.output_barcode_pattern.format(1)
+        except (IndexError, KeyError, ValueError) as exc:
+            raise ValueError(
+                "output_barcode_pattern must accept one positional integer, "
+                f'e.g. "barcode{{:02d}}" (got {self.output_barcode_pattern!r}: {exc})'
+            )
+        if not sample:
+            raise ValueError(
+                "output_barcode_pattern must produce a non-empty directory name"
+            )
 
 
 @dataclass(frozen=True)

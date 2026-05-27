@@ -19,7 +19,6 @@ from nanopore_simulator.detection import (
 )
 from nanopore_simulator.fastq import count_reads_with_offsets
 
-
 # -------------------------------------------------------------------
 # FileEntry dataclass
 # -------------------------------------------------------------------
@@ -157,7 +156,10 @@ def build_replay_manifest(config: ReplayConfig) -> List[FileEntry]:
 
     Detects (or uses forced) source directory structure and enumerates
     files.  When ``reads_per_output`` is set, source FASTQ files are
-    rechunked into smaller output files.  Batch numbers are assigned
+    rechunked into smaller output files.  When ``output_structure`` is
+    not "preserve", the input shape is decoupled from the output shape:
+    source reads are pooled and replayed into a flat or barcoded target
+    layout regardless of the source layout.  Batch numbers are assigned
     according to ``batch_size``.
 
     Args:
@@ -166,26 +168,30 @@ def build_replay_manifest(config: ReplayConfig) -> List[FileEntry]:
     Returns:
         Ordered list of FileEntry objects to execute.
     """
-    # Determine structure
-    if config.structure != "auto":
-        structure = config.structure
+    # Special case: source is a single file rather than a directory.
+    if config.source_dir.is_file():
+        raw_entries = _single_file_entries(config)
     else:
-        try:
-            structure = detect_structure(config.source_dir)
-        except ValueError:
-            return []
+        if config.structure != "auto":
+            structure = config.structure
+        else:
+            try:
+                structure = detect_structure(config.source_dir)
+            except ValueError:
+                return []
 
-    # Build raw file list
-    if structure == "singleplex":
-        raw_entries = _singleplex_entries(config)
-    else:
-        raw_entries = _multiplex_entries(config)
+        if structure == "singleplex":
+            raw_entries = _singleplex_entries(config)
+        else:
+            raw_entries = _multiplex_entries(config)
 
     if not raw_entries:
         return []
 
-    # Rechunking path
-    if config.reads_per_output is not None:
+    # Reshape / rechunk path.  Both --reads-per-file and a non-preserve
+    # --output-structure flow through the same pooled-rechunk pipeline.
+    needs_reshape = config.output_structure != "preserve"
+    if config.reads_per_output is not None or needs_reshape:
         raw_entries = _rechunk_entries(raw_entries, config)
 
     # Assign batch numbers
@@ -193,6 +199,19 @@ def build_replay_manifest(config: ReplayConfig) -> List[FileEntry]:
         entry.batch = i // config.batch_size
 
     return raw_entries
+
+
+def _single_file_entries(config: ReplayConfig) -> List[FileEntry]:
+    """Build a synthetic singleplex entry for a single-file source."""
+    src = config.source_dir
+    return [
+        FileEntry(
+            source=src,
+            target=config.target_dir / src.name,
+            operation=config.operation,
+            barcode=None,
+        )
+    ]
 
 
 def _singleplex_entries(config: ReplayConfig) -> List[FileEntry]:
@@ -238,112 +257,197 @@ def _rechunk_entries(
 
     Reads are counted in each source FASTQ while simultaneously
     recording byte offsets at chunk boundaries.  Output entries are
-    planned with ``reads_per_output`` reads each and carry a
-    ``source_offset`` so the executor can seek directly to the
-    correct position instead of scanning earlier reads.
+    planned with ``reads_per_output`` reads each (or, when only the
+    output structure is changing, sized to fit the requested layout)
+    and carry a ``source_offset`` so the executor can seek directly to
+    the correct position instead of scanning earlier reads.
 
-    Chunks are interleaved round-robin across barcodes so that each
-    batch interval advances all barcodes together rather than finishing
-    one barcode before starting the next.
+    Output layout is controlled by ``config.output_structure``:
+
+    - ``preserve``: input barcode groups are kept; chunks within each
+      group keep their barcode and are interleaved round-robin so each
+      batch interval advances all barcodes together.
+    - ``flat``: all source FASTQs (across any input barcodes) are pooled
+      into a single sequence of chunks emitted into ``target_dir``.
+    - ``barcoded``: source FASTQs are pooled and chunks are dealt
+      round-robin across ``output_barcodes`` directories named via
+      ``output_barcode_pattern``.
     """
-    from itertools import zip_longest
-
     rpf = config.reads_per_output
-    assert rpf is not None
+    # When only the structure is changing (no explicit --reads-per-file),
+    # use a default chunk size large enough that small fixtures still
+    # produce at least one file per output barcode.  We override this
+    # below once the total read count is known.
+    needs_reshape = config.output_structure != "preserve"
 
-    # Group by barcode
+    # Group entries by input barcode (or by None for singleplex).
     barcode_order: List[Optional[str]] = []
     groups: dict = {}
     for entry in raw_entries:
         bc = entry.barcode
         if bc not in groups:
             barcode_order.append(bc)
-            # Determine target directory from existing entry
-            if entry.barcode:
-                target_dir = config.target_dir / entry.barcode
-            else:
-                target_dir = config.target_dir
             groups[bc] = {
-                "target_dir": target_dir,
+                "input_target_dir": (
+                    config.target_dir / bc if bc else config.target_dir
+                ),
                 "fastq_files": [],
                 "other_entries": [],
             }
         if entry.source is not None and _is_fastq_file(entry.source):
-            read_count, offsets = count_reads_with_offsets(entry.source, rpf)
-            groups[bc]["fastq_files"].append((entry.source, read_count, offsets))
+            groups[bc]["fastq_files"].append(entry.source)
         else:
             groups[bc]["other_entries"].append(entry)
 
     rechunked: List[FileEntry] = []
 
-    # Non-FASTQ files pass through first (order preserved per barcode)
-    for bc in barcode_order:
-        rechunked.extend(groups[bc]["other_entries"])
+    # Non-FASTQ files pass through first (preserve mode only).
+    if not needs_reshape:
+        for bc in barcode_order:
+            rechunked.extend(groups[bc]["other_entries"])
 
-    # Build per-barcode chunk lists, then interleave round-robin so that
-    # batch assignment spreads chunks across barcodes rather than
-    # exhausting one barcode before starting the next.
+    if needs_reshape:
+        # Pool all FASTQ sources across input barcodes into a single
+        # ordered sequence.  The output layout is computed entirely
+        # from output_structure / output_barcodes.
+        pooled_sources: List[Path] = []
+        for bc in barcode_order:
+            pooled_sources.extend(groups[bc]["fastq_files"])
+        if not pooled_sources:
+            return rechunked
+        rechunked.extend(_plan_reshape(pooled_sources, config, rpf))
+        return rechunked
+
+    # Preserve mode: build per-input-barcode chunk lists, then
+    # interleave round-robin.
+    from itertools import zip_longest
+
+    assert rpf is not None  # preserve+rechunk path requires reads_per_output
     per_barcode_chunks: List[List[FileEntry]] = []
     for bc in barcode_order:
         grp = groups[bc]
-        target_dir = grp["target_dir"]
-        bc_chunks: List[FileEntry] = []
+        target_dir = grp["input_target_dir"]
+        sources = grp["fastq_files"]
+        per_barcode_chunks.append(
+            _plan_preserve_chunks(sources, target_dir, bc, rpf, config)
+        )
 
-        total_reads = sum(c for _, c, _ in grp["fastq_files"])
-        if total_reads == 0:
-            per_barcode_chunks.append(bc_chunks)
-            continue
-
-        n_output = math.ceil(total_reads / rpf)
-        first_source = grp["fastq_files"][0][0] if grp["fastq_files"] else None
-        # `ext` (gzip vs plain) is the same across the whole barcode
-        # group because all sources are FASTQ-shaped; the chunk
-        # filename stem, however, must follow whichever source
-        # contributed the chunk's reads -- using only the first
-        # source's stem makes operator-visible output look like one
-        # giant input ran. See docs/audit-2026-05-02-nanorunner-and-compat.md
-        # finding §1.4.
-        ext = _get_fastq_extension(first_source) if first_source else ".fastq"
-
-        # Collect ordered source paths for the rechunk entries.
-        source_paths = [src for src, _, _ in grp["fastq_files"]]
-
-        # Build a global chunk-to-(source_file_index, byte_offset) map.
-        chunk_offsets = _build_chunk_offsets(grp["fastq_files"], rpf)
-
-        for chunk_idx in range(n_output):
-            src_file_idx, byte_offset = chunk_offsets.get(chunk_idx, (0, None))
-            # Stem comes from the chunk's actual source, not the
-            # alphabetically-first source.
-            chunk_source = (
-                source_paths[src_file_idx] if byte_offset is not None else first_source
-            )
-            stem = _fastq_stem(chunk_source) if chunk_source else "reads"
-            filename = f"{stem}_chunk_{chunk_idx:04d}{ext}"
-            bc_chunks.append(
-                FileEntry(
-                    source=(
-                        source_paths[src_file_idx] if byte_offset is not None else None
-                    ),
-                    target=target_dir / filename,
-                    operation="rechunk",
-                    barcode=bc,
-                    read_count=min(rpf, total_reads - chunk_idx * rpf),
-                    file_index=chunk_idx,
-                    source_files=source_paths,
-                    source_offset=byte_offset,
-                )
-            )
-
-        per_barcode_chunks.append(bc_chunks)
-
-    # Interleave: bc01_chunk0, bc02_chunk0, ..., bc01_chunk1, bc02_chunk1, ...
-    for group in zip_longest(*per_barcode_chunks):
-        for entry in group:
+    for chunk_group in zip_longest(*per_barcode_chunks):
+        for entry in chunk_group:
             if entry is not None:
                 rechunked.append(entry)
 
     return rechunked
+
+
+def _plan_preserve_chunks(
+    sources: List[Path],
+    target_dir: Path,
+    barcode: Optional[str],
+    rpf: int,
+    config: ReplayConfig,
+) -> List[FileEntry]:
+    """Plan rechunked entries for one input barcode group (preserve mode)."""
+    fastq_files = [(src, *count_reads_with_offsets(src, rpf)) for src in sources]
+    total_reads = sum(c for _, c, _ in fastq_files)
+    if total_reads == 0:
+        return []
+
+    n_output = math.ceil(total_reads / rpf)
+    first_source = fastq_files[0][0]
+    ext = _get_fastq_extension(first_source)
+    source_paths = [src for src, _, _ in fastq_files]
+    chunk_offsets = _build_chunk_offsets(fastq_files, rpf)
+
+    entries: List[FileEntry] = []
+    for chunk_idx in range(n_output):
+        src_file_idx, byte_offset = chunk_offsets.get(chunk_idx, (0, None))
+        chunk_source = (
+            source_paths[src_file_idx] if byte_offset is not None else first_source
+        )
+        stem = (
+            config.output_file_prefix
+            if config.output_file_prefix
+            else _fastq_stem(chunk_source)
+        )
+        filename = f"{stem}_chunk_{chunk_idx:04d}{ext}"
+        entries.append(
+            FileEntry(
+                source=(
+                    source_paths[src_file_idx] if byte_offset is not None else None
+                ),
+                target=target_dir / filename,
+                operation="rechunk",
+                barcode=barcode,
+                read_count=min(rpf, total_reads - chunk_idx * rpf),
+                file_index=chunk_idx,
+                source_files=source_paths,
+                source_offset=byte_offset,
+            )
+        )
+    return entries
+
+
+def _plan_reshape(
+    pooled_sources: List[Path], config: ReplayConfig, rpf: Optional[int]
+) -> List[FileEntry]:
+    """Plan chunks for a non-preserve output layout from pooled sources."""
+    assert rpf is not None  # enforced by ReplayConfig validation
+    fastq_files = [(src, *count_reads_with_offsets(src, rpf)) for src in pooled_sources]
+    total_reads = sum(c for _, c, _ in fastq_files)
+    if total_reads == 0:
+        return []
+
+    n_output = math.ceil(total_reads / rpf)
+    first_source = pooled_sources[0]
+    ext = _get_fastq_extension(first_source)
+    chunk_offsets = _build_chunk_offsets(fastq_files, rpf)
+
+    if config.output_structure == "flat":
+        per_chunk_barcodes: List[Optional[str]] = [None] * n_output
+        per_chunk_target_dirs: List[Path] = [config.target_dir] * n_output
+        per_chunk_file_idx: List[int] = list(range(n_output))
+    else:  # "barcoded"
+        n_bc = config.output_barcodes
+        per_chunk_barcodes = []
+        per_chunk_target_dirs = []
+        per_chunk_file_idx = []
+        per_bc_counter = [0] * n_bc
+        for chunk_idx in range(n_output):
+            bc_idx = chunk_idx % n_bc
+            bc_name = config.output_barcode_pattern.format(bc_idx + 1)
+            per_chunk_barcodes.append(bc_name)
+            per_chunk_target_dirs.append(config.target_dir / bc_name)
+            per_chunk_file_idx.append(per_bc_counter[bc_idx])
+            per_bc_counter[bc_idx] += 1
+
+    entries: List[FileEntry] = []
+    for chunk_idx in range(n_output):
+        src_file_idx, byte_offset = chunk_offsets.get(chunk_idx, (0, None))
+        chunk_source = (
+            pooled_sources[src_file_idx] if byte_offset is not None else first_source
+        )
+        stem = (
+            config.output_file_prefix
+            if config.output_file_prefix
+            else _fastq_stem(chunk_source)
+        )
+        filename = f"{stem}_chunk_{per_chunk_file_idx[chunk_idx]:04d}{ext}"
+        entries.append(
+            FileEntry(
+                source=(
+                    pooled_sources[src_file_idx] if byte_offset is not None else None
+                ),
+                target=per_chunk_target_dirs[chunk_idx] / filename,
+                operation="rechunk",
+                barcode=per_chunk_barcodes[chunk_idx],
+                read_count=min(rpf, total_reads - chunk_idx * rpf),
+                file_index=per_chunk_file_idx[chunk_idx],
+                source_files=pooled_sources,
+                source_offset=byte_offset,
+            )
+        )
+    return entries
 
 
 def _build_chunk_offsets(fastq_files: list, rpf: int) -> dict:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nanorunner"
-version = "3.0.0"
+version = "3.1.0"
 description = "Comprehensive nanopore sequencing simulator with timing models, parallel processing, and real-time monitoring for bioinformatics pipeline testing"
 readme = "README.md"
 dependencies = [

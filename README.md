@@ -4,52 +4,58 @@
 ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
 
-NanoRunner is a Python tool for testing nanopore sequencing analysis
-pipelines. It delivers FASTQ files to a target directory with controlled
-timing, allowing downstream watch-directory pipelines to be exercised
-without an active sequencer.
+NanoRunner delivers FASTQ files into a target directory with controlled
+timing, so that downstream watch-directory pipelines can be exercised
+without an active sequencer. Two run modes are provided:
 
-The tool operates in two modes:
+- **Replay** -- transfer existing FASTQ files (a single file, a flat
+  directory, or barcoded subdirectories) into the target with
+  configurable timing. Can rechunk a single FASTQ into many small
+  files and reshape the output layout independently of the input.
+- **Generate** -- produce simulated reads from genome FASTAs, species
+  names, or mock community presets, and deliver them with the same
+  timing models.
 
-- **Replay**: transfer existing FASTQ files from a source directory to a
-  target directory at configurable intervals.
-- **Generate**: produce simulated nanopore reads from genome FASTA files
-  (or species names / mock community presets) and write them to the target
-  directory at configurable intervals.
+Both modes are compatible with watch-directory pipelines such as
+Nanometa Live and nanometanf.
 
-Both modes preserve singleplex and multiplex (barcoded) directory layouts
-and are compatible with downstream pipelines that monitor a directory,
-such as Nanometa Live and nanometanf.
-
-## Get started
-
-The recommended environment manager is conda:
+## Install
 
 ```bash
 conda create -n nanorunner python=3.10
 conda activate nanorunner
-pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v3.0.0
+pip install git+https://github.com/FOI-Bioinformatics/nanorunner.git@v3.1.0
 nanorunner --help
 ```
 
-For full installation options, the two run modes, timing models,
-configuration parameters, and pipeline integration, see the
-[usage guide](docs/quickstart.md). For an end-to-end demo driving
-Nanometa Live with simulated reads, see the
-[Nanometa Live integration walkthrough](https://github.com/FOI-Bioinformatics/nanometa_live/blob/main/docs/quickstart-with-nanorunner.md).
+## First run
+
+```bash
+# Replay an existing run into a watch directory at 5 s intervals
+nanorunner replay --source /data/run01 --target /watch/output --interval 5
+
+# Generate 1000 simulated reads from one genome
+nanorunner generate --genomes genome.fa --target /watch/output --interval 5
+```
 
 ## Documentation
 
-- [Usage guide](docs/quickstart.md) -- installation, run modes, timing
-  models, configuration, pipeline integration
-- [Troubleshooting](docs/troubleshooting.md) -- installation and runtime
-  issues
-- [Testing notes](docs/testing.md) -- test categories, running tests, and
-  contribution conventions
-- [Examples](examples/) -- runnable scripts demonstrating timing models,
-  profiles, parallel processing, and pipeline integration
-- [CLAUDE.md](CLAUDE.md) -- developer guide (architecture, extension
-  points)
+See **[docs/](docs/README.md)** for the full documentation:
+
+- [Getting started](docs/getting-started.md)
+- [Replay guide](docs/guides/replay.md) -- includes the 3x3
+  input/output reshape matrix.
+- [Generate guide](docs/guides/generate.md)
+- [Timing models](docs/guides/timing-models.md)
+- [Pipeline integration](docs/guides/pipeline-integration.md)
+- [CLI reference](docs/reference/cli.md)
+- [Configuration reference](docs/reference/configuration.md)
+- [Troubleshooting](docs/reference/troubleshooting.md)
+- [Examples](examples/) -- runnable scripts
+- [CLAUDE.md](CLAUDE.md) -- developer guide
+
+For an end-to-end demo driving Nanometa Live with simulated reads,
+see the [Nanometa Live integration walkthrough](https://github.com/FOI-Bioinformatics/nanometa_live/blob/main/docs/quickstart-with-nanorunner.md).
 
 ## Requirements
 
@@ -59,8 +65,7 @@ Nanometa Live with simulated reads, see the
   for higher-fidelity read simulation; `ncbi-datasets-cli` for
   `--species` / `--mock` workflows
 
-Run `nanorunner check-deps` for a current dependency status report and
-install hints.
+Run `nanorunner check-deps` for a current dependency status report.
 
 ## Citation
 

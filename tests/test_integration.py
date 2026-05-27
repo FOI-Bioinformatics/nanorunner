@@ -766,7 +766,7 @@ class TestVersionFlag:
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
         assert "nanorunner" in result.output
-        assert "3.0.0" in result.output
+        assert "3.1.0" in result.output
 
 
 class TestReplayRechunking:
@@ -1132,3 +1132,172 @@ class TestInterruptRecovery:
         completed_files = list(target.glob("*.fastq"))
         # At least the first file should have been written successfully.
         assert len(completed_files) >= 1
+
+
+# ---------------------------------------------------------------------------
+# 3x3 input/output reshape matrix
+# ---------------------------------------------------------------------------
+
+
+def _write_fastq(
+    path: Path, n_reads: int, start: int = 0, compress: bool = False
+) -> None:
+    """Write *n_reads* synthetic FASTQ records to *path*."""
+    lines = []
+    for i in range(start, start + n_reads):
+        lines.append(f"@read{i}\nACGTACGT\n+\nIIIIIIII\n")
+    blob = "".join(lines)
+    if compress:
+        with gzip.open(path, "wt") as fh:
+            fh.write(blob)
+    else:
+        path.write_text(blob)
+
+
+def _count_reads(path: Path) -> int:
+    opener = gzip.open if path.suffix == ".gz" else open
+    with opener(path, "rt") as fh:
+        return sum(1 for line in fh if line.startswith("@read"))
+
+
+def _make_input(tmp_path: Path, shape: str, compressed: bool) -> Path:
+    """Build a source layout for one of: flat-one, flat-many, barcoded."""
+    src = tmp_path / "source"
+    src.mkdir()
+    ext = ".fastq.gz" if compressed else ".fastq"
+    if shape == "flat-one":
+        f = src / f"reads_all{ext}"
+        _write_fastq(f, 30, compress=compressed)
+        return f  # source is the file itself
+    if shape == "flat-many":
+        for i in range(3):
+            _write_fastq(src / f"reads_{i}{ext}", 10, start=i * 10, compress=compressed)
+        return src
+    if shape == "barcoded":
+        per_bc = 10
+        for j, bc in enumerate(["barcode01", "barcode02", "barcode03"]):
+            bc_dir = src / bc
+            bc_dir.mkdir()
+            _write_fastq(
+                bc_dir / f"reads{ext}", per_bc, start=j * per_bc, compress=compressed
+            )
+        return src
+    raise ValueError(shape)
+
+
+@pytest.mark.parametrize("input_shape", ["flat-one", "flat-many", "barcoded"])
+@pytest.mark.parametrize("output_shape", ["preserve", "flat", "barcoded"])
+@pytest.mark.parametrize("compressed", [False, True])
+def test_reshape_matrix(
+    tmp_path: Path, input_shape: str, output_shape: str, compressed: bool
+) -> None:
+    """End-to-end: every cell of the 3x3 reshape matrix preserves total reads
+    and produces the requested target layout."""
+    source = _make_input(tmp_path, input_shape, compressed)
+    target = tmp_path / "target"
+    target.mkdir()
+
+    config = ReplayConfig(
+        source_dir=source,
+        target_dir=target,
+        operation="copy",
+        interval=0.0,
+        reads_per_output=7,
+        output_structure=output_shape,
+        output_barcodes=3 if output_shape == "barcoded" else 1,
+        monitor_type="none",
+    )
+    run_replay(config)
+
+    # All output FASTQ files (recursive).
+    out_files = sorted(p for p in target.rglob("*") if p.is_file())
+    assert out_files, "no output produced"
+
+    total_out = sum(_count_reads(p) for p in out_files)
+    assert total_out == 30, f"reads not preserved: {total_out}"
+
+    if output_shape == "preserve":
+        if input_shape == "barcoded":
+            # Output mirrors input barcode dirs.
+            assert all(p.parent.name.startswith("barcode") for p in out_files)
+        else:
+            # Flat or single-file source -> all files directly under target.
+            assert all(p.parent == target for p in out_files)
+    elif output_shape == "flat":
+        assert all(p.parent == target for p in out_files)
+    elif output_shape == "barcoded":
+        bc_dirs = {p.parent.name for p in out_files}
+        assert bc_dirs == {"barcode01", "barcode02", "barcode03"}, bc_dirs
+
+
+def test_reshape_requires_reads_per_file(tmp_path: Path) -> None:
+    """Non-preserve output_structure without --reads-per-file is a config error."""
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / "a.fastq").write_text("@r1\nACGT\n+\nIIII\n")
+    with pytest.raises(ValueError, match="reads_per_output"):
+        ReplayConfig(
+            source_dir=src,
+            target_dir=tmp_path / "out",
+            output_structure="flat",
+        )
+
+
+def test_reshape_requires_copy_operation(tmp_path: Path) -> None:
+    """Non-preserve output_structure with operation='link' is a config error."""
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / "a.fastq").write_text("@r1\nACGT\n+\nIIII\n")
+    with pytest.raises(ValueError, match="operation='link'"):
+        ReplayConfig(
+            source_dir=src,
+            target_dir=tmp_path / "out",
+            operation="link",
+            reads_per_output=10,
+            output_structure="flat",
+        )
+
+
+def test_reshape_custom_barcode_pattern(tmp_path: Path) -> None:
+    """--output-barcode-pattern controls output directory naming."""
+    src = tmp_path / "in"
+    src.mkdir()
+    _write_fastq(src / "reads.fastq", 12)
+    target = tmp_path / "out"
+    target.mkdir()
+    config = ReplayConfig(
+        source_dir=src,
+        target_dir=target,
+        operation="copy",
+        interval=0.0,
+        reads_per_output=4,
+        output_structure="barcoded",
+        output_barcodes=2,
+        output_barcode_pattern="bc{:01d}",
+        monitor_type="none",
+    )
+    run_replay(config)
+    bc_dirs = {p.name for p in target.iterdir() if p.is_dir()}
+    assert bc_dirs == {"bc1", "bc2"}, bc_dirs
+
+
+def test_reshape_custom_file_prefix(tmp_path: Path) -> None:
+    """--output-file-prefix overrides the source stem in chunk filenames."""
+    src = tmp_path / "in"
+    src.mkdir()
+    _write_fastq(src / "reads.fastq", 10)
+    target = tmp_path / "out"
+    target.mkdir()
+    config = ReplayConfig(
+        source_dir=src,
+        target_dir=target,
+        operation="copy",
+        interval=0.0,
+        reads_per_output=5,
+        output_structure="flat",
+        output_file_prefix="run42",
+        monitor_type="none",
+    )
+    run_replay(config)
+    names = sorted(p.name for p in target.iterdir() if p.is_file())
+    assert all(n.startswith("run42_chunk_") for n in names), names

@@ -10,7 +10,6 @@ from typing import Dict, List, Optional
 
 import typer
 
-
 # ---------------------------------------------------------------------------
 # Genome file extensions
 # ---------------------------------------------------------------------------
@@ -138,45 +137,31 @@ def _expand_genome_paths(paths: List[Path]) -> List[Path]:
     return expanded
 
 
-def _resolve_and_download_genomes(
+def _resolve_genome_refs(
     mock_name: Optional[str],
     species_inputs: Optional[List[str]],
     taxid_inputs: Optional[List[str]],
-    offline: bool = False,
-) -> tuple:
-    """Resolve mock/species/taxid inputs to downloaded genome paths.
+) -> List[tuple]:
+    """Resolve mock/species/taxid inputs to genome references.
 
-    Downloads genomes as needed via NCBI datasets CLI and returns
-    a list of local FASTA file paths ready for read generation,
-    along with any abundance information from mock communities.
-
-    Args:
-        mock_name: Preset mock community name, or None.
-        species_inputs: Species names to resolve, or None.
-        taxid_inputs: NCBI taxonomy IDs as strings, or None.
-        offline: If True, use only cached genomes.
-
-    Returns:
-        Tuple of (genome_paths, abundances) where abundances may be None.
+    Returns a list of (name, GenomeRef, abundance_or_None) tuples.  The
+    abundance value is only set for mock-community organisms; species
+    and taxid inputs get None so callers can preserve index alignment
+    when different input types are combined.  Unresolvable inputs emit
+    warnings and are skipped.
 
     Raises:
-        typer.Exit: If resolution or download fails completely.
+        typer.Exit(code=1): If no inputs resolve to a valid GenomeRef
+            (e.g. unknown mock name and no other inputs).
     """
     from nanopore_simulator.species import (
-        GenomeCache,
         GenomeRef,
-        download_genome,
         resolve_species,
         resolve_taxid,
     )
     from nanopore_simulator.mocks import get_mock
 
-    cache = GenomeCache()
-    # Each entry is (name, ref, abundance_or_none).  The abundance
-    # value is only set for mock-community organisms; species and
-    # taxid inputs get None so that index alignment is maintained
-    # even when different input types are combined.
-    genome_downloads: List[tuple] = []
+    refs: List[tuple] = []
 
     if mock_name:
         mock_community = get_mock(mock_name)
@@ -198,7 +183,7 @@ def _resolve_and_download_genomes(
             else:
                 ref = resolve_species(org.name)
             if ref:
-                genome_downloads.append((org.name, ref, org.abundance))
+                refs.append((org.name, ref, org.abundance))
             else:
                 typer.echo(f"Warning: Could not resolve: {org.name}", err=True)
 
@@ -206,7 +191,7 @@ def _resolve_and_download_genomes(
         for sp in species_inputs:
             sp_ref: Optional[GenomeRef] = resolve_species(sp)
             if sp_ref:
-                genome_downloads.append((sp, sp_ref, None))
+                refs.append((sp, sp_ref, None))
             else:
                 typer.echo(f"Warning: Could not resolve: {sp}", err=True)
 
@@ -214,41 +199,75 @@ def _resolve_and_download_genomes(
         for tid in taxid_inputs:
             tid_ref: Optional[GenomeRef] = resolve_taxid(int(tid))
             if tid_ref:
-                genome_downloads.append((f"taxid:{tid}", tid_ref, None))
+                refs.append((f"taxid:{tid}", tid_ref, None))
             else:
                 typer.echo(f"Warning: Could not resolve taxid: {tid}", err=True)
 
-    if not genome_downloads:
+    if not refs:
         typer.echo("Error: No genomes could be resolved", err=True)
         raise typer.Exit(code=1)
 
-    typer.echo(f"Downloading {len(genome_downloads)} genome(s)...")
-    successful_paths: List[Path] = []
-    successful_abundances: List[float] = []
-    has_abundance_info = any(ab is not None for _, _, ab in genome_downloads)
+    return refs
 
-    for name, ref, abundance in genome_downloads:
+
+def _download_genome_refs(refs: List[tuple]) -> List[tuple]:
+    """Download genomes from resolved refs.
+
+    Takes the (name, ref, abundance_or_None) tuples returned by
+    ``_resolve_genome_refs`` and downloads each genome via the
+    shared cache.  Returns the list of (name, ref, path, abundance)
+    tuples that downloaded successfully.  Failures emit a warning
+    and are dropped from the result.
+    """
+    from nanopore_simulator.species import GenomeCache, download_genome
+
+    cache = GenomeCache()
+    typer.echo(f"Downloading {len(refs)} genome(s)...")
+    successful: List[tuple] = []
+    for name, ref, abundance in refs:
         try:
             path = download_genome(ref, cache=cache)
             typer.echo(f"  Ready: {name} -> {path}")
-            successful_paths.append(Path(path))
-            if abundance is not None:
-                successful_abundances.append(abundance)
+            successful.append((name, ref, Path(path), abundance))
         except Exception as exc:
             typer.echo(f"  Failed: {name} - {exc}", err=True)
+    return successful
 
-    if not successful_paths:
+
+def _resolve_and_download_genomes(
+    mock_name: Optional[str],
+    species_inputs: Optional[List[str]],
+    taxid_inputs: Optional[List[str]],
+    offline: bool = False,
+) -> tuple:
+    """Resolve and download mock/species/taxid inputs in one step.
+
+    Convenience wrapper used by the ``generate`` subcommand.  Returns
+    ``(genome_paths, abundances)`` ready for ``GenerateConfig``.  The
+    ``abundances`` list is None when no input supplied abundance info,
+    otherwise it is renormalized so the surviving genomes sum to 1.0.
+
+    Raises:
+        typer.Exit(code=1): If no genomes resolve or none download.
+    """
+    refs = _resolve_genome_refs(mock_name, species_inputs, taxid_inputs)
+    successful = _download_genome_refs(refs)
+
+    if not successful:
         typer.echo("Error: No genomes downloaded successfully", err=True)
         raise typer.Exit(code=1)
 
-    # Renormalize abundances if some genomes failed
-    final_abundances = None
-    if has_abundance_info and successful_abundances:
-        total = sum(successful_abundances)
-        if total > 0:
-            final_abundances = [a / total for a in successful_abundances]
+    paths = [path for _, _, path, _ in successful]
+    abundances_present = [a for _, _, _, a in successful if a is not None]
+    has_abundance_info = any(a is not None for _, _, _, a in successful)
 
-    return successful_paths, final_abundances
+    final_abundances = None
+    if has_abundance_info and abundances_present:
+        total = sum(abundances_present)
+        if total > 0:
+            final_abundances = [a / total for a in abundances_present]
+
+    return paths, final_abundances
 
 
 # ---------------------------------------------------------------------------

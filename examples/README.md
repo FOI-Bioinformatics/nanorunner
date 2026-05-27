@@ -145,8 +145,8 @@ rm -rf ~/.cache/nanorunner_genomes/
 
 After exploring these examples:
 
-1. Review the [full documentation](../README.md)
-2. Read [docs/quickstart.md](../docs/quickstart.md) for a guided introduction
-3. See [docs/troubleshooting.md](../docs/troubleshooting.md) for common issues
+1. Review the [full documentation](../docs/README.md)
+2. Read [docs/getting-started.md](../docs/getting-started.md) for a guided introduction
+3. See [docs/reference/troubleshooting.md](../docs/reference/troubleshooting.md) for common issues
 4. Try with your own sequencing data
 5. Integrate with your bioinformatics pipeline

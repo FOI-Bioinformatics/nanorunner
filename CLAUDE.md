@@ -15,7 +15,7 @@ to exercise watch-directory bioinformatics pipelines.
 Both modes preserve singleplex and multiplex (barcoded) layouts and apply one
 of four timing models. Optional resource monitoring is provided by `psutil`.
 
-**Current version:** 3.0.0
+**Current version:** 3.1.0
 **Conda environment for development:** `nanorunner`
 
 ## Project conventions
@@ -103,10 +103,11 @@ Flat layout under `nanopore_simulator/`. No subpackages.
 - `cli_generate.py` -- `generate` subcommand options and dispatch.
 - `cli_helpers.py` -- shared helpers used by the subcommand modules
   (genome resolution, abundance parsing, output dispatching).
-- `cli_utils.py` -- additional utilities used by the CLI layer. The
-  2026-04-29 audit flagged that some genome-resolution logic here
-  duplicates helpers in `cli_helpers.py`; treat as transitional and
-  do not extend without consolidating first.
+- `cli_utils.py` -- additional utilities used by the CLI layer (the
+  `download`, `validate`, `list-*`, `check-deps`, and `recommend`
+  subcommands). Shares genome-resolution helpers with `cli_generate`
+  via `cli_helpers._resolve_genome_refs` /
+  `cli_helpers._download_genome_refs`.
 - `timing.py` -- timing model implementations and factory.
 - `monitoring.py` -- `ProgressMonitor` with optional resource tracking; `NullMonitor` for headless runs.
 - `detection.py` -- module-level singleplex / multiplex structure detection.
@@ -179,8 +180,7 @@ files: `test_config.py`, `test_manifest.py`, `test_executor.py`,
 `test_adapters.py`, `test_profiles.py`, `test_deps.py`, `test_cli.py`,
 `test_integration.py`. Shared fixtures live in `conftest.py`.
 
-Coverage target: 90% (set in `pytest.ini`). Current coverage is 88%; the
-largest gap is `cli_helpers.py` at 55%.
+Coverage target: 90% (set in `pytest.ini`). Current coverage is 91%.
 
 ## Integration with Nanometa Live
 
@@ -221,7 +221,9 @@ entry under `examples/`.
 ## Reference
 
 - [README](README.md) -- project landing page
-- [Usage guide](docs/quickstart.md) -- comprehensive user documentation
+- [Documentation index](docs/README.md) -- structured user docs
+- [Getting started](docs/getting-started.md) -- install + first run
+- [Replay guide](docs/guides/replay.md) -- includes the 3x3 reshape matrix
 - [Troubleshooting](docs/troubleshooting.md)
 - [Testing notes](docs/testing.md)
 - [Examples](examples/)

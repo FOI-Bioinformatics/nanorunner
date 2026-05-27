@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-05-27
+
+This release adds layout reshaping to replay mode and tightens the CLI/code
+surface. Backwards-compatible with 3.0.x: existing invocations behave
+identically because the new flags default to `preserve`.
+
+### Added
+- **Layout reshaping in replay mode.** Four new flags let you decouple
+  input layout from output layout:
+  - `--output-structure {preserve, flat, barcoded}` controls the target
+    shape. `preserve` mirrors the source (default), `flat` emits all
+    chunks directly under `--target`, `barcoded` deals chunks
+    round-robin across barcode subdirectories.
+  - `--output-barcodes N` sets the number of barcode directories when
+    `--output-structure=barcoded`.
+  - `--output-barcode-pattern STR` is a Python format string used to
+    name barcode directories (default `barcode{:02d}`).
+  - `--output-file-prefix STR` overrides the chunk filename stem.
+  - Reshaping requires `--reads-per-file` and `--operation copy`.
+- **Single-file source for replay.** `--source` now accepts either a
+  directory or a path to one FASTQ file. A single file is treated as a
+  one-file singleplex source.
+
+### Changed
+- **Consolidated genome-resolution helpers.** The duplicated
+  resolve-and-download logic that lived in both `cli_helpers.py` and
+  `cli_utils.py:download` is now a single pipeline
+  (`_resolve_genome_refs` + `_download_genome_refs` +
+  `_resolve_and_download_genomes`) shared by both call sites.
+- **Documentation restructure.** `docs/` is now organised into
+  `getting-started.md`, `guides/`, and `reference/` tiers. The legacy
+  `quickstart.md` is retired; its content moved into the new tier.
+- **Coverage.** Test coverage now sits at 91% overall (up from 88%);
+  `cli_helpers.py` is at 100%.
+
 ## [3.0.0] - 2026-03-23
 
 This release is a substantial internal rewrite. The CLI contract is preserved — all

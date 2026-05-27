@@ -925,7 +925,7 @@ class TestVersionFlag:
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
         assert "nanorunner" in result.output
-        assert "3.0.0" in result.output
+        assert "3.1.0" in result.output
 
 
 # -------------------------------------------------------------------

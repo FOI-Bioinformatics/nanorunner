@@ -324,7 +324,8 @@ source) or clear the target and start again.
 Before opening an issue:
 
 1. Search [existing issues](https://github.com/FOI-Bioinformatics/nanorunner/issues).
-2. Re-read the [usage guide](quickstart.md) and main [README](../README.md).
+2. Re-read the [getting-started guide](../getting-started.md) and the
+   main [README](../../README.md).
 3. Run an example from `examples/` to confirm the install works.
 4. Capture full error output with `2>&1 | tee debug.log`.
 
