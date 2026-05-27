@@ -7,13 +7,19 @@ to exercise watch-directory bioinformatics pipelines.
 
 `nanorunner` operates in two modes:
 
-- **Replay**: copy or symlink existing FASTQ files from a source directory to a
-  target directory at configurable intervals.
-- **Generate**: produce simulated reads from genome FASTA files (or species
-  names / mock community presets) and write them to the target directory.
+- **Replay**: copy or symlink existing FASTQ files from a source into a
+  target directory at configurable intervals. Source can be a single FASTQ
+  file, a flat directory, or barcoded subdirectories. Output layout can
+  be reshaped independently of the input (`--output-structure
+  {preserve,flat,barcoded}`) and a large FASTQ can be rechunked into
+  many smaller ones (`--reads-per-file`).
+- **Generate**: produce simulated reads from genome FASTA files (or
+  species names, NCBI taxids, or mock community presets) and write them
+  to the target directory.
 
-Both modes preserve singleplex and multiplex (barcoded) layouts and apply one
-of four timing models. Optional resource monitoring is provided by `psutil`.
+Both modes preserve singleplex and multiplex (barcoded) layouts by default,
+support all four timing models, and write atomically. Optional resource
+monitoring is provided by `psutil`.
 
 **Current version:** 3.1.0
 **Conda environment for development:** `nanorunner`
@@ -100,6 +106,9 @@ Flat layout under `nanopore_simulator/`. No subpackages.
 **Infrastructure**
 - `cli.py` -- Typer app entry point; registers subcommands.
 - `cli_replay.py` -- `replay` subcommand options and dispatch.
+  Includes the layout-reshape flags: `--output-structure`,
+  `--output-barcodes`, `--output-barcode-pattern`, `--output-file-prefix`.
+  `--source` accepts a directory or a single FASTQ file.
 - `cli_generate.py` -- `generate` subcommand options and dispatch.
 - `cli_helpers.py` -- shared helpers used by the subcommand modules
   (genome resolution, abundance parsing, output dispatching).
@@ -178,9 +187,16 @@ files: `test_config.py`, `test_manifest.py`, `test_executor.py`,
 `test_runner.py`, `test_timing.py`, `test_generators.py`, `test_species.py`,
 `test_mocks.py`, `test_monitoring.py`, `test_detection.py`,
 `test_adapters.py`, `test_profiles.py`, `test_deps.py`, `test_cli.py`,
-`test_integration.py`. Shared fixtures live in `conftest.py`.
+`test_cli_helpers.py`, `test_integration.py`. Shared fixtures live in
+`conftest.py`. The full suite currently runs 773 tests.
 
-Coverage target: 90% (set in `pytest.ini`). Current coverage is 91%.
+Coverage target: 90% (set in `pytest.ini`). Current coverage is 91%
+(`cli_helpers.py` is at 100%; the largest remaining gap is
+`generators.py` at 84%).
+
+The 3x3 input/output reshape matrix for replay is exercised
+parametrically in `test_integration.py::test_reshape_matrix` and via
+the CLI in `TestReshapeCli`.
 
 ## Integration with Nanometa Live
 
