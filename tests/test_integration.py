@@ -1301,3 +1301,90 @@ def test_reshape_custom_file_prefix(tmp_path: Path) -> None:
     run_replay(config)
     names = sorted(p.name for p in target.iterdir() if p.is_file())
     assert all(n.startswith("run42_chunk_") for n in names), names
+
+
+# ---------------------------------------------------------------------------
+# Reshape flags through the CLI
+# ---------------------------------------------------------------------------
+
+
+class TestReshapeCli:
+    """Verify the --output-* flags are wired through the CLI."""
+
+    def test_cli_single_file_to_barcoded(self, tmp_path: Path):
+        src = tmp_path / "run.fastq"
+        _write_fastq(src, 30)
+        target = tmp_path / "out"
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(src),
+                "--target",
+                str(target),
+                "--reads-per-file",
+                "10",
+                "--output-structure",
+                "barcoded",
+                "--output-barcodes",
+                "3",
+                "--interval",
+                "0",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        bc_dirs = sorted(p.name for p in target.iterdir() if p.is_dir())
+        assert bc_dirs == ["barcode01", "barcode02", "barcode03"]
+
+    def test_cli_rejects_flat_without_reads_per_file(self, tmp_path: Path):
+        src = tmp_path / "in"
+        src.mkdir()
+        _write_fastq(src / "r.fastq", 5)
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(src),
+                "--target",
+                str(tmp_path / "out"),
+                "--output-structure",
+                "flat",
+                "--interval",
+                "0",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 2
+        assert "reads-per-file" in result.output or "reads_per_output" in result.output
+
+    def test_cli_custom_barcode_pattern(self, tmp_path: Path):
+        src = tmp_path / "in"
+        src.mkdir()
+        _write_fastq(src / "r.fastq", 12)
+        target = tmp_path / "out"
+        result = runner.invoke(
+            app,
+            [
+                "replay",
+                "--source",
+                str(src),
+                "--target",
+                str(target),
+                "--reads-per-file",
+                "4",
+                "--output-structure",
+                "barcoded",
+                "--output-barcodes",
+                "2",
+                "--output-barcode-pattern",
+                "bc{:01d}",
+                "--interval",
+                "0",
+                "--quiet",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert {p.name for p in target.iterdir() if p.is_dir()} == {"bc1", "bc2"}

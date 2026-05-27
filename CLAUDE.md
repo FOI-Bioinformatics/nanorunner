@@ -224,7 +224,7 @@ entry under `examples/`.
 - [Documentation index](docs/README.md) -- structured user docs
 - [Getting started](docs/getting-started.md) -- install + first run
 - [Replay guide](docs/guides/replay.md) -- includes the 3x3 reshape matrix
-- [Troubleshooting](docs/troubleshooting.md)
+- [Troubleshooting](docs/reference/troubleshooting.md)
 - [Testing notes](docs/testing.md)
 - [Examples](examples/)
 - [Archive](docs/archive/) -- historical audits and design plans
