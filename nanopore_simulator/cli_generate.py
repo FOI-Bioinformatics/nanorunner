@@ -59,6 +59,11 @@ def generate(
         help="Direct NCBI taxonomy IDs.",
         rich_help_panel="Genome Source",
     ),
+    accession: Optional[List[str]] = typer.Option(
+        None,
+        help="Specific NCBI assembly accessions (e.g. GCA_000005845.2 or GCF_...).",
+        rich_help_panel="Genome Source",
+    ),
     # Read Generation
     generator_backend: GeneratorBackend = typer.Option(
         GeneratorBackend.auto,
@@ -223,17 +228,19 @@ def generate(
             species is not None,
             mock is not None,
             taxid is not None,
+            accession is not None,
         ]
     )
     if sources == 0:
         typer.echo(
-            "Error: specify one of --genomes, --species, --mock, or --taxid",
+            "Error: specify one of --genomes, --species, --mock, --taxid, "
+            "or --accession",
             err=True,
         )
         raise typer.Exit(code=1)
     if sources > 1:
         typer.echo(
-            "Error: --genomes, --species, --mock, and --taxid "
+            "Error: --genomes, --species, --mock, --taxid, and --accession "
             "are mutually exclusive",
             err=True,
         )
@@ -320,6 +327,7 @@ def generate(
     genome_inputs = list(genomes) if genomes else None
     species_inputs = list(species) if species else None
     taxid_inputs = [str(t) for t in taxid] if taxid else None
+    accession_inputs = list(accession) if accession else None
     mock_name = mock
 
     try:
@@ -329,6 +337,7 @@ def generate(
             species_inputs=species_inputs,
             mock_name=mock_name,
             taxid_inputs=taxid_inputs,
+            accession_inputs=accession_inputs,
             abundances=list(abundances) if abundances else None,
             read_count=rc,
             interval=iv,
@@ -356,7 +365,10 @@ def generate(
     # Pre-flight validation
     from nanopore_simulator.deps import check_preflight
 
-    needs_download = bool(species_inputs or mock_name or taxid_inputs) and not offline
+    needs_download = (
+        bool(species_inputs or mock_name or taxid_inputs or accession_inputs)
+        and not offline
+    )
     errors = check_preflight(
         operation="generate",
         generator_backend=config.generator_backend,
@@ -367,13 +379,14 @@ def generate(
             typer.echo(f"Error: {err}", err=True)
         raise typer.Exit(code=1)
 
-    # Resolve mock/species/taxid to genome paths if needed
+    # Resolve mock/species/taxid/accession to genome paths if needed
     if needs_download or (mock_name and offline):
         genome_paths, mock_abundances = _resolve_and_download_genomes(
             mock_name,
             species_inputs,
             taxid_inputs,
             offline=offline,
+            accession_inputs=accession_inputs,
         )
         # Determine structure for multi-genome inputs
         resolved_struct = struct
@@ -386,6 +399,7 @@ def generate(
             species_inputs=None,
             mock_name=None,
             taxid_inputs=None,
+            accession_inputs=None,
             abundances=mock_abundances if not abundances else config.abundances,
             read_count=config.read_count,
             interval=config.interval,

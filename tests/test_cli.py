@@ -1140,6 +1140,55 @@ class TestEdgeCases:
         barcode_dirs = [d for d in target.iterdir() if d.is_dir()]
         assert len(barcode_dirs) >= 1
 
+    def test_accession_help_listed(self):
+        """--accession must appear in generate --help so users discover it."""
+        result = runner.invoke(app, ["generate", "--help"])
+        assert result.exit_code == 0
+        assert "--accession" in result.output
+
+    def test_accession_mutually_exclusive_with_genomes(self, sample_fasta, tmp_path):
+        target = tmp_path / "gen_output"
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target",
+                str(target),
+                "--genomes",
+                str(sample_fasta),
+                "--accession",
+                "GCA_000005845.2",
+                "--read-count",
+                "10",
+            ],
+        )
+        assert result.exit_code != 0
+        assert (
+            "mutually exclusive" in (result.stderr or "")
+            or "mutually exclusive" in result.output
+        )
+
+    def test_accession_malformed_rejected(self, tmp_path):
+        target = tmp_path / "gen_output"
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--target",
+                str(target),
+                "--accession",
+                "not_an_accession",
+                "--read-count",
+                "10",
+                "--interval",
+                "0",
+                "--no-wait",
+            ],
+        )
+        # Malformed accessions warn + skip; with only one input and it
+        # rejected, the resolver raises typer.Exit(1).
+        assert result.exit_code != 0
+
     def test_force_singleplex_multi_genome_warns(self, sample_fasta, tmp_path):
         """Forcing singleplex on multiple genomes without --mix-reads is a
         silent footgun: each genome's reads land in the target root with

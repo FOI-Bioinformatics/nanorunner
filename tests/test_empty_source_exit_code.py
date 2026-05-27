@@ -40,9 +40,7 @@ def target_dir(tmp_path: Path) -> Path:
 
 
 class TestReplayEmptySourceExitCode:
-    def test_exit_code_three_on_empty_source(
-        self, empty_dir: Path, target_dir: Path
-    ):
+    def test_exit_code_three_on_empty_source(self, empty_dir: Path, target_dir: Path):
         result = runner.invoke(
             app,
             [
@@ -61,9 +59,7 @@ class TestReplayEmptySourceExitCode:
             f"{result.exit_code}; output:\n{result.output}"
         )
 
-    def test_error_message_names_source_dir(
-        self, empty_dir: Path, target_dir: Path
-    ):
+    def test_error_message_names_source_dir(self, empty_dir: Path, target_dir: Path):
         result = runner.invoke(
             app,
             [
@@ -84,9 +80,7 @@ class TestReplayEmptySourceExitCode:
             f"{result.output}"
         )
 
-    def test_exit_code_distinct_from_generic_error(
-        self, tmp_path: Path
-    ):
+    def test_exit_code_distinct_from_generic_error(self, tmp_path: Path):
         # A non-existent --source raises a different (generic) error
         # path that should exit code 1 (or 2 for argparse-level), NOT
         # 3 -- exit code 3 is reserved for "operator pointed at an

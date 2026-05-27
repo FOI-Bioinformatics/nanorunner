@@ -252,8 +252,15 @@ class TestGenerateConfig:
         )
         assert cfg.taxid_inputs == ["562"]
 
+    def test_minimal_with_accessions(self, tmp_path):
+        cfg = GenerateConfig(
+            target_dir=tmp_path / "out",
+            accession_inputs=["GCA_000005845.2"],
+        )
+        assert cfg.accession_inputs == ["GCA_000005845.2"]
+
     def test_no_input_source(self, tmp_path):
-        with pytest.raises(ValueError, match="genome.*species.*mock.*taxid"):
+        with pytest.raises(ValueError, match="genome.*species.*mock.*taxid.*accession"):
             GenerateConfig(target_dir=tmp_path / "out")
 
     def test_negative_read_count(self, tmp_path):

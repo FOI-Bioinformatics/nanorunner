@@ -207,6 +207,7 @@ class GenerateConfig:
     species_inputs: Optional[List[str]] = None
     mock_name: Optional[str] = None
     taxid_inputs: Optional[List[str]] = None
+    accession_inputs: Optional[List[str]] = None
     abundances: Optional[List[float]] = None
     read_count: int = 1000
     interval: float = 5.0
@@ -243,11 +244,13 @@ class GenerateConfig:
             or self.species_inputs
             or self.mock_name
             or self.taxid_inputs
+            or self.accession_inputs
         )
         if not has_input:
             raise ValueError(
                 "at least one input source required: "
-                "genome_inputs, species_inputs, mock_name, or taxid_inputs"
+                "genome_inputs, species_inputs, mock_name, taxid_inputs, "
+                "or accession_inputs"
             )
         if self.read_count < 1:
             raise ValueError("read_count must be at least 1")

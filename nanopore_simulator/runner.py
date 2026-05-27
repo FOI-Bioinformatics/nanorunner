@@ -31,6 +31,8 @@ class EmptySourceError(RuntimeError):
     targeted message and exit with a non-zero code rather than the
     pre-2026-05-02 silent-return behaviour that defeated CI pipelines.
     """
+
+
 from nanopore_simulator.executor import execute_entry
 from nanopore_simulator.generators import (
     GeneratorConfig,
@@ -225,7 +227,7 @@ def run_generate(config: GenerateConfig) -> None:
         # non-zero code and a clear message.
         raise EmptySourceError(
             "No genomes available to generate from. Provide at least "
-            "one of --genomes, --species, --mock, or --taxid."
+            "one of --genomes, --species, --mock, --taxid, or --accession."
         )
 
     gen_config = GeneratorConfig(

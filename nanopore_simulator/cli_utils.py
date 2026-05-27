@@ -237,6 +237,11 @@ def download(
         help="NCBI taxonomy IDs to download.",
         rich_help_panel="Genome Source",
     ),
+    accession: Optional[List[str]] = typer.Option(
+        None,
+        help="Specific NCBI assembly accessions (e.g. GCA_000005845.2).",
+        rich_help_panel="Genome Source",
+    ),
     # Optional target for generation
     target: Optional[Path] = typer.Option(
         None,
@@ -316,8 +321,11 @@ def download(
     if no_wait:
         interval = 0.0
 
-    if not (species or mock or taxid):
-        typer.echo("Error: Must specify --species, --mock, or --taxid", err=True)
+    if not (species or mock or taxid or accession):
+        typer.echo(
+            "Error: Must specify --species, --mock, --taxid, or --accession",
+            err=True,
+        )
         raise typer.Exit(code=1)
 
     # Pre-flight: verify datasets CLI
@@ -336,7 +344,8 @@ def download(
     )
 
     taxid_strs = [str(t) for t in taxid] if taxid else None
-    refs = _resolve_genome_refs(mock, species, taxid_strs)
+    accession_strs = list(accession) if accession else None
+    refs = _resolve_genome_refs(mock, species, taxid_strs, accession_strs)
     successful = _download_genome_refs(refs)
     typer.echo("Download complete")
 

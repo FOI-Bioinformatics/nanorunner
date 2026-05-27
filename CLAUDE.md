@@ -14,7 +14,8 @@ to exercise watch-directory bioinformatics pipelines.
   {preserve,flat,barcoded}`) and a large FASTQ can be rechunked into
   many smaller ones (`--reads-per-file`).
 - **Generate**: produce simulated reads from genome FASTA files (or
-  species names, NCBI taxids, or mock community presets) and write them
+  species names, NCBI taxids, explicit NCBI assembly accessions
+  (e.g. `GCA_000005845.2`), or mock community presets) and write them
   to the target directory.
 
 Both modes preserve singleplex and multiplex (barcoded) layouts by default,

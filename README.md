@@ -24,7 +24,8 @@ Two run modes:
   many small files and reshape the output layout independently of the
   input (any of the three shapes can become any of the three).
 - **Generate** -- produce simulated reads from genome FASTAs, species
-  names, NCBI taxonomy IDs, or built-in mock community presets, and
+  names, NCBI taxonomy IDs, explicit NCBI assembly accessions
+  (e.g. `GCA_000005845.2`), or built-in mock community presets, and
   deliver them with the same timing models.
 
 Output is compatible with watch-directory pipelines such as

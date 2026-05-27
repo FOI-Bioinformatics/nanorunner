@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Direct NCBI assembly accession input.** `generate` and `download`
+  accept a new repeatable `--accession` flag for pinning runs to a
+  specific assembly (e.g. `GCA_000005845.2` or `GCF_...`). Unlike
+  `--species` and `--taxid`, no lookup is required -- the accession
+  is validated against the `GCA_/GCF_NNNNNNNNN.V` shape and downloaded
+  directly via the existing `datasets` CLI path. Mutually exclusive
+  with the other genome-source flags.
+
+### Fixed
+- `MANIFEST.in` now includes `CHANGELOG.md`, so the sdist (used by
+  PyPI installs) ships the changelog. Surfaced by the round 7
+  packaging audit (`bin/audit_packaging.py`).
+
 ## [3.1.0] - 2026-05-27
 
 This release adds layout reshaping to replay mode and tightens the CLI/code

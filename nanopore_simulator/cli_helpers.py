@@ -141,14 +141,15 @@ def _resolve_genome_refs(
     mock_name: Optional[str],
     species_inputs: Optional[List[str]],
     taxid_inputs: Optional[List[str]],
+    accession_inputs: Optional[List[str]] = None,
 ) -> List[tuple]:
-    """Resolve mock/species/taxid inputs to genome references.
+    """Resolve mock/species/taxid/accession inputs to genome references.
 
     Returns a list of (name, GenomeRef, abundance_or_None) tuples.  The
-    abundance value is only set for mock-community organisms; species
-    and taxid inputs get None so callers can preserve index alignment
-    when different input types are combined.  Unresolvable inputs emit
-    warnings and are skipped.
+    abundance value is only set for mock-community organisms; species,
+    taxid, and accession inputs get None so callers can preserve index
+    alignment when different input types are combined.  Unresolvable
+    inputs emit warnings and are skipped.
 
     Raises:
         typer.Exit(code=1): If no inputs resolve to a valid GenomeRef
@@ -156,6 +157,7 @@ def _resolve_genome_refs(
     """
     from nanopore_simulator.species import (
         GenomeRef,
+        resolve_accession,
         resolve_species,
         resolve_taxid,
     )
@@ -203,6 +205,17 @@ def _resolve_genome_refs(
             else:
                 typer.echo(f"Warning: Could not resolve taxid: {tid}", err=True)
 
+    if accession_inputs:
+        for acc in accession_inputs:
+            acc_ref: Optional[GenomeRef] = resolve_accession(acc)
+            if acc_ref:
+                refs.append((acc, acc_ref, None))
+            else:
+                typer.echo(
+                    f"Warning: Malformed accession (expected GCA_/GCF_NNNNNNNNN.V): {acc}",
+                    err=True,
+                )
+
     if not refs:
         typer.echo("Error: No genomes could be resolved", err=True)
         raise typer.Exit(code=1)
@@ -239,8 +252,9 @@ def _resolve_and_download_genomes(
     species_inputs: Optional[List[str]],
     taxid_inputs: Optional[List[str]],
     offline: bool = False,
+    accession_inputs: Optional[List[str]] = None,
 ) -> tuple:
-    """Resolve and download mock/species/taxid inputs in one step.
+    """Resolve and download mock/species/taxid/accession inputs in one step.
 
     Convenience wrapper used by the ``generate`` subcommand.  Returns
     ``(genome_paths, abundances)`` ready for ``GenerateConfig``.  The
@@ -250,7 +264,9 @@ def _resolve_and_download_genomes(
     Raises:
         typer.Exit(code=1): If no genomes resolve or none download.
     """
-    refs = _resolve_genome_refs(mock_name, species_inputs, taxid_inputs)
+    refs = _resolve_genome_refs(
+        mock_name, species_inputs, taxid_inputs, accession_inputs
+    )
     successful = _download_genome_refs(refs)
 
     if not successful:

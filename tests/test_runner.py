@@ -192,9 +192,7 @@ class TestRunReplayEmpty:
     can exit with a non-zero code and a clear message.
     """
 
-    def test_empty_source_raises(
-        self, empty_source: Path, tmp_path: Path
-    ) -> None:
+    def test_empty_source_raises(self, empty_source: Path, tmp_path: Path) -> None:
         from nanopore_simulator.runner import EmptySourceError
 
         target = tmp_path / "target"

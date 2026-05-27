@@ -18,6 +18,7 @@ import gzip as gzip_module
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -502,6 +503,43 @@ def resolve_species(
         return ref
 
     return None
+
+
+_ACCESSION_RE = re.compile(r"^GC[AF]_\d{9}\.\d+$")
+
+
+def resolve_accession(
+    accession: str,
+    *,
+    name: Optional[str] = None,
+    domain: Optional[str] = None,
+) -> Optional[GenomeRef]:
+    """Build a GenomeRef for an explicit NCBI assembly accession.
+
+    Unlike species/taxid resolution, an accession already identifies a
+    specific assembly, so no lookup is needed -- the GenomeRef is
+    constructed directly and the download step uses the existing
+    NCBI datasets path (``_ncbi_download``). The accession format is
+    validated (``GCA_NNNNNNNNN.V`` or ``GCF_NNNNNNNNN.V``); malformed
+    inputs return None so the caller can warn and skip.
+
+    Args:
+        accession: Full NCBI assembly accession, e.g. "GCA_000005845.2".
+        name: Optional display name (defaults to the accession string).
+        domain: Optional taxonomic domain hint (defaults to "bacteria").
+
+    Returns:
+        A GenomeRef pinned to the requested accession, or None if the
+        accession does not match the expected format.
+    """
+    if not _ACCESSION_RE.match(accession):
+        return None
+    return GenomeRef(
+        name=name or accession,
+        accession=accession,
+        source="ncbi",
+        domain=domain or "bacteria",
+    )
 
 
 def resolve_taxid(

@@ -14,9 +14,54 @@ from nanopore_simulator.species import (
     GenomeRef,
     ResolutionCache,
     download_genome,
+    resolve_accession,
     resolve_species,
     resolve_taxid,
 )
+
+
+class TestResolveAccession:
+    """resolve_accession builds GenomeRef from explicit assembly accessions
+    without any network lookup, validating the GCA_/GCF_ format."""
+
+    def test_gca_accession(self) -> None:
+        ref = resolve_accession("GCA_000005845.2")
+        assert ref is not None
+        assert ref.accession == "GCA_000005845.2"
+        assert ref.source == "ncbi"
+        assert ref.name == "GCA_000005845.2"
+
+    def test_gcf_accession(self) -> None:
+        ref = resolve_accession("GCF_000001405.40")
+        assert ref is not None
+        assert ref.accession == "GCF_000001405.40"
+
+    def test_optional_display_name(self) -> None:
+        ref = resolve_accession("GCA_000005845.2", name="E. coli K-12")
+        assert ref is not None
+        assert ref.name == "E. coli K-12"
+
+    def test_optional_domain(self) -> None:
+        ref = resolve_accession("GCA_000146045.2", domain="eukaryota")
+        assert ref is not None
+        assert ref.domain == "eukaryota"
+
+    def test_default_domain_is_bacteria(self) -> None:
+        ref = resolve_accession("GCA_000005845.2")
+        assert ref is not None
+        assert ref.domain == "bacteria"
+
+    def test_missing_version_suffix_rejected(self) -> None:
+        assert resolve_accession("GCA_000005845") is None
+
+    def test_wrong_prefix_rejected(self) -> None:
+        assert resolve_accession("XYZ_000005845.2") is None
+
+    def test_lowercase_rejected(self) -> None:
+        assert resolve_accession("gca_000005845.2") is None
+
+    def test_empty_string_rejected(self) -> None:
+        assert resolve_accession("") is None
 
 
 # ---------------------------------------------------------------------------
