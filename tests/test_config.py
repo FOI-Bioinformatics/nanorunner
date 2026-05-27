@@ -116,6 +116,39 @@ class TestReplayConfig:
                 reads_per_output=500,
             )
 
+    def test_pattern_without_placeholder_rejected(self, tmp_path):
+        """A pattern that ignores its argument produces identical names
+        for every barcode index, so all output collides into one
+        directory. That is silently wrong; the constructor must reject
+        it.
+        """
+        source = tmp_path / "source"
+        source.mkdir()
+        with pytest.raises(ValueError, match="distinct"):
+            ReplayConfig(
+                source_dir=source,
+                target_dir=tmp_path / "t",
+                operation="copy",
+                reads_per_output=25,
+                output_structure="barcoded",
+                output_barcodes=3,
+                output_barcode_pattern="nopattern",
+            )
+
+    def test_pattern_with_placeholder_accepted(self, tmp_path):
+        source = tmp_path / "source"
+        source.mkdir()
+        cfg = ReplayConfig(
+            source_dir=source,
+            target_dir=tmp_path / "t",
+            operation="copy",
+            reads_per_output=25,
+            output_structure="barcoded",
+            output_barcodes=3,
+            output_barcode_pattern="BC{:03d}",
+        )
+        assert cfg.output_barcode_pattern == "BC{:03d}"
+
     def test_all_file_extensions(self, tmp_path):
         source = tmp_path / "source"
         source.mkdir()

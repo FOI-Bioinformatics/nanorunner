@@ -141,17 +141,28 @@ class ReplayConfig:
                 )
         if self.output_barcodes < 1:
             raise ValueError("output_barcodes must be at least 1")
-        # Validate the barcode pattern by trying to format it.
+        # Validate the barcode pattern by trying to format it. The
+        # pattern must (a) accept a positional integer, (b) produce a
+        # non-empty name, and (c) produce *distinct* names for distinct
+        # integers -- otherwise every output collides into a single
+        # directory and the user silently loses the barcoded layout.
         try:
-            sample = self.output_barcode_pattern.format(1)
+            sample_one = self.output_barcode_pattern.format(1)
+            sample_two = self.output_barcode_pattern.format(2)
         except (IndexError, KeyError, ValueError) as exc:
             raise ValueError(
                 "output_barcode_pattern must accept one positional integer, "
                 f'e.g. "barcode{{:02d}}" (got {self.output_barcode_pattern!r}: {exc})'
             )
-        if not sample:
+        if not sample_one:
             raise ValueError(
                 "output_barcode_pattern must produce a non-empty directory name"
+            )
+        if sample_one == sample_two:
+            raise ValueError(
+                "output_barcode_pattern must produce distinct names per "
+                "barcode index -- include a positional placeholder like "
+                f'"barcode{{:02d}}" (got {self.output_barcode_pattern!r})'
             )
 
 
