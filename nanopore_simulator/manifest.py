@@ -7,6 +7,8 @@ execution is handled separately by ``executor.py``.
 """
 
 import math
+import random
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
@@ -570,19 +572,35 @@ def _generate_multiplex_entries(
     rpf: int,
     ext: str,
 ) -> List[FileEntry]:
-    """Generate entries with each genome in a separate barcode directory."""
-    entries: List[FileEntry] = []
+    """Generate entries with each genome in a separate barcode directory.
+
+    Entries are emitted in *stratified rounds*: within round *r* every
+    barcode that still has chunks contributes exactly one entry, in a
+    shuffled order; only once round *r* is exhausted does any barcode
+    begin its (r+1)th chunk. This guarantees no draining -- consumers
+    see early reads for every sample -- while avoiding the strict
+    tick-tock (bc01, bc02, bc03, bc01, bc02, bc03, ...) that is
+    unrepresentative of real sequencer output. The shuffle is seeded
+    deterministically off the target path so unit tests are
+    reproducible.
+
+    Without this stratification, default ``batch_size=1`` would write
+    every file for barcode01 before any file appears for barcode02,
+    which breaks downstream watch-directory consumers.
+    """
+    per_barcode: List[List[FileEntry]] = []
     for idx, genome_path in enumerate(genomes):
         barcode = f"barcode{idx + 1:02d}"
         barcode_dir = config.target_dir / barcode
         stem = _genome_stem(genome_path)
         n_files = max(1, math.ceil(per_genome_reads[idx] / rpf))
         remaining = per_genome_reads[idx]
+        bucket: List[FileEntry] = []
         for fi in range(n_files):
             chunk = min(rpf, remaining)
             remaining -= chunk
             filename = f"{stem}_reads_{fi:04d}{ext}"
-            entries.append(
+            bucket.append(
                 FileEntry(
                     target=barcode_dir / filename,
                     operation="generate",
@@ -592,6 +610,17 @@ def _generate_multiplex_entries(
                     barcode=barcode,
                 )
             )
+        per_barcode.append(bucket)
+
+    seed = zlib.adler32(str(config.target_dir).encode("utf-8"))
+    rng = random.Random(seed)
+    entries: List[FileEntry] = []
+    max_files = max((len(b) for b in per_barcode), default=0)
+    for fi in range(max_files):
+        round_indices = [i for i, b in enumerate(per_barcode) if fi < len(b)]
+        rng.shuffle(round_indices)
+        for i in round_indices:
+            entries.append(per_barcode[i][fi])
     return entries
 
 

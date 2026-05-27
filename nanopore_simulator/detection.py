@@ -112,9 +112,15 @@ def _is_sequencing_file(file_path: Path) -> bool:
     """Check if a file has a supported sequencing file extension.
 
     Handles compound extensions like .fastq.gz by checking the
-    lowercased filename suffix.
+    lowercased filename suffix. Hidden files (leading dot) -- including
+    macOS AppleDouble ``._<name>`` sidecars that mirror real filenames
+    on non-HFS volumes -- are excluded; treating them as FASTQ would
+    crash gzip/utf-8 decoding in the rechunk/reshape path.
     """
-    name_lower = file_path.name.lower()
+    name = file_path.name
+    if name.startswith("."):
+        return False
+    name_lower = name.lower()
     for ext in _SUPPORTED_EXTENSIONS:
         if name_lower.endswith(ext):
             return True

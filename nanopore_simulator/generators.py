@@ -583,6 +583,7 @@ class BuiltinGenerator(ReadGenerator):
             quals.append(chr(int(q) + 33))
         return "".join(quals)
 
+
 # -------------------------------------------------------------------
 # Subprocess generator (badread / nanosim)
 # -------------------------------------------------------------------
@@ -687,6 +688,48 @@ class SubprocessGenerator(ReadGenerator):
 
     # -- badread specifics ------------------------------------------
 
+    # ``badread simulate --quantity`` budgets total bases, not reads, so the
+    # actual emitted read count depends on the sampled length distribution.
+    # We overshoot the requested base count and then truncate the parsed
+    # output to exactly ``num_reads`` so the public ``read_count`` contract
+    # is honored. The 1.6x margin is empirically generous enough to cover
+    # the log-normal upper tail without wasting too much subprocess work.
+    _BADREAD_QUANTITY_MARGIN = 1.6
+
+    def _badread_quantity(self, num_reads: int) -> int:
+        return max(
+            1,
+            int(
+                num_reads * self.config.mean_read_length * self._BADREAD_QUANTITY_MARGIN
+            ),
+        )
+
+    def _badread_cmd(self, genome: GenomeInput, num_reads: int) -> List[str]:
+        return [
+            "badread",
+            "simulate",
+            "--reference",
+            str(genome.fasta_path),
+            "--quantity",
+            str(self._badread_quantity(num_reads)),
+            "--length",
+            f"{self.config.mean_read_length},{self.config.std_read_length}",
+        ]
+
+    @staticmethod
+    def _parse_fastq_stdout(stdout: str) -> List[Tuple[str, str, str, str]]:
+        reads: List[Tuple[str, str, str, str]] = []
+        lines = stdout.split("\n")
+        i = 0
+        while i + 3 < len(lines):
+            header = lines[i]
+            if not header.startswith("@"):
+                i += 1
+                continue
+            reads.append((header, lines[i + 1], lines[i + 2], lines[i + 3]))
+            i += 4
+        return reads
+
     def _run_badread(
         self,
         genome: GenomeInput,
@@ -694,55 +737,37 @@ class SubprocessGenerator(ReadGenerator):
         num_reads: int,
         compress: bool = False,
     ) -> None:
-        total_bases = num_reads * self.config.mean_read_length
-        cmd = [
-            "badread",
-            "simulate",
-            "--reference",
-            str(genome.fasta_path),
-            "--quantity",
-            str(total_bases),
-            "--length",
-            f"{self.config.mean_read_length},{self.config.std_read_length}",
-        ]
+        cmd = self._badread_cmd(genome, num_reads)
         logger.info("Running badread: %s", " ".join(cmd))
         result = self._run_subprocess(cmd, "badread")
-
+        reads = self._parse_fastq_stdout(result.stdout)[:num_reads]
+        if len(reads) < num_reads:
+            logger.warning(
+                "badread produced %d/%d reads for %s; quantity margin may be too tight",
+                len(reads),
+                num_reads,
+                genome.fasta_path,
+            )
+        rendered = "".join(f"{h}\n{s}\n{p}\n{q}\n" for (h, s, p, q) in reads)
         if compress:
             with gzip.open(output_path, "wt", compresslevel=1) as fh:
-                fh.write(result.stdout)
+                fh.write(rendered)
         else:
-            output_path.write_text(result.stdout)
+            output_path.write_text(rendered)
 
     def _badread_in_memory(
         self, genome: GenomeInput, num_reads: int
     ) -> List[Tuple[str, str, str, str]]:
-        total_bases = num_reads * self.config.mean_read_length
-        cmd = [
-            "badread",
-            "simulate",
-            "--reference",
-            str(genome.fasta_path),
-            "--quantity",
-            str(total_bases),
-            "--length",
-            f"{self.config.mean_read_length},{self.config.std_read_length}",
-        ]
+        cmd = self._badread_cmd(genome, num_reads)
         result = self._run_subprocess(cmd, "badread")
-
-        reads: List[Tuple[str, str, str, str]] = []
-        lines = result.stdout.split("\n")
-        i = 0
-        while i + 3 < len(lines):
-            header = lines[i]
-            if not header.startswith("@"):
-                i += 1
-                continue
-            seq = lines[i + 1]
-            sep = lines[i + 2]
-            qual = lines[i + 3]
-            reads.append((header, seq, sep, qual))
-            i += 4
+        reads = self._parse_fastq_stdout(result.stdout)[:num_reads]
+        if len(reads) < num_reads:
+            logger.warning(
+                "badread produced %d/%d reads for %s; quantity margin may be too tight",
+                len(reads),
+                num_reads,
+                genome.fasta_path,
+            )
         return reads
 
     # -- nanosim specifics ------------------------------------------

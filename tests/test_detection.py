@@ -92,6 +92,21 @@ class TestFindSequencingFiles:
         files = find_sequencing_files(source)
         assert len(files) == 1
 
+    def test_ignores_macos_appledouble_sidecars(self, tmp_path):
+        """Skip ._<name> AppleDouble metadata that macOS writes on
+        non-HFS volumes. They share the .fastq suffix but are binary
+        metadata, not sequencing data, and would crash downstream
+        parsers (BadGzipFile / utf-8 decode errors) if included.
+        """
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "reads.fastq.gz").write_bytes(b"")
+        (source / "._reads.fastq.gz").write_bytes(b"\x00\x05\x16\x07")
+        (source / "._other.fastq").write_bytes(b"\x00\x05\x16\x07")
+        files = find_sequencing_files(source)
+        names = sorted(p.name for p in files)
+        assert names == ["reads.fastq.gz"]
+
 
 class TestFindBarcodeDirs:
     def test_finds_barcode_dirs(self, source_dir_multiplex):

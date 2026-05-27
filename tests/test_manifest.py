@@ -369,8 +369,7 @@ class TestBuildReplayManifestRechunk:
         )
         manifest = build_replay_manifest(config)
         pod5_entries = [
-            e for e in manifest
-            if e.operation == "copy" and e.source.suffix == ".pod5"
+            e for e in manifest if e.operation == "copy" and e.source.suffix == ".pod5"
         ]
         rechunk_entries = [e for e in manifest if e.operation == "rechunk"]
         assert pod5_entries == []
@@ -525,6 +524,73 @@ class TestBuildGenerateManifestMultiple:
         assert barcodes == {"barcode01", "barcode02"}
         for entry in manifest:
             assert entry.target.parent == target / entry.barcode
+
+    def test_multiplex_entries_interleaved_across_barcodes(
+        self, genome_a: Path, genome_b: Path, tmp_path: Path
+    ) -> None:
+        """Multiplex generate must interleave entries across barcodes so
+        that consumers watching the target directory see early reads for
+        every sample rather than all of sample 1 first.
+
+        The exact order within a round is randomized -- a real sequencer
+        does not emit barcodes in strict tick-tock -- but every barcode
+        must complete chunk *r* before any barcode starts chunk *r+1*
+        (no draining of one sample ahead of another).
+        """
+        config = GenerateConfig(
+            target_dir=tmp_path / "target",
+            genome_inputs=[genome_a, genome_b],
+            read_count=400,
+            reads_per_file=50,
+            structure="multiplex",
+            monitor_type="none",
+        )
+        manifest = build_generate_manifest(config)
+        barcodes = [e.barcode for e in manifest]
+        # 2 genomes x 4 chunks = 8 entries
+        assert len(barcodes) == 8
+        # No draining: each round of n_barcodes entries contains every
+        # barcode exactly once.
+        for r in range(4):
+            window = barcodes[r * 2 : (r + 1) * 2]
+            assert sorted(window) == ["barcode01", "barcode02"]
+        # File-index order is preserved within a barcode.
+        for bc in ("barcode01", "barcode02"):
+            indices = [e.file_index for e in manifest if e.barcode == bc]
+            assert indices == sorted(indices)
+
+    def test_multiplex_round_order_is_randomized(
+        self, genome_a: Path, genome_b: Path, tmp_path: Path
+    ) -> None:
+        """With three barcodes and several rounds, the per-round order
+        should not be strictly identical -- otherwise consumers see a
+        rigid tick-tock that is unrepresentative of real runs. The
+        sequence remains deterministic for a given target_dir so unit
+        tests stay reproducible.
+        """
+        genome_c = tmp_path / "genome_c.fa"
+        genome_c.write_text(">chr1\nGGGGCCCCAAAATTTTGGGGCCCCAAAATTTT\n")
+        config = GenerateConfig(
+            target_dir=tmp_path / "target_for_shuffle",
+            genome_inputs=[genome_a, genome_b, genome_c],
+            read_count=900,
+            reads_per_file=50,
+            structure="multiplex",
+            monitor_type="none",
+        )
+        manifest = build_generate_manifest(config)
+        bc_seq = [e.barcode for e in manifest]
+        rounds = [tuple(bc_seq[i : i + 3]) for i in range(0, len(bc_seq), 3)]
+        # Each round still covers all three barcodes exactly once.
+        for r in rounds:
+            assert sorted(r) == ["barcode01", "barcode02", "barcode03"]
+        # Across six rounds the within-round order should not be
+        # identical for every round (probability of all-identical under
+        # a uniform shuffle is (1/6)^5 ~ 1e-4).
+        assert len(set(rounds)) > 1
+        # Determinism: a second call with the same config reproduces it.
+        manifest2 = build_generate_manifest(config)
+        assert [e.barcode for e in manifest2] == bc_seq
 
     def test_batching_generate(self, genome_a: Path, tmp_path: Path) -> None:
         config = GenerateConfig(

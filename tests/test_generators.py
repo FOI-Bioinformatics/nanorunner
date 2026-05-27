@@ -5,6 +5,8 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import shutil
+
 import pytest
 
 from nanopore_simulator.generators import (
@@ -419,6 +421,32 @@ class TestSubprocessGenerator:
             gen = SubprocessGenerator(GeneratorConfig(), backend="nanosim")
             assert gen._backend_available() is False
 
+    @pytest.mark.skipif(shutil.which("badread") is None, reason="badread not installed")
+    def test_badread_emits_exactly_requested_read_count(
+        self, simple_fasta: Path, tmp_path: Path
+    ) -> None:
+        """badread's --quantity budget is in bases, so without truncation
+        the actual read count drifts off the requested value. The wrapper
+        must enforce exactly num_reads in the written file.
+        """
+        cfg = GeneratorConfig(
+            num_reads=20,
+            mean_read_length=1000,
+            std_read_length=100,
+            reads_per_file=20,
+        )
+        gen = SubprocessGenerator(cfg, backend="badread")
+        out = gen.generate_reads(
+            GenomeInput(fasta_path=simple_fasta),
+            tmp_path,
+            file_index=0,
+            num_reads=20,
+        )
+        from nanopore_simulator.fastq import iter_reads
+
+        emitted = sum(1 for _ in iter_reads(out))
+        assert emitted == 20
+
     def test_badread_generate_reads(self, simple_fasta: Path, tmp_path: Path) -> None:
         fastq_output = "@read1\nACGT\n+\nIIII\n@read2\nTTTT\n+\nIIII\n"
         mock_result = MagicMock(returncode=0, stdout=fastq_output, stderr="")
@@ -592,5 +620,3 @@ class TestDetectAvailableBackends:
             assert result["builtin"] is True
             assert result["badread"] is False
             assert result["nanosim"] is False
-
-
