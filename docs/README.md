@@ -1,41 +1,49 @@
 # nanorunner documentation
 
-Reference material for the nanorunner nanopore sequencing run simulator.
+nanorunner is a Python tool that delivers FASTQ files into a target
+directory with controlled timing, so that watch-directory analysis
+pipelines can be exercised without an active sequencer.
 
-Start with the [usage guide](quickstart.md) for installation, run modes,
-timing models, configuration, and pipeline integration.
+## Getting started
 
-## User documentation
+- **[Getting started](getting-started.md)** -- install, the two run
+  modes, and a first end-to-end run.
 
-- [Usage guide](quickstart.md) -- comprehensive end-to-end reference
-- [Troubleshooting](troubleshooting.md) -- installation and runtime issues
-- [Testing notes](testing.md) -- test categories, running tests, and
-  contribution conventions
+## Guides
+
+- **[Replay guide](guides/replay.md)** -- transferring existing
+  FASTQ files, rechunking, and the 3x3 input/output reshape matrix.
+- **[Generate guide](guides/generate.md)** -- simulating reads from
+  genomes, species names, and mock communities.
+- **[Timing models](guides/timing-models.md)** -- the four timing
+  models and the available profiles.
+- **[Pipeline integration](guides/pipeline-integration.md)** --
+  driving Nanometa Live, nanometanf, and Kraken from nanorunner.
+
+## Reference
+
+- **[CLI reference](reference/cli.md)** -- every option grouped by
+  purpose.
+- **[Configuration reference](reference/configuration.md)** -- field
+  tables for `ReplayConfig` and `GenerateConfig`.
+- **[Troubleshooting](reference/troubleshooting.md)** -- installation,
+  runtime, and dependency issues.
+
+## Developer
+
+- **[Testing notes](testing.md)** -- test categories and conventions.
+- **[CLAUDE.md](../CLAUDE.md)** -- developer guide (architecture,
+  extension points).
+- **[Examples](../examples/)** -- runnable scripts.
+- **[Archive](archive/)** -- historical audits and design plans.
 
 ## Integration
 
-- [Quick start with Nanometa Live](https://github.com/FOI-Bioinformatics/nanometa_live/blob/main/docs/quickstart-with-nanorunner.md)
-  -- end-to-end demo driving Nanometa Live (and the nanometanf Nextflow
-  backend) with simulated reads from nanorunner
-
-## Developer documentation
-
-- [CLAUDE.md](../CLAUDE.md) -- architecture, extension points, conventions
-- [CONTRIBUTING.md](../CONTRIBUTING.md) -- contribution workflow
-- [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) -- community standards
-- [Examples](../examples/) -- runnable scripts demonstrating timing
-  models, profiles, parallel processing, and pipeline integration
-
-## Archive
-
-Working artifacts from development cycles -- audit reports and design
-plans -- live in [`archive/`](archive/README.md). They are preserved
-for reference but are not actively maintained.
+- [Nanometa Live walkthrough](https://github.com/FOI-Bioinformatics/nanometa_live/blob/main/docs/quickstart-with-nanorunner.md)
+  -- end-to-end demo driving Nanometa Live with simulated reads.
 
 ## Version
 
-- Current version: 3.0.0
+- Current version: 3.1.0
 - Python requirement: 3.9 or later
-- Test suite: 729 tests across 19 files; coverage 88% (the 90%
-  threshold in `pytest.ini` is not currently met -- see
-  [testing notes](testing.md))
+- Test coverage: 91%

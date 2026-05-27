@@ -12,6 +12,7 @@ from nanopore_simulator.cli import (
     ForceStructure,
     MonitorLevel,
     OperationChoice,
+    OutputStructure,
     TimingModelChoice,
     app,
 )
@@ -32,9 +33,13 @@ def replay(
         ...,
         "--source",
         "-s",
-        help="Source directory containing FASTQ files.",
+        help=(
+            "Source directory containing FASTQ files, or a path to a single "
+            "FASTQ file (treated as a singleplex source with one file)."
+        ),
         exists=True,
-        file_okay=False,
+        file_okay=True,
+        dir_okay=True,
         resolve_path=True,
         rich_help_panel="Required",
     ),
@@ -82,6 +87,40 @@ def replay(
             "Rechunk FASTQ files into output files of N reads each. "
             "Incompatible with --operation link."
         ),
+        rich_help_panel="Simulation Configuration",
+    ),
+    output_structure: OutputStructure = typer.Option(
+        OutputStructure.preserve,
+        "--output-structure",
+        help=(
+            "Target layout: preserve (mirror source), flat (all files in "
+            "target dir), or barcoded (split into N barcode subdirs). "
+            "Non-preserve values require --reads-per-file and --operation copy."
+        ),
+        rich_help_panel="Simulation Configuration",
+    ),
+    output_barcodes: int = typer.Option(
+        1,
+        "--output-barcodes",
+        help=(
+            "Number of barcode directories when --output-structure=barcoded. "
+            "Pooled reads are dealt round-robin across these directories."
+        ),
+        rich_help_panel="Simulation Configuration",
+    ),
+    output_barcode_pattern: str = typer.Option(
+        "barcode{:02d}",
+        "--output-barcode-pattern",
+        help=(
+            "Python format string for barcode directory names. Must contain "
+            "one positional integer placeholder, e.g. 'barcode{:02d}' or 'bc{}'."
+        ),
+        rich_help_panel="Simulation Configuration",
+    ),
+    output_file_prefix: Optional[str] = typer.Option(
+        None,
+        "--output-file-prefix",
+        help=("Filename stem for output chunks. Defaults to the source file stem."),
         rich_help_panel="Simulation Configuration",
     ),
     # Timing Models
@@ -210,6 +249,10 @@ def replay(
             adapter=pipeline,
             reads_per_output=reads_per_file,
             structure=struct,
+            output_structure=output_structure.value,
+            output_barcodes=output_barcodes,
+            output_barcode_pattern=output_barcode_pattern,
+            output_file_prefix=output_file_prefix,
         )
     except ValueError as exc:
         typer.echo(f"Error: {exc}", err=True)

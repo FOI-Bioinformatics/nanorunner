@@ -16,7 +16,6 @@ import typer
 
 from nanopore_simulator import __version__
 
-
 # -------------------------------------------------------------------
 # Enums
 # -------------------------------------------------------------------
@@ -62,6 +61,12 @@ class GeneratorBackend(str, Enum):
 class ForceStructure(str, Enum):
     singleplex = "singleplex"
     multiplex = "multiplex"
+
+
+class OutputStructure(str, Enum):
+    preserve = "preserve"
+    flat = "flat"
+    barcoded = "barcoded"
 
 
 # -------------------------------------------------------------------
