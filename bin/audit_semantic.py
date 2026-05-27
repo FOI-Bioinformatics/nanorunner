@@ -271,7 +271,6 @@ def phase_n_adversarial(root: Path) -> List[Finding]:
 
     # N3: multi-chromosome FASTA, reads must come from at least one
     def multi_assert(f, t, files):
-        sources = ["A" * 2000, "T" * 2000, "G" * 2000, "C" * 2000]
         from_each = {c: 0 for c in "ATGC"}
         for fq in files:
             for _h, seq, _p, _q in _iter_fastq_records(fq):
