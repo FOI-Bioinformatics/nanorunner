@@ -157,7 +157,7 @@ def test_resolve_and_download_renormalizes_abundances(tmp_path):
     p1.write_text(">a\nACGT\n")
     p2.write_text(">b\nACGT\n")
 
-    def fake_dl(ref, cache=None):
+    def fake_dl(ref, cache=None, offline=False):
         return p1 if ref.accession == "A1" else p2
 
     with patch("nanopore_simulator.mocks.get_mock", return_value=fake_mock):
@@ -167,6 +167,42 @@ def test_resolve_and_download_renormalizes_abundances(tmp_path):
     assert paths == [p1, p2]
     assert abundances is not None
     assert abs(sum(abundances) - 1.0) < 1e-9
+
+
+def test_resolve_and_download_offline_uses_cache_for_species(tmp_path):
+    """--species --offline: when the species is in the resolution cache
+    AND the genome is in the cache, the helper resolves both without
+    any network call. Mirrors the --mock --offline path."""
+    from nanopore_simulator.species import GenomeRef
+
+    cached_path = tmp_path / "ecoli.fa.gz"
+    cached_path.write_bytes(b"\x1f\x8b\x08\x00")  # gzip magic; content unused
+
+    ref = GenomeRef(
+        name="Escherichia coli",
+        accession="GCF_000005845.2",
+        source="gtdb",
+        domain="bacteria",
+    )
+
+    def cached_lookup(name, *, offline=False, **kw):
+        # Cache returns the ref whether offline or not -- the point is
+        # that the helper does not hit the network branch.
+        return ref
+
+    def cached_download(ref, cache=None, offline=False):
+        assert offline is True, "download_genome must receive offline=True"
+        return cached_path
+
+    with patch("nanopore_simulator.species.resolve_species", side_effect=cached_lookup):
+        with patch(
+            "nanopore_simulator.species.download_genome",
+            side_effect=cached_download,
+        ):
+            paths, _ab = _resolve_and_download_genomes(
+                None, ["Escherichia coli"], None, offline=True
+            )
+    assert paths == [cached_path]
 
 
 # ---------------------------------------------------------------------------

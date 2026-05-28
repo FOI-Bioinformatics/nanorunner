@@ -142,6 +142,7 @@ def _resolve_genome_refs(
     species_inputs: Optional[List[str]],
     taxid_inputs: Optional[List[str]],
     accession_inputs: Optional[List[str]] = None,
+    offline: bool = False,
 ) -> List[tuple]:
     """Resolve mock/species/taxid/accession inputs to genome references.
 
@@ -150,6 +151,12 @@ def _resolve_genome_refs(
     taxid, and accession inputs get None so callers can preserve index
     alignment when different input types are combined.  Unresolvable
     inputs emit warnings and are skipped.
+
+    When ``offline=True`` species and taxid resolution rely solely on
+    the resolution cache (no network), accessions resolve directly
+    from their format (no lookup needed), and mock organisms with
+    explicit accessions also bypass network calls. Cache misses emit
+    a warning and the entry is skipped.
 
     Raises:
         typer.Exit(code=1): If no inputs resolve to a valid GenomeRef
@@ -183,7 +190,7 @@ def _resolve_genome_refs(
                     domain=domain,
                 )
             else:
-                ref = resolve_species(org.name)
+                ref = resolve_species(org.name, offline=offline)
             if ref:
                 refs.append((org.name, ref, org.abundance))
             else:
@@ -191,7 +198,7 @@ def _resolve_genome_refs(
 
     if species_inputs:
         for sp in species_inputs:
-            sp_ref: Optional[GenomeRef] = resolve_species(sp)
+            sp_ref: Optional[GenomeRef] = resolve_species(sp, offline=offline)
             if sp_ref:
                 refs.append((sp, sp_ref, None))
             else:
@@ -199,7 +206,7 @@ def _resolve_genome_refs(
 
     if taxid_inputs:
         for tid in taxid_inputs:
-            tid_ref: Optional[GenomeRef] = resolve_taxid(int(tid))
+            tid_ref: Optional[GenomeRef] = resolve_taxid(int(tid), offline=offline)
             if tid_ref:
                 refs.append((f"taxid:{tid}", tid_ref, None))
             else:
@@ -223,23 +230,28 @@ def _resolve_genome_refs(
     return refs
 
 
-def _download_genome_refs(refs: List[tuple]) -> List[tuple]:
+def _download_genome_refs(refs: List[tuple], offline: bool = False) -> List[tuple]:
     """Download genomes from resolved refs.
 
     Takes the (name, ref, abundance_or_None) tuples returned by
     ``_resolve_genome_refs`` and downloads each genome via the
     shared cache.  Returns the list of (name, ref, path, abundance)
     tuples that downloaded successfully.  Failures emit a warning
-    and are dropped from the result.
+    and are dropped from the result. When ``offline=True``, each
+    genome must already be in the cache; ``download_genome`` raises
+    on cache misses and the failure is reported and skipped.
     """
     from nanopore_simulator.species import GenomeCache, download_genome
 
     cache = GenomeCache()
-    typer.echo(f"Downloading {len(refs)} genome(s)...")
+    if offline:
+        typer.echo(f"Resolving {len(refs)} genome(s) from cache (offline)...")
+    else:
+        typer.echo(f"Downloading {len(refs)} genome(s)...")
     successful: List[tuple] = []
     for name, ref, abundance in refs:
         try:
-            path = download_genome(ref, cache=cache)
+            path = download_genome(ref, cache=cache, offline=offline)
             typer.echo(f"  Ready: {name} -> {path}")
             successful.append((name, ref, Path(path), abundance))
         except Exception as exc:
@@ -265,9 +277,13 @@ def _resolve_and_download_genomes(
         typer.Exit(code=1): If no genomes resolve or none download.
     """
     refs = _resolve_genome_refs(
-        mock_name, species_inputs, taxid_inputs, accession_inputs
+        mock_name,
+        species_inputs,
+        taxid_inputs,
+        accession_inputs,
+        offline=offline,
     )
-    successful = _download_genome_refs(refs)
+    successful = _download_genome_refs(refs, offline=offline)
 
     if not successful:
         typer.echo("Error: No genomes downloaded successfully", err=True)

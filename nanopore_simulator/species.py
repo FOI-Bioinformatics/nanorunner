@@ -553,17 +553,25 @@ def resolve_taxid(
 
     Args:
         taxid: NCBI taxonomy ID (e.g. 562 for E. coli).
-        offline: If True, return None (no network calls).
+        offline: If True, skip network lookups and rely only on the
+            resolution cache.
         cache: Genome cache instance (unused here; for API consistency).
         resolution_cache_dir: Directory for the resolution cache file.
 
     Returns:
         GenomeRef if found, None otherwise.
     """
+    res_cache = ResolutionCache(cache_dir=resolution_cache_dir)
+
+    # 1. Check the resolution cache so previously-resolved taxids work
+    #    offline. (Mirrors the resolve_species cache-first pattern.)
+    cached = res_cache.get(f"taxid:{taxid}")
+    if cached is not None:
+        return cached
+
     if offline:
         return None
 
-    res_cache = ResolutionCache(cache_dir=resolution_cache_dir)
     ref = _ncbi_lookup(taxid=taxid)
     if ref is not None:
         res_cache.put(f"taxid:{taxid}", ref)

@@ -365,10 +365,12 @@ def generate(
     # Pre-flight validation
     from nanopore_simulator.deps import check_preflight
 
-    needs_download = (
-        bool(species_inputs or mock_name or taxid_inputs or accession_inputs)
-        and not offline
+    # A non-`--genomes` source always needs the resolution pipeline,
+    # whether we are downloading or just consulting the cache offline.
+    needs_resolution = bool(
+        species_inputs or mock_name or taxid_inputs or accession_inputs
     )
+    needs_download = needs_resolution and not offline
     errors = check_preflight(
         operation="generate",
         generator_backend=config.generator_backend,
@@ -379,8 +381,11 @@ def generate(
             typer.echo(f"Error: {err}", err=True)
         raise typer.Exit(code=1)
 
-    # Resolve mock/species/taxid/accession to genome paths if needed
-    if needs_download or (mock_name and offline):
+    # Resolve mock/species/taxid/accession to genome paths if needed.
+    # In offline mode the resolution + download helpers consult the
+    # caches and warn-and-skip on misses (mirrors --mock --offline,
+    # which previously was the only path that honored the cache).
+    if needs_resolution:
         genome_paths, mock_abundances = _resolve_and_download_genomes(
             mock_name,
             species_inputs,

@@ -20,6 +20,54 @@ from nanopore_simulator.species import (
 )
 
 
+class TestOfflineResolution:
+    """Offline-mode resolution must consult the cache before bailing.
+
+    `--mock --offline` already worked because mock organisms carry an
+    explicit accession; species/taxid bypass the cache today even when
+    the previous resolution was cached. Fix this so any previously-seen
+    name or taxid still resolves when offline.
+    """
+
+    def test_taxid_offline_cache_hit(self, tmp_path: Path) -> None:
+        cache_dir = tmp_path / "cache"
+        rc = ResolutionCache(cache_dir=cache_dir)
+        ref = GenomeRef(
+            name="Escherichia coli",
+            accession="GCF_000005845.2",
+            source="ncbi",
+            domain="bacteria",
+        )
+        rc.put("taxid:562", ref)
+
+        # In offline mode the cached entry must be returned without
+        # touching the network (no _ncbi_lookup call).
+        got = resolve_taxid(562, offline=True, resolution_cache_dir=cache_dir)
+        assert got is not None
+        assert got.accession == "GCF_000005845.2"
+
+    def test_taxid_offline_cache_miss(self, tmp_path: Path) -> None:
+        cache_dir = tmp_path / "cache"
+        got = resolve_taxid(99999999, offline=True, resolution_cache_dir=cache_dir)
+        assert got is None
+
+    def test_species_offline_cache_hit(self, tmp_path: Path) -> None:
+        cache_dir = tmp_path / "cache"
+        rc = ResolutionCache(cache_dir=cache_dir)
+        ref = GenomeRef(
+            name="Escherichia coli",
+            accession="GCF_000005845.2",
+            source="gtdb",
+            domain="bacteria",
+        )
+        rc.put("Escherichia coli", ref)
+        got = resolve_species(
+            "Escherichia coli", offline=True, resolution_cache_dir=cache_dir
+        )
+        assert got is not None
+        assert got.accession == "GCF_000005845.2"
+
+
 class TestResolveAccession:
     """resolve_accession builds GenomeRef from explicit assembly accessions
     without any network lookup, validating the GCA_/GCF_ format."""
