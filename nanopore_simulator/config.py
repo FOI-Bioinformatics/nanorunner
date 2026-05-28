@@ -179,6 +179,9 @@ class GenerateConfig:
         species_inputs: Species names to resolve via GTDB/NCBI.
         mock_name: Preset mock community name.
         taxid_inputs: NCBI taxonomy IDs.
+        accession_inputs: Explicit NCBI assembly accessions (e.g.
+            ``GCA_000005845.2`` or ``GCF_...``). Mutually exclusive
+            with the other genome sources.
         abundances: Per-genome abundance fractions (must sum to ~1.0).
         read_count: Total reads to generate across all organisms.
         interval: Base seconds between batch operations.
@@ -200,6 +203,9 @@ class GenerateConfig:
         adapter: Pipeline adapter name, or None.
         structure: Output directory layout -- "singleplex" or "multiplex".
         offline_mode: Use only cached genomes, no network requests.
+        seed: Explicit RNG seed for byte-reproducible runs. When None,
+            the runner derives a deterministic seed from ``target_dir``
+            so the same target still yields the same output.
     """
 
     target_dir: Path
