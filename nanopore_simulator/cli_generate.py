@@ -183,9 +183,14 @@ def generate(
         rich_help_panel="Timing Models",
     ),
     # Parallel Processing
-    parallel: bool = typer.Option(
-        False,
-        help="Enable parallel processing within batches.",
+    parallel: Optional[bool] = typer.Option(
+        None,
+        "--parallel/--no-parallel",
+        help=(
+            "Enable parallel processing within batches. Defaults to the "
+            "profile's setting; pass --no-parallel to override a profile "
+            "that enables it."
+        ),
         rich_help_panel="Parallel Processing",
     ),
     worker_count: Optional[int] = typer.Option(
@@ -309,7 +314,7 @@ def generate(
     )
     iv = _interval if _interval is not None else params.get("interval", 5.0)
     bs = _batch_size if _batch_size is not None else params.get("batch_size", 1)
-    par = parallel or params.get("parallel_processing", False)
+    par = parallel if parallel is not None else params.get("parallel_processing", False)
     wk = _worker_count if _worker_count is not None else params.get("worker_count", 4)
     if force_structure:
         struct = force_structure.value

@@ -155,9 +155,14 @@ def replay(
         rich_help_panel="Timing Models",
     ),
     # Parallel Processing
-    parallel: bool = typer.Option(
-        False,
-        help="Enable parallel processing within batches.",
+    parallel: Optional[bool] = typer.Option(
+        None,
+        "--parallel/--no-parallel",
+        help=(
+            "Enable parallel processing within batches. Defaults to the "
+            "profile's setting; pass --no-parallel to override a profile "
+            "that enables it."
+        ),
         rich_help_panel="Parallel Processing",
     ),
     worker_count: int = typer.Option(
@@ -229,7 +234,7 @@ def replay(
     tp = timing_params or params.get("timing_model_params", {})
     op = operation.value
     bs = batch_size if batch_size != 1 else params.get("batch_size", 1)
-    par = parallel or params.get("parallel_processing", False)
+    par = parallel if parallel is not None else params.get("parallel_processing", False)
     wk = worker_count if worker_count != 4 else params.get("worker_count", 4)
     struct = force_structure.value if force_structure else "auto"
     monitor_type = _resolve_monitor(monitor, quiet)

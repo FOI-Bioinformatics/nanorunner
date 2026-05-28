@@ -1140,6 +1140,48 @@ class TestEdgeCases:
         barcode_dirs = [d for d in target.iterdir() if d.is_dir()]
         assert len(barcode_dirs) >= 1
 
+    def test_no_parallel_overrides_profile(self, sample_fasta, tmp_path):
+        """A profile that sets parallel_processing=True must be
+        overridable by --no-parallel. Previously the merge used
+        ``parallel or profile`` which silently kept the profile's True.
+        """
+        from unittest.mock import patch
+
+        target = tmp_path / "gen_out"
+        captured = {}
+
+        def fake_run(cfg):
+            captured["parallel"] = cfg.parallel
+
+        with patch(
+            "nanopore_simulator.cli_generate.run_generate", side_effect=fake_run
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "generate",
+                    "--target",
+                    str(target),
+                    "--genomes",
+                    str(sample_fasta),
+                    "--profile",
+                    "generate_standard",
+                    "--read-count",
+                    "10",
+                    "--reads-per-file",
+                    "5",
+                    "--interval",
+                    "0",
+                    "--monitor",
+                    "none",
+                    "--generator-backend",
+                    "builtin",
+                    "--no-parallel",
+                ],
+            )
+        assert result.exit_code == 0
+        assert captured.get("parallel") is False
+
     def test_accession_help_listed(self):
         """--accession must appear in generate --help so users discover it."""
         result = runner.invoke(app, ["generate", "--help"])
