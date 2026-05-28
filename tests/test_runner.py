@@ -236,6 +236,53 @@ class TestRunGenerate:
         output_files = list(target.glob("*.fastq"))
         assert len(output_files) == 2  # 200 / 100
 
+    def test_same_target_dir_yields_byte_identical_output(
+        self, genome_a: Path, tmp_path: Path
+    ) -> None:
+        """Two generate runs into the same target directory with the
+        same inputs must produce byte-identical FASTQ files.
+
+        ``runner.run_generate`` derives the RNG seed from
+        ``zlib.adler32(target_dir)`` when ``config.seed`` is None, so
+        same-target runs are reproducible. The round-8 CLI audit
+        exercised this end-to-end; this test adds an API-level guard
+        so a regression cannot reach a release.
+        """
+        import hashlib
+
+        def _hash_dir(target: Path) -> dict:
+            return {
+                p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                for p in sorted(target.glob("*.fastq"))
+            }
+
+        def _generate(target: Path) -> None:
+            target.mkdir(parents=True, exist_ok=True)
+            cfg = GenerateConfig(
+                target_dir=target,
+                genome_inputs=[genome_a],
+                read_count=120,
+                reads_per_file=40,
+                generator_backend="builtin",
+                mean_length=10,
+                std_length=3,
+                min_length=5,
+                interval=0.0,
+                monitor_type="none",
+                output_format="fastq",
+            )
+            run_generate(cfg)
+
+        target = tmp_path / "deterministic"
+        _generate(target)
+        first = _hash_dir(target)
+        # Wipe and re-run into the same path.
+        for p in target.glob("*.fastq"):
+            p.unlink()
+        _generate(target)
+        second = _hash_dir(target)
+        assert first == second, "same-target runs produced different output"
+
     def test_generate_parallel(self, genome_a: Path, tmp_path: Path) -> None:
         target = tmp_path / "target"
         config = GenerateConfig(
