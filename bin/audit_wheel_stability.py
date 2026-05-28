@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import argparse
 import inspect
-import json
 import logging
 import shutil
 import subprocess
@@ -31,7 +30,7 @@ import traceback
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 
 logger = logging.getLogger("audit-r9")
 REPO_ROOT = Path(__file__).resolve().parent.parent
