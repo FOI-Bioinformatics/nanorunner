@@ -21,18 +21,6 @@ from types import FrameType
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from nanopore_simulator.config import GenerateConfig, ReplayConfig
-
-
-class EmptySourceError(RuntimeError):
-    """Raised when a manifest is empty -- nothing to replay or generate.
-
-    Distinguishes a legitimate "I forgot to point --source somewhere"
-    operator mistake from internal failures, so the CLI can present a
-    targeted message and exit with a non-zero code rather than the
-    pre-2026-05-02 silent-return behaviour that defeated CI pipelines.
-    """
-
-
 from nanopore_simulator.executor import execute_entry
 from nanopore_simulator.generators import (
     GeneratorConfig,
@@ -50,6 +38,17 @@ from nanopore_simulator.monitoring import (
     format_bytes,
 )
 from nanopore_simulator.timing import create_timing_model
+
+
+class EmptySourceError(RuntimeError):
+    """Raised when a manifest is empty -- nothing to replay or generate.
+
+    Distinguishes a legitimate "I forgot to point --source somewhere"
+    operator mistake from internal failures, so the CLI can present a
+    targeted message and exit with a non-zero code rather than the
+    pre-2026-05-02 silent-return behaviour that defeated CI pipelines.
+    """
+
 
 logger = logging.getLogger(__name__)
 
