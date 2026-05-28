@@ -1163,10 +1163,7 @@ class TestEdgeCases:
             ],
         )
         assert result.exit_code != 0
-        assert (
-            "mutually exclusive" in (result.stderr or "")
-            or "mutually exclusive" in result.output
-        )
+        assert "mutually exclusive" in result.output
 
     def test_accession_malformed_rejected(self, tmp_path):
         target = tmp_path / "gen_output"
@@ -1217,7 +1214,10 @@ class TestEdgeCases:
             ],
         )
         assert result.exit_code == 0
-        assert "force-structure singleplex" in (result.stderr or "")
+        # result.output combines stdout+stderr across click versions.
+        # In click<8.2 result.stderr raises unless mix_stderr=False is
+        # passed to CliRunner; result.output works on both.
+        assert "force-structure singleplex" in result.output
 
     def test_force_singleplex_multi_genome_no_warn_with_mix(
         self, sample_fasta, tmp_path
@@ -1248,7 +1248,7 @@ class TestEdgeCases:
             ],
         )
         assert result.exit_code == 0
-        assert "force-structure singleplex" not in (result.stderr or "")
+        assert "force-structure singleplex" not in result.output
 
     def test_generate_output_format_fastq(self, sample_fasta, tmp_path):
         target = tmp_path / "gen_output"

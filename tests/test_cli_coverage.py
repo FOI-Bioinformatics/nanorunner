@@ -33,7 +33,11 @@ class TestResolveMonitor:
         assert _resolve_monitor(MonitorLevel.default, quiet=False) == "basic"
 
     def test_enhanced_with_psutil_returns_enhanced(self) -> None:
-        # psutil is available in test env
+        # psutil is an optional dependency (the ``[enhanced]`` extra).
+        # The fallback path is exercised by
+        # test_enhanced_without_psutil_falls_back; only exercise the
+        # success branch when psutil is actually installed.
+        pytest.importorskip("psutil")
         result = _resolve_monitor(MonitorLevel.enhanced, quiet=False)
         assert result == "enhanced"
 
