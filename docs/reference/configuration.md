@@ -48,6 +48,7 @@ field.
 | `species_inputs` | `Optional[List[str]]` | `None` | Species names. |
 | `mock_name` | `Optional[str]` | `None` | Mock community ID. |
 | `taxid_inputs` | `Optional[List[str]]` | `None` | NCBI taxids. |
+| `accession_inputs` | `Optional[List[str]]` | `None` | Explicit NCBI assembly accessions (`GCA_/GCF_NNNNNNNNN.V`). |
 | `abundances` | `Optional[List[float]]` | `None` | Per-genome abundances (sum to 1.0). |
 | `read_count` | `int` | `1000` | Total reads across all genomes. |
 | `interval` | `float` | `5.0` | Base seconds between batches. |
@@ -73,7 +74,7 @@ field.
 ### Validation rules
 
 - At least one of `genome_inputs`, `species_inputs`, `mock_name`,
-  `taxid_inputs` must be provided.
+  `taxid_inputs`, or `accession_inputs` must be provided.
 - `read_count >= 1`.
 - `output_format in {"fastq", "fastq.gz"}`.
 - `structure in {"singleplex", "multiplex"}`.

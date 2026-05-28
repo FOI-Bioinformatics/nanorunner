@@ -68,6 +68,9 @@ listing is what `--help` prints in your installed version.
 - `--species NAME [...]` -- species names (GTDB / NCBI lookup).
 - `--mock MOCK_ID` -- built-in mock community.
 - `--taxid INT [...]` -- NCBI taxonomy IDs.
+- `--accession ACC [...]` -- explicit NCBI assembly accessions
+  (e.g. `GCA_000005845.2` or `GCF_...`). Skips taxonomy lookup and
+  pins the run to the exact assembly.
 
 ### Generation parameters
 
@@ -82,7 +85,10 @@ listing is what `--help` prints in your installed version.
 - `--abundances FLOAT [...]` -- per-genome abundances (must sum to 1.0).
 - `--force-structure {singleplex, multiplex}` -- output layout (default
   multiplex for >1 genome).
-- `--offline` -- use only cached genomes; no network requests.
+- `--offline` -- consult the local cache only; no network requests.
+  Applies to every genome source (`--species`, `--taxid`, `--mock`,
+  `--accession`). On a cache miss the affected genome is reported
+  and skipped, and the run exits non-zero if nothing else resolved.
 
 Timing, parallel, and monitoring options match replay mode.
 
@@ -97,8 +103,8 @@ Timing, parallel, and monitoring options match replay mode.
   recommendations.
 - `nanorunner validate --pipeline NAME --target PATH` -- validate an
   existing directory.
-- `nanorunner download [--mock | --species | --taxid] [--target PATH]`
-  -- pre-cache genomes, optionally generating reads.
+- `nanorunner download [--mock | --species | --taxid | --accession]
+  [--target PATH]` -- pre-cache genomes, optionally generating reads.
 
 ## Exit codes
 

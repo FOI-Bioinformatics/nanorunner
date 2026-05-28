@@ -4,7 +4,7 @@ The `generate` subcommand produces simulated nanopore reads and delivers
 them to a target directory with the same timing models as replay mode.
 
 ```bash
-nanorunner generate --target <DST> [--genomes ... | --species ... | --mock ID] [options]
+nanorunner generate --target <DST> [--genomes ... | --species ... | --mock ID | --taxid ... | --accession ...] [options]
 ```
 
 ## Input sources
@@ -15,10 +15,13 @@ nanorunner generate --target <DST> [--genomes ... | --species ... | --mock ID] [
 | `--species` | One or more species names. Resolved via GTDB (bacteria, archaea) or NCBI Datasets (eukaryotes). |
 | `--mock` | A built-in mock community ID. See `nanorunner list-mocks`. |
 | `--taxid` | One or more NCBI taxonomy IDs. |
+| `--accession` | One or more explicit NCBI assembly accessions (`GCA_/GCF_NNNNNNNNN.V`, e.g. `GCA_000005845.2`). Pins the run to the exact assembly with no taxonomy lookup. |
 
-When `--species`, `--mock`, or `--taxid` is used, nanorunner downloads
-the reference genomes on demand into a local cache. Use
-`nanorunner download` to pre-populate the cache for offline work.
+When `--species`, `--mock`, `--taxid`, or `--accession` is used,
+nanorunner downloads the reference genomes on demand into a local
+cache. Use `nanorunner download` to pre-populate the cache for
+offline work; subsequent `--offline` runs of any of these sources
+will resolve from the cache without any network call.
 
 ## Backends
 
@@ -88,6 +91,17 @@ nanorunner generate --mock zymo_d6300 -t /watch/output
 nanorunner list-mocks
 ```
 
+### From an explicit assembly accession
+
+```bash
+nanorunner generate --accession GCA_000005845.2 -t /watch/output
+nanorunner generate --accession GCA_000005845.2 --accession GCF_000146045.2 \
+    -t /watch/output
+```
+
+Use `--accession` when you need to pin the run to a specific assembly
+rather than relying on the resolver to pick a representative.
+
 ### Custom abundances
 
 ```bash
@@ -129,7 +143,14 @@ For offline use or repeated runs:
 ```bash
 nanorunner download --mock zymo_d6300
 nanorunner download --species "E. coli" "S. aureus"
+nanorunner download --taxid 562
+nanorunner download --accession GCA_000005845.2
 ```
 
 Cached genomes live in the platform-specific data directory and are
 reused on subsequent runs automatically.
+
+Once cached, `generate --offline` resolves from the cache for every
+genome source (`--mock`, `--species`, `--taxid`, `--accession`) with
+no network call. On a cache miss the affected genome is reported and
+skipped; if nothing else resolves, the run exits non-zero.

@@ -189,7 +189,7 @@ files: `test_config.py`, `test_manifest.py`, `test_executor.py`,
 `test_mocks.py`, `test_monitoring.py`, `test_detection.py`,
 `test_adapters.py`, `test_profiles.py`, `test_deps.py`, `test_cli.py`,
 `test_cli_helpers.py`, `test_integration.py`. Shared fixtures live in
-`conftest.py`. The full suite currently runs 784 tests.
+`conftest.py`. The full suite currently runs 801 tests.
 
 Coverage target: 90% (set in `pytest.ini`). Current coverage is 91%.
 `cli_helpers.py`, `mocks.py`, `cli.py`, `detection.py`, and
@@ -206,6 +206,17 @@ Re-runnable audit drivers under `bin/`:
 - `audit_robustness.py` (round 4): round-trip identity, unusual
   filenames, SIGTERM mid-run, concurrent writers, source mutation
   mid-replay, read-only target.
+- `audit_semantic.py` (round 5): generated reads must be real
+  subsequences of the source genome; adversarial FASTA (N bases,
+  short sequences, multi-chromosome, empty); boundary read counts.
+- `audit_examples_scale.py` (round 6): every script under `examples/`
+  exits 0; scalability sanity at 5k reads x 3 barcodes (sequential
+  and parallel) and at fine chunking.
+- `audit_packaging.py` (round 7): version consistency across
+  `pyproject.toml` / `__init__.py` / README / CHANGELOG / CLAUDE.md;
+  `python -m build` produces installable sdist + wheel; the wheel
+  installs into a clean venv and the CLI works there; CHANGELOG
+  covers every git tag; CI matrix tests the minimum supported Python.
 
 The 3x3 input/output reshape matrix for replay is exercised
 parametrically in `test_integration.py::test_reshape_matrix` and via

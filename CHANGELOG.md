@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with the other genome-source flags.
 
 ### Fixed
+- `--species`, `--taxid`, and `--accession` now respect `--offline`
+  by consulting the cache. Previously the resolution pipeline was
+  gated on the network-download path and only `--mock --offline`
+  reached the cache lookup; the other sources fell through to
+  `EmptySourceError`. `resolve_taxid` also now checks
+  `ResolutionCache` before bailing on `offline=True`, mirroring
+  `resolve_species`. Cache misses produce a clean per-genome
+  "not cached" error and a non-zero exit instead of the generic
+  "no genomes available" message.
 - `MANIFEST.in` now includes `CHANGELOG.md`, so the sdist (used by
   PyPI installs) ships the changelog. Surfaced by the round 7
   packaging audit (`bin/audit_packaging.py`).

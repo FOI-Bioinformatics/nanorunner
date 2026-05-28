@@ -1,7 +1,7 @@
 # NanoRunner Examples
 
 This directory contains practical examples demonstrating nanorunner's
-capabilities. All examples use the v3.0.0 API.
+capabilities. All examples target the v3.1.0 API.
 
 ## Prerequisites
 
