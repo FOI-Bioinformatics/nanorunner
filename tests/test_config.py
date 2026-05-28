@@ -259,6 +259,20 @@ class TestGenerateConfig:
         )
         assert cfg.accession_inputs == ["GCA_000005845.2"]
 
+    def test_seed_defaults_to_none(self, tmp_path):
+        genome = tmp_path / "g.fa"
+        genome.write_text(">s\nACGT\n")
+        cfg = GenerateConfig(target_dir=tmp_path / "out", genome_inputs=[genome])
+        assert cfg.seed is None
+
+    def test_seed_accepted(self, tmp_path):
+        genome = tmp_path / "g.fa"
+        genome.write_text(">s\nACGT\n")
+        cfg = GenerateConfig(
+            target_dir=tmp_path / "out", genome_inputs=[genome], seed=42
+        )
+        assert cfg.seed == 42
+
     def test_no_input_source(self, tmp_path):
         with pytest.raises(ValueError, match="genome.*species.*mock.*taxid.*accession"):
             GenerateConfig(target_dir=tmp_path / "out")

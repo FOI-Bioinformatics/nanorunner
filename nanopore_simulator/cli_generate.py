@@ -70,6 +70,15 @@ def generate(
         help="Read generation backend.",
         rich_help_panel="Read Generation",
     ),
+    seed: Optional[int] = typer.Option(
+        None,
+        help=(
+            "Explicit RNG seed for byte-reproducible runs. When omitted "
+            "the seed is derived from --target so the same target dir "
+            "still yields the same output."
+        ),
+        rich_help_panel="Read Generation",
+    ),
     read_count: Optional[int] = typer.Option(
         None,
         help="Total number of reads to generate across all genomes. [default: 1000]",
@@ -357,6 +366,7 @@ def generate(
             adapter=pipeline,
             structure=struct,
             offline_mode=offline,
+            seed=seed,
         )
     except ValueError as exc:
         typer.echo(f"Error: {exc}", err=True)
@@ -426,6 +436,7 @@ def generate(
             adapter=config.adapter,
             structure=resolved_struct,
             offline_mode=config.offline_mode,
+            seed=config.seed,
         )
 
     try:

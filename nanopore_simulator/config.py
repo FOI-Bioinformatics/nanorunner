@@ -229,6 +229,7 @@ class GenerateConfig:
     adapter: Optional[str] = None
     structure: str = "singleplex"
     offline_mode: bool = False
+    seed: Optional[int] = None
 
     def __post_init__(self) -> None:
         _validate_common(

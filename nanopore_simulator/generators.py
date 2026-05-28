@@ -83,6 +83,10 @@ class GeneratorConfig:
     std_quality: float = 4.0
     reads_per_file: int = 100
     output_format: str = "fastq.gz"
+    # When set, the builtin generator's numpy RNG is seeded from this
+    # value so runs become byte-reproducible. None preserves the
+    # historical fresh-entropy behaviour.
+    seed: Optional[int] = None
 
     def __post_init__(self) -> None:
         if self.num_reads < 1:
@@ -247,7 +251,7 @@ class BuiltinGenerator(ReadGenerator):
         self._cache_lock = threading.Lock()
         self._np_rng: Optional["np.random.Generator"] = None
         if _HAS_NUMPY:
-            self._np_rng = np.random.default_rng()
+            self._np_rng = np.random.default_rng(config.seed)
 
     @classmethod
     def is_available(cls) -> bool:
@@ -809,7 +813,7 @@ class SubprocessGenerator(ReadGenerator):
 
         # Generate quality scores and write FASTQ
         if _HAS_NUMPY:
-            ns_rng = np.random.default_rng()
+            ns_rng = np.random.default_rng(self.config.seed)
 
         if output_path.suffix == ".gz":
             fh = gzip.open(output_path, "wt", compresslevel=1)

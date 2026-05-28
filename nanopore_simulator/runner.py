@@ -230,6 +230,18 @@ def run_generate(config: GenerateConfig) -> None:
             "one of --genomes, --species, --mock, --taxid, or --accession."
         )
 
+    # Reproducibility: when the caller did not pass an explicit seed,
+    # derive one from the target directory. This mirrors the manifest
+    # shuffle (manifest._generate_multiplex_entries) so two runs into
+    # the same target produce byte-identical output, while two runs
+    # into different targets still differ.
+    if config.seed is not None:
+        gen_seed: Optional[int] = config.seed
+    else:
+        import zlib
+
+        gen_seed = zlib.adler32(str(config.target_dir).encode("utf-8"))
+
     gen_config = GeneratorConfig(
         num_reads=config.read_count,
         mean_read_length=config.mean_length,
@@ -239,6 +251,7 @@ def run_generate(config: GenerateConfig) -> None:
         std_quality=config.std_quality,
         reads_per_file=config.reads_per_file,
         output_format=config.output_format,
+        seed=gen_seed,
     )
     generator = create_generator(config.generator_backend, gen_config)
 
