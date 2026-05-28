@@ -47,5 +47,6 @@ jobs:
         if: matrix.python-version == '3.11'
         run: |
           pip install bandit pip-audit
-          bandit -r nanopore_simulator/ -c pyproject.toml || bandit -r nanopore_simulator/ -s B101
+          bandit -r nanopore_simulator/ -c pyproject.toml \
+            || bandit -r nanopore_simulator/ -s B101
           pip-audit

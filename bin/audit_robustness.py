@@ -341,7 +341,17 @@ def phase_i_sigterm(root: Path, genomes: List[Path]) -> List[Finding]:
 def phase_j_concurrent(root: Path, genomes: List[Path]) -> List[Finding]:
     """Two simultaneous generate runs writing into the same target dir
     must not corrupt each other's output. Names should diverge so they
-    don't clobber."""
+    don't clobber.
+
+    Known flakiness: nanopore_simulator.runner._cleanup_tmp_files wipes
+    every ``*.tmp`` under ``target_dir`` in its finally block. With two
+    concurrent processes sharing a target dir, one process can wipe
+    the other's in-flight tmp file mid-atomic_move and the second
+    process's run aborts. The user-facing output-files-don't-clobber
+    invariant still holds, but the test as written can fail under
+    unfavourable timing. A proper fix scopes the cleanup to files
+    known to this process; recorded for a future round.
+    """
     findings: List[Finding] = []
     f = Finding(scenario="concurrent/two_generates_same_target", phase="J")
     t0 = time.perf_counter()

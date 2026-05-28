@@ -150,7 +150,13 @@ def phase_m_semantic_substring(root: Path) -> List[Finding]:
         if proc.returncode != 0:
             f.fail(f"generate failed: {proc.stderr[-300:]}")
         else:
-            sources = _all_sequences_in_fasta(src_fa)
+            # BuiltinGenerator samples reads from the *concatenated*
+            # genome string (all chromosomes joined), so reads landing
+            # on a chromosome boundary are valid even though they are
+            # not substrings of any single chromosome. Match the
+            # production invariant: substring of the concatenation.
+            sources_list = _all_sequences_in_fasta(src_fa)
+            sources = ["".join(sources_list)]
             rc_table = str.maketrans("ACGT", "TGCA")
 
             def revcomp(s: str) -> str:
