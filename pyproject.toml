@@ -44,9 +44,13 @@ nanorunner = "nanopore_simulator.cli:main"
 dev = [
     "pytest>=6.0",
     "pytest-cov",
-    "black",
-    "flake8",
-    "mypy",
+    # Cap the linters at their current major lines so a new release cannot
+    # silently change formatting or add checks and turn CI red without a
+    # code change. black uses calendar-based style versions, so the cap
+    # matters most there.
+    "black>=26.5,<27",
+    "flake8>=7.3,<8",
+    "mypy>=2.1,<3",
 ]
 test = [
     "pytest>=6.0",

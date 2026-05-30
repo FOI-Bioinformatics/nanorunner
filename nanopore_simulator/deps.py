@@ -10,7 +10,6 @@ import shutil
 from dataclasses import dataclass
 from typing import Dict, List
 
-
 # Canonical install instructions for external dependencies.
 INSTALL_HINTS: Dict[str, str] = {
     "badread": "conda install -c conda-forge -c bioconda badread",

@@ -9,7 +9,6 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Dict, List
 
-
 # ---------------------------------------------------------------------------
 # Adapter configurations
 # ---------------------------------------------------------------------------

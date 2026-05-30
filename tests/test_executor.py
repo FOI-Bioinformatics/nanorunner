@@ -14,7 +14,6 @@ from nanopore_simulator.generators import (
 )
 from nanopore_simulator.manifest import FileEntry
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
