@@ -84,3 +84,16 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
+
+[tool.bandit]
+# The findings skipped below are inherent to this tool's design rather than
+# security defects. Each is intentional and not reachable from untrusted input:
+#   B101 - assert statements used for internal invariants in non-hot paths.
+#   B311 - the standard library RNG drives timing jitter, read sampling, and
+#          manifest shuffling; none of these are security or cryptographic.
+#   B404 / B603 / B607 - the generate and download paths deliberately invoke
+#          local bioinformatics tools (badread, nanosim, ncbi datasets, gtdb)
+#          via subprocess with argument lists (never shell=True) and resolve
+#          executables by name on PATH.
+#   B310 - genome downloads use urllib against fixed https GTDB/NCBI endpoints.
+skips = ["B101", "B311", "B404", "B603", "B607", "B310"]

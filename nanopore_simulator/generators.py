@@ -252,6 +252,11 @@ class BuiltinGenerator(ReadGenerator):
         self._np_rng: Optional["np.random.Generator"] = None
         if _HAS_NUMPY:
             self._np_rng = np.random.default_rng(config.seed)
+        # Dedicated stdlib RNG for the no-numpy fallback paths. Using an
+        # instance (rather than the global ``random`` module) keeps the
+        # seed local to this generator, so the reproducibility guarantee
+        # in ``runner.run_generate`` holds even when numpy is absent.
+        self._py_rng = random.Random(config.seed)
 
     @classmethod
     def is_available(cls) -> bool:
@@ -357,17 +362,17 @@ class BuiltinGenerator(ReadGenerator):
         reads: List[Tuple[str, str, str]] = []
         for i in range(num_reads):
             if sigma > 0:
-                read_len = int(random.lognormvariate(mu, sigma))
+                read_len = int(self._py_rng.lognormvariate(mu, sigma))
             else:
                 read_len = mean_len
             read_len = max(self.config.min_read_length, read_len)
             read_len = min(read_len, genome_len)
 
             max_start = max(0, genome_len - read_len)
-            start = random.randint(0, max_start) if max_start > 0 else 0
+            start = self._py_rng.randint(0, max_start) if max_start > 0 else 0
             seq = genome_seq[start : start + read_len]
 
-            if random.random() < 0.5:
+            if self._py_rng.random() < 0.5:
                 seq = self._reverse_complement(seq)
 
             quals = self._generate_quality_string(len(seq))
@@ -545,17 +550,17 @@ class BuiltinGenerator(ReadGenerator):
 
         for i in range(num_reads):
             if sigma > 0:
-                read_len = int(random.lognormvariate(mu, sigma))
+                read_len = int(self._py_rng.lognormvariate(mu, sigma))
             else:
                 read_len = mean_len
             read_len = max(min_len, read_len)
             read_len = min(read_len, genome_len)
 
             max_start = max(0, genome_len - read_len)
-            start = random.randint(0, max_start) if max_start > 0 else 0
+            start = self._py_rng.randint(0, max_start) if max_start > 0 else 0
             seq = genome_seq[start : start + read_len]
 
-            if random.random() < 0.5:
+            if self._py_rng.random() < 0.5:
                 seq = self._reverse_complement(seq)
 
             quals = self._generate_quality_string(len(seq))
@@ -582,7 +587,7 @@ class BuiltinGenerator(ReadGenerator):
             )
         quals = []
         for _ in range(length):
-            q = random.gauss(self.config.mean_quality, self.config.std_quality)
+            q = self._py_rng.gauss(self.config.mean_quality, self.config.std_quality)
             q = max(0, min(40, q))
             quals.append(chr(int(q) + 33))
         return "".join(quals)
