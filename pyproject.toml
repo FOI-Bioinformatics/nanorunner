@@ -47,10 +47,12 @@ dev = [
     # Cap the linters at their current major lines so a new release cannot
     # silently change formatting or add checks and turn CI red without a
     # code change. black uses calendar-based style versions, so the cap
-    # matters most there.
-    "black>=26.5,<27",
+    # matters most there. black and mypy now require Python >= 3.10, so
+    # gate them behind a marker; the lint job only runs on 3.11, while the
+    # 3.9 matrix entry installs this extra solely to run the test suite.
+    "black>=26.5,<27; python_version >= '3.10'",
     "flake8>=7.3,<8",
-    "mypy>=2.1,<3",
+    "mypy>=2.1,<3; python_version >= '3.10'",
 ]
 test = [
     "pytest>=6.0",
